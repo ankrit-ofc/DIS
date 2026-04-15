@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 400" width="460" height="400">
+  <defs>
+    <linearGradient id="cartGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#1D4ED8"/>
+    </linearGradient>
+    <linearGradient id="boxGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#BFDBFE"/>
+      <stop offset="100%" stop-color="#60A5FA"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Floor shadow -->
+  <ellipse cx="230" cy="370" rx="190" ry="14" fill="#0D1120" opacity="0.08"/>
+
+  <!-- Backdrop circle -->
+  <circle cx="230" cy="190" r="160" fill="#EFF6FF"/>
+
+  <!-- Cart body -->
+  <g transform="translate(80,90)">
+    <!-- Handle -->
+    <path d="M10 30 L60 30 L90 180" fill="none" stroke="url(#cartGrad)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Basket -->
+    <path d="M70 70 L310 70 L290 200 L95 200 Z" fill="url(#cartGrad)" stroke="#1D4ED8" stroke-width="4" stroke-linejoin="round"/>
+    <!-- Basket grid -->
+    <path d="M95 100 L285 100 M100 130 L280 130 M105 160 L275 160" stroke="#BFDBFE" stroke-width="2" opacity="0.55"/>
+    <path d="M150 75 L140 195 M210 75 L210 195 M270 75 L280 195" stroke="#BFDBFE" stroke-width="2" opacity="0.55"/>
+
+    <!-- Boxes in the cart -->
+    <rect x="120" y="40" width="70" height="52" rx="6" fill="#F59E0B"/>
+    <rect x="120" y="40" width="70" height="16" rx="6" fill="#D97706"/>
+    <rect x="200" y="30" width="64" height="62" rx="6" fill="#00C46F"/>
+    <rect x="200" y="30" width="64" height="14" rx="6" fill="#00A05A"/>
+
+    <!-- Wheels -->
+    <circle cx="120" cy="230" r="22" fill="#0D1120"/>
+    <circle cx="120" cy="230" r="8" fill="#BFDBFE"/>
+    <circle cx="270" cy="230" r="22" fill="#0D1120"/>
+    <circle cx="270" cy="230" r="8" fill="#BFDBFE"/>
+  </g>
+
+  <!-- Floating DISTRO tag -->
+  <g transform="translate(300,60)">
+    <rect x="0" y="0" width="110" height="36" rx="10" fill="#FFFFFF" stroke="#BFDBFE" stroke-width="2"/>
+    <circle cx="16" cy="18" r="5" fill="#00C46F"/>
+    <text x="30" y="23" font-family="'Space Grotesk', system-ui, sans-serif" font-size="13" font-weight="700" fill="#2563EB">DISTRO</text>
+  </g>
+
+  <!-- Sparkles -->
+  <g fill="#F59E0B">
+    <circle cx="60" cy="120" r="4"/>
+    <circle cx="400" cy="160" r="5"/>
+    <circle cx="90" cy="280" r="3"/>
+    <circle cx="380" cy="300" r="4"/>
+  </g>
+</svg>

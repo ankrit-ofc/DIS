@@ -10,6 +10,7 @@ import { useAuthStore } from "../../store/authStore";
 import { colors, spacing, radius, typography } from "../../lib/theme";
 import { AuthStackParamList } from "../../navigation/AuthStack";
 import { AuthBrand, StepIndicator, InputField, AuthError, s } from "./_shared";
+import { LocationPicker, LocationPickerValue } from "../../components/LocationPicker";
 
 type Props = {
   navigation: StackNavigationProp<AuthStackParamList, "RegisterStep2">;
@@ -83,14 +84,22 @@ export function RegisterStep2Screen({ navigation, route }: Props) {
   const { email, otpToken } = route.params;
   const [storeName, setStoreName] = useState("");
   const [ownerName, setOwnerName] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [panNumber, setPanNumber] = useState("");
   const [district, setDistrict] = useState("");
+  const [address, setAddress] = useState("");
+  const [location, setLocation] = useState<LocationPickerValue | null>(null);
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [agreeTerms, setAgreeTerms] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { setAuth } = useAuthStore();
   const ownerRef = useRef<TI>(null);
+  const companyRef = useRef<TI>(null);
+  const panRef = useRef<TI>(null);
+  const addressRef = useRef<TI>(null);
   const phoneRef = useRef<TI>(null);
   const passwordRef = useRef<TI>(null);
   const confirmRef = useRef<TI>(null);
@@ -109,20 +118,35 @@ export function RegisterStep2Screen({ navigation, route }: Props) {
   };
 
   const handleRegister = async () => {
-    if (!storeName.trim() || !ownerName.trim() || !district || !phone.trim() || !password) {
-      setError("All fields are required."); shake(); return;
+    if (!storeName.trim() || !ownerName.trim() || !district || !phone.trim() || !password || !address.trim()) {
+      setError("Please fill all required fields."); shake(); return;
     }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters."); shake(); return;
+    if (!location) {
+      setError("Please pin your store location on the map."); shake(); return;
+    }
+    if (panNumber && !/^\d{9}$/.test(panNumber)) {
+      setError("PAN number must be exactly 9 digits."); shake(); return;
+    }
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters."); shake(); return;
     }
     if (password !== confirmPassword) {
       setError("Passwords do not match."); shake(); return;
+    }
+    if (!agreeTerms) {
+      setError("Please accept the Terms & Privacy Policy."); shake(); return;
     }
     setError("");
     setLoading(true);
     btnScale.value = withSpring(0.97, { damping: 20, stiffness: 300 });
     try {
-      const res = await api.post("/auth/register", { email, otpToken, storeName, ownerName, district, phone, password });
+      const res = await api.post("/auth/register", {
+        email, otpToken, storeName, ownerName, district, phone, password, address,
+        companyName: companyName || undefined,
+        panNumber: panNumber || undefined,
+        latitude: location?.latitude,
+        longitude: location?.longitude,
+      });
       await setAuth(res.data.token, res.data.profile ?? res.data.user);
       btnScale.value = withSpring(1);
     } catch (err: any) {
@@ -160,18 +184,52 @@ export function RegisterStep2Screen({ navigation, route }: Props) {
               onSubmitEditing={() => (ownerRef.current as any)?.focus()} />
             <InputField label="Owner name" value={ownerName} onChangeText={setOwnerName}
               placeholder="e.g. Ram Sharma" inputRef={ownerRef} returnKeyType="next"
-              onSubmitEditing={() => (phoneRef.current as any)?.focus()} />
+              onSubmitEditing={() => (companyRef.current as any)?.focus()} />
+            <InputField label="Company name (optional)" value={companyName} onChangeText={setCompanyName}
+              placeholder="For registered businesses" inputRef={companyRef} returnKeyType="next"
+              onSubmitEditing={() => (panRef.current as any)?.focus()} />
+            <InputField label="PAN number (optional, 9 digits)" value={panNumber}
+              onChangeText={(v) => setPanNumber(v.replace(/\D/g, "").slice(0, 9))}
+              placeholder="123456789" keyboardType="number-pad" inputRef={panRef}
+              returnKeyType="next" onSubmitEditing={() => (addressRef.current as any)?.focus()} />
             <DistrictPicker value={district} onSelect={setDistrict} />
+            <InputField label="Address" value={address} onChangeText={setAddress}
+              placeholder="Street, area, landmark" inputRef={addressRef} returnKeyType="next"
+              onSubmitEditing={() => (phoneRef.current as any)?.focus()} />
+            <LocationPicker
+              value={location}
+              onChange={(v) => {
+                setLocation(v);
+                if (v.address && !address.trim()) setAddress(v.address);
+              }}
+              label="Pin your store location *"
+              helperText="Search, drag the marker, or use your current location."
+            />
             <InputField label="Phone number" value={phone} onChangeText={setPhone}
               placeholder="98XXXXXXXX" keyboardType="phone-pad" inputRef={phoneRef}
               returnKeyType="next" onSubmitEditing={() => (passwordRef.current as any)?.focus()} />
             <InputField label="Password" value={password} onChangeText={setPassword}
-              placeholder="Min. 6 characters" secureTextEntry inputRef={passwordRef}
+              placeholder="Min. 8 characters" secureTextEntry inputRef={passwordRef}
               returnKeyType="next" onSubmitEditing={() => (confirmRef.current as any)?.focus()}
               autoCapitalize="none" />
             <InputField label="Confirm password" value={confirmPassword} onChangeText={setConfirmPassword}
               placeholder="Re-enter password" secureTextEntry inputRef={confirmRef}
               returnKeyType="done" onSubmitEditing={handleRegister} autoCapitalize="none" />
+            <TouchableOpacity onPress={() => setAgreeTerms(v => !v)} activeOpacity={0.8}
+              style={{ flexDirection: "row", alignItems: "flex-start", gap: 8, paddingVertical: 6 }}>
+              <View style={{
+                width: 18, height: 18, borderRadius: 4, borderWidth: 1.5,
+                borderColor: agreeTerms ? colors.blue : colors.gray300,
+                backgroundColor: agreeTerms ? colors.blue : "transparent",
+                alignItems: "center", justifyContent: "center", marginTop: 2,
+              }}>
+                {agreeTerms && <Ionicons name="checkmark" size={12} color={colors.white} />}
+              </View>
+              <Text style={{ flex: 1, fontSize: 13, color: colors.gray600, fontFamily: typography.body }}>
+                I agree to the <Text style={{ color: colors.blue }}>Terms &amp; Conditions</Text> and{" "}
+                <Text style={{ color: colors.blue }}>Privacy Policy</Text>.
+              </Text>
+            </TouchableOpacity>
           </View>
           <AuthError message={error} animStyle={errorStyle} />
           <Animated.View style={btnStyle}>

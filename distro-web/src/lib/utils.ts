@@ -5,6 +5,22 @@ export function formatPrice(amount: number): string {
   }).format(amount);
 }
 
+export function formatUnitPrice(amount: number, unit: string): string {
+  const val = new Intl.NumberFormat("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+  return `Rs ${val} / ${unit}`;
+}
+
+export function formatCartonPrice(price: number, moq: number): string {
+  const val = new Intl.NumberFormat("en-IN", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(price * moq);
+  return `Rs ${val} / carton (${moq} pcs)`;
+}
+
 export function formatNumber(n: number): string {
   return new Intl.NumberFormat("en-IN").format(n);
 }
@@ -52,4 +68,41 @@ export function getStockLabel(stock: number, moq: number): {
   if (stock <= 0) return { label: "Out of Stock", color: "text-red-500 bg-red-50" };
   if (stock <= moq * 2) return { label: "Low Stock", color: "text-orange-500 bg-orange-50" };
   return { label: "In Stock", color: "text-green bg-green-light" };
+}
+
+/** Single-letter avatar for nav (owner name → store → phone) — matches API `ownerName` / `storeName` */
+export function getSessionInitial(
+  user:
+    | {
+        ownerName?: string | null;
+        name?: string | null;
+        storeName?: string | null;
+        phone?: string | null;
+      }
+    | null
+    | undefined
+): string {
+  if (!user) return "?";
+  const name = (user.ownerName ?? user.name)?.trim();
+  if (name) return name.charAt(0).toUpperCase();
+  const store = user.storeName?.trim();
+  if (store) return store.charAt(0).toUpperCase();
+  const digits = user.phone?.replace(/\D/g, "") ?? "";
+  return digits.slice(-1) || "?";
+}
+
+export function getSessionDisplayName(
+  user: {
+    ownerName?: string | null;
+    name?: string | null;
+    storeName?: string | null;
+    phone: string;
+    role: "BUYER" | "ADMIN";
+  } | null
+): string {
+  if (!user) return "";
+  if (user.role === "ADMIN") {
+    return user.ownerName?.trim() || user.name?.trim() || user.storeName?.trim() || "Admin";
+  }
+  return user.ownerName?.trim() || user.name?.trim() || user.storeName?.trim() || user.phone;
 }

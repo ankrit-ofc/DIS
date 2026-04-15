@@ -36,8 +36,8 @@ router.get('/', requireAuth, isAdmin, async (req: Request, res: Response): Promi
       take: limitNum,
       select: {
         id: true, phone: true, email: true, storeName: true, ownerName: true,
-        district: true, status: true, creditLimit: true, creditUsed: true,
-        createdAt: true,
+        district: true, address: true, companyName: true, panNumber: true,
+        status: true, creditLimit: true, creditUsed: true, createdAt: true,
       },
     }),
     prisma.profile.count({ where }),
@@ -54,8 +54,9 @@ router.get('/:id', requireAuth, isAdmin, async (req: Request, res: Response): Pr
     where: { id },
     select: {
       id: true, phone: true, email: true, storeName: true, ownerName: true,
-      district: true, address: true, status: true, role: true,
-      creditLimit: true, creditUsed: true, createdAt: true, updatedAt: true,
+      district: true, address: true, companyName: true, panNumber: true,
+      status: true, role: true, creditLimit: true, creditUsed: true,
+      createdAt: true, updatedAt: true,
     },
   });
   if (!customer) {

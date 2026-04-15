@@ -11,13 +11,16 @@ import { useState, useEffect, useCallback } from "react";
 import { api } from "../../lib/api";
 import { StatusBadge } from "../../components/StatusBadge";
 import { colors, spacing, radius, shadow } from "../../lib/theme";
+import { fmtRs } from "../../lib/format";
 
 interface Order {
   id: number;
   orderNumber: string;
   status: string;
-  totalAmount: number;
-  itemCount: number;
+  total?: number;
+  totalAmount?: number;
+  items?: unknown[];
+  itemCount?: number;
   createdAt: string;
 }
 
@@ -65,7 +68,7 @@ export function OrdersScreen({ navigation }: any) {
               </View>
               <View style={styles.cardBody}>
                 <Text style={styles.meta}>
-                  {item.itemCount} item{item.itemCount !== 1 ? "s" : ""}
+                  {item.itemCount ?? item.items?.length ?? 0} item{(item.itemCount ?? item.items?.length ?? 0) !== 1 ? "s" : ""}
                 </Text>
                 <Text style={styles.meta}>
                   {new Date(item.createdAt).toLocaleDateString("en-NP", {
@@ -75,7 +78,7 @@ export function OrdersScreen({ navigation }: any) {
                   })}
                 </Text>
               </View>
-              <Text style={styles.amount}>Rs {item.totalAmount.toLocaleString()}</Text>
+              <Text style={styles.amount}>{fmtRs(item.totalAmount ?? item.total)}</Text>
             </TouchableOpacity>
           )}
           refreshControl={

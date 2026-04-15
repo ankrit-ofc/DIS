@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../../lib/api";
 import { StatusBadge } from "../../components/StatusBadge";
 import { colors, spacing, radius, shadow } from "../../lib/theme";
+import { fmtRs } from "../../lib/format";
 
 interface Customer {
   id: number;
@@ -29,7 +30,7 @@ interface Customer {
   notes?: string;
 }
 interface CustomerDetail extends Customer {
-  recentOrders: { id: number; orderNumber: string; status: string; totalAmount: number; createdAt: string }[];
+  recentOrders: { id: number; orderNumber: string; status: string; total?: number; totalAmount?: number; createdAt: string }[];
 }
 
 function CreditBar({ used = 0, limit = 0 }: { used?: number; limit?: number }) {
@@ -40,7 +41,7 @@ function CreditBar({ used = 0, limit = 0 }: { used?: number; limit?: number }) {
     <View style={cred.wrap}>
       <View style={cred.headerRow}>
         <Text style={cred.label}>Credit</Text>
-        <Text style={cred.vals}>Rs {used.toLocaleString()} / Rs {limit.toLocaleString()}</Text>
+        <Text style={cred.vals}>{fmtRs(used)} / {fmtRs(limit)}</Text>
       </View>
       <View style={cred.track}>
         <View style={[cred.fill, { width: `${Math.round(pct * 100)}%`, backgroundColor: barColor }]} />
@@ -148,7 +149,7 @@ export function CustomersScreen() {
               <View style={styles.stats}>
                 <Text style={styles.orderCount}>{item.orderCount}</Text>
                 <Text style={styles.ordersLabel}>orders</Text>
-                <Text style={styles.spent}>Rs {(item.totalSpent ?? 0).toLocaleString()}</Text>
+                <Text style={styles.spent}>{fmtRs(item.totalSpent)}</Text>
               </View>
             </TouchableOpacity>
           )}
@@ -196,7 +197,7 @@ export function CustomersScreen() {
                   <Text style={styles.statBoxLabel}>orders</Text>
                 </View>
                 <View style={styles.statBox}>
-                  <Text style={styles.statBoxVal}>Rs {(selected.totalSpent ?? 0).toLocaleString()}</Text>
+                  <Text style={styles.statBoxVal}>{fmtRs(selected.totalSpent)}</Text>
                   <Text style={styles.statBoxLabel}>total spent</Text>
                 </View>
               </View>
@@ -239,7 +240,7 @@ export function CustomersScreen() {
                       </View>
                       <View style={styles.recentOrderRight}>
                         <StatusBadge status={o.status} />
-                        <Text style={styles.recentOrderAmt}>Rs {o.totalAmount.toLocaleString()}</Text>
+                        <Text style={styles.recentOrderAmt}>{fmtRs(o.totalAmount ?? o.total)}</Text>
                       </View>
                     </View>
                   ))}

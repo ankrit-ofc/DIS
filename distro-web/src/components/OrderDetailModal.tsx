@@ -7,17 +7,20 @@ import { formatPrice, routeParamId } from "@/lib/utils";
 
 interface OrderItem {
   id: number;
-  productName: string;
+  name: string;
+  productName?: string;
   qty: number;
   price: number;
-  unit: string;
+  total: number;
+  unit?: string;
 }
 
 interface Order {
   id: number;
   orderNumber: string;
-  status: "PENDING" | "CONFIRMED" | "PROCESSING" | "SHIPPED" | "DELIVERED" | "CANCELLED";
-  storeName: string;
+  status: "PENDING" | "CONFIRMED" | "PROCESSING" | "DISPATCHED" | "DELIVERED" | "CANCELLED";
+  storeName?: string;
+  buyer?: { storeName?: string; phone?: string };
   deliveryAddress: string;
   deliveryDistrict: string;
   paymentMethod: string;
@@ -33,7 +36,7 @@ const STEPS: { key: Order["status"]; label: string }[] = [
   { key: "PENDING", label: "Placed" },
   { key: "CONFIRMED", label: "Confirmed" },
   { key: "PROCESSING", label: "Processing" },
-  { key: "SHIPPED", label: "Dispatched" },
+  { key: "DISPATCHED", label: "Dispatched" },
   { key: "DELIVERED", label: "Delivered" },
 ];
 
@@ -163,13 +166,13 @@ export default function OrderDetailModal({
                   {order.items.map((item) => (
                     <li key={item.id} className="flex justify-between px-4 py-3 text-sm">
                       <div>
-                        <p className="font-medium text-ink">{item.productName}</p>
+                        <p className="font-medium text-ink">{item.productName ?? item.name}</p>
                         <p className="text-xs text-gray-400">
-                          {item.qty} × {formatPrice(item.price)} {item.unit}
+                          {item.qty} × {formatPrice(item.price)}{item.unit ? ` ${item.unit}` : ""}
                         </p>
                       </div>
                       <p className="font-grotesk font-semibold text-ink">
-                        {formatPrice(item.price * item.qty)}
+                        {formatPrice(item.total ?? item.price * item.qty)}
                       </p>
                     </li>
                   ))}

@@ -9,6 +9,7 @@ import { useAuthStore } from "../../store/authStore";
 import { useCartStore } from "../../store/cartStore";
 import { api } from "../../lib/api";
 import { colors, spacing, radius, shadow, typography } from "../../lib/theme";
+import { fmtRs, fmtUnitPrice, sessionInitial } from "../../lib/format";
 import { SkeletonLoader, SkeletonProductCard, SkeletonCategoryChip } from "../../components/SkeletonLoader";
 
 const { width: W } = Dimensions.get("window");
@@ -106,9 +107,9 @@ function ProductCard({ item, onPress, onAdd }: { item: Product; onPress: () => v
       <View style={pc.body}>
         {item.brand && <Text style={pc.brand} numberOfLines={1}>{item.brand}</Text>}
         <Text style={pc.name} numberOfLines={2}>{item.name}</Text>
-        <Text style={pc.price}>Rs {item.price.toLocaleString()}</Text>
+        <Text style={pc.price}>{fmtUnitPrice(item.price, item.unit)}</Text>
         {item.moq && item.moq > 1 && (
-          <Text style={pc.moq}>Min {item.moq} pcs</Text>
+          <Text style={pc.moq}>{fmtRs(item.price * item.moq)} / carton ({item.moq} pcs)</Text>
         )}
       </View>
 
@@ -221,7 +222,8 @@ export function HomeScreen({ navigation }: any) {
 
   useEffect(() => { load(); }, []);
 
-  const storeName = profile?.storeName ?? profile?.name ?? "Your Store";
+  const storeName = profile?.storeName ?? profile?.ownerName ?? profile?.name ?? "Your Store";
+  const initial = sessionInitial(profile);
   const h = new Date().getHours();
   const greeting = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
 
@@ -249,9 +251,19 @@ export function HomeScreen({ navigation }: any) {
             <Text style={s.greeting}>{greeting},</Text>
             <Text style={s.storeName} numberOfLines={1}>{storeName}</Text>
           </View>
-          <TouchableOpacity style={s.bellBtn} activeOpacity={0.8} hitSlop={8}>
-            <Ionicons name="notifications-outline" size={22} color={colors.white} />
-          </TouchableOpacity>
+          <View style={s.headerActions}>
+            <TouchableOpacity
+              style={s.sessionAvatar}
+              onPress={() => navigation.navigate("Account")}
+              activeOpacity={0.85}
+              accessibilityLabel="Account"
+            >
+              <Text style={s.sessionAvatarText}>{initial}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.bellBtn} activeOpacity={0.8} hitSlop={8}>
+              <Ionicons name="notifications-outline" size={22} color={colors.white} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Search bar */}
@@ -346,6 +358,26 @@ const s = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  sessionAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(255,255,255,0.22)",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sessionAvatarText: {
+    fontSize: 16,
+    fontFamily: typography.heading,
+    color: colors.white,
   },
   greeting: {
     fontSize: 12,

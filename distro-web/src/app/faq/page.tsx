@@ -35,7 +35,11 @@ const FAQS: FAQ[] = [
   },
   {
     q: "Can I cancel or modify my order?",
-    a: "Orders can be cancelled within 1 hour of placing them, as long as they haven't been confirmed. Contact us on WhatsApp at +977 9800000000 for urgent modifications.",
+    a: "Orders can be cancelled within 30 minutes of placing them, as long as they haven't been confirmed. Use the Cancel Order button on the order detail page, or contact us on WhatsApp at +977 9800000000 for urgent modifications.",
+  },
+  {
+    q: "What is my credit limit?",
+    a: "Your credit limit is shown on your Account page. It is set per agreement with your account manager and tracks how much you can order on credit terms. Completed COD and digital payments free up credit automatically.",
   },
   {
     q: "What if I receive damaged or wrong products?",

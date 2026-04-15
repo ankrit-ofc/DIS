@@ -8,7 +8,7 @@ import api from "@/lib/api";
 interface TrackingResult {
   id: number;
   orderNumber: string;
-  status: "PENDING" | "CONFIRMED" | "PROCESSING" | "SHIPPED" | "DELIVERED" | "CANCELLED";
+  status: "PENDING" | "CONFIRMED" | "PROCESSING" | "DISPATCHED" | "DELIVERED" | "CANCELLED";
   storeName: string;
   deliveryAddress: string;
   deliveryDistrict: string;
@@ -25,7 +25,7 @@ const STEPS: {
   { key: "PENDING", label: "Order Placed", icon: <Package size={18} />, description: "Your order has been received" },
   { key: "CONFIRMED", label: "Confirmed", icon: <CheckCircle2 size={18} />, description: "Order confirmed by DISTRO" },
   { key: "PROCESSING", label: "Processing", icon: <Clock size={18} />, description: "Order is being packed" },
-  { key: "SHIPPED", label: "On the Way", icon: <Truck size={18} />, description: "Out for delivery" },
+  { key: "DISPATCHED", label: "On the Way", icon: <Truck size={18} />, description: "Out for delivery" },
   { key: "DELIVERED", label: "Delivered", icon: <Home size={18} />, description: "Delivered to your store" },
 ];
 

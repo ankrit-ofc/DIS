@@ -13,6 +13,7 @@ import {
 import { useAuthStore } from "../../store/authStore";
 import { api } from "../../lib/api";
 import { colors, spacing, radius, shadow } from "../../lib/theme";
+import { sessionInitial } from "../../lib/format";
 import Constants from "expo-constants";
 
 function CreditBar({ used, limit }: { used: number; limit: number }) {
@@ -50,7 +51,7 @@ export function AccountScreen() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   // Edit profile state
-  const [editName, setEditName] = useState(profile?.name ?? "");
+  const [editName, setEditName] = useState(profile?.ownerName ?? profile?.name ?? "");
   const [editStore, setEditStore] = useState(profile?.storeName ?? "");
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState("");
@@ -110,10 +111,10 @@ export function AccountScreen() {
       {/* Profile card */}
       <View style={[styles.profileCard, shadow.sm]}>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{(profile?.name ?? profile?.storeName ?? "?").charAt(0).toUpperCase()}</Text>
+          <Text style={styles.avatarText}>{sessionInitial(profile)}</Text>
         </View>
         <View style={styles.profileInfo}>
-          <Text style={styles.name}>{profile?.name ?? profile?.storeName ?? "Store"}</Text>
+          <Text style={styles.name}>{profile?.ownerName ?? profile?.name ?? profile?.storeName ?? "Store"}</Text>
           {profile?.storeName && <Text style={styles.storeName}>{profile.storeName}</Text>}
           <Text style={styles.phone}>{profile?.phone ?? "—"}</Text>
         </View>

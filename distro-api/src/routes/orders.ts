@@ -23,6 +23,8 @@ const ORDER_STATUSES = [
   'PENDING', 'CONFIRMED', 'PROCESSING', 'DISPATCHED', 'DELIVERED', 'CANCELLED',
 ] as const;
 
+const MIN_ORDER_VALUE = 50000;
+
 class OrderError extends Error {
   constructor(public statusCode: number, message: string) {
     super(message);
@@ -117,6 +119,14 @@ router.post(
           const p = productMap.get(item.productId)!;
           subtotal += p.price * item.qty;
         }
+
+        if (subtotal < MIN_ORDER_VALUE) {
+          throw new OrderError(
+            400,
+            `Minimum order is Rs ${MIN_ORDER_VALUE.toLocaleString('en-IN')}. Your subtotal is Rs ${subtotal.toLocaleString('en-IN')}.`,
+          );
+        }
+
         const total = subtotal + deliveryFee;
 
         // 4. Create Order
@@ -195,7 +205,9 @@ router.post(
         res.status(err.statusCode).json({ error: err.message });
         return;
       }
-      throw err;
+      console.error('[ORDER] Unhandled error creating order:', err);
+      res.status(500).json({ error: (err as Error).message || 'Internal server error' });
+      return;
     }
 
     // ── After transaction commits — fire-and-forget notifications ────────────
@@ -262,12 +274,13 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
   const profile     = (req as any).profile as { id: string; role: string };
   const isAdminUser = profile.role === 'ADMIN';
 
-  const status = qs(req.query.status as string | string[] | undefined);
-  const search = qs(req.query.search as string | string[] | undefined);
-  const from   = qs(req.query.from   as string | string[] | undefined);
-  const to     = qs(req.query.to     as string | string[] | undefined);
-  const page   = qs(req.query.page   as string | string[] | undefined);
-  const limit  = qs(req.query.limit  as string | string[] | undefined);
+  const status   = qs(req.query.status   as string | string[] | undefined);
+  const search   = qs(req.query.search   as string | string[] | undefined);
+  const from     = qs(req.query.from     as string | string[] | undefined);
+  const to       = qs(req.query.to       as string | string[] | undefined);
+  const page     = qs(req.query.page     as string | string[] | undefined);
+  const limit    = qs(req.query.limit    as string | string[] | undefined);
+  const buyerId  = qs(req.query.buyerId  as string | string[] | undefined);
 
   const pageNum  = Math.max(1, parseInt(page  ?? '1')  || 1);
   const limitNum = Math.min(100, Math.max(1, parseInt(limit ?? '20') || 20));
@@ -275,6 +288,7 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
 
   const where: Record<string, any> = {};
   if (!isAdminUser) where.buyerId = profile.id;
+  else if (buyerId) where.buyerId = buyerId;
   if (status)       where.status  = status;
   if (from || to) {
     where.createdAt = {
@@ -426,6 +440,69 @@ router.patch(
     }
 
     res.json({ order: updated });
+  },
+);
+
+// ─── PATCH /api/orders/bulk-status — ADMIN, update many in one call ──────────
+router.patch(
+  '/bulk-status',
+  requireAuth,
+  isAdmin,
+  async (req: Request, res: Response): Promise<void> => {
+    const { ids, status, note } = req.body as { ids?: string[]; status?: string; note?: string };
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      res.status(400).json({ error: 'ids array is required' });
+      return;
+    }
+    if (!status || !ORDER_STATUSES.includes(status as any)) {
+      res.status(400).json({ error: `status must be one of: ${ORDER_STATUSES.join(', ')}` });
+      return;
+    }
+
+    const orders = await prisma.order.findMany({
+      where:   { id: { in: ids } },
+      include: { buyer: { select: { phone: true, email: true, storeName: true } } },
+    });
+
+    if (orders.length === 0) {
+      res.status(404).json({ error: 'No matching orders found' });
+      return;
+    }
+
+    await prisma.$transaction([
+      prisma.order.updateMany({
+        where: { id: { in: orders.map((o) => o.id) } },
+        data:  { status: status as any },
+      }),
+      ...orders.map((o) =>
+        prisma.orderActivity.create({
+          data: { orderId: o.id, status: status as any, note: note ?? null },
+        }),
+      ),
+    ]);
+
+    // Fire-and-forget notifications for every buyer
+    for (const o of orders) {
+      if (!o.buyer) continue;
+      void sendNotification(o.buyer.phone, statusUpdateMessage(o.orderNumber, status));
+      if (o.buyer.email) {
+        void (async () => {
+          try {
+            const html = await render(OrderStatusEmail({
+              orderNumber: o.orderNumber,
+              storeName:   o.buyer!.storeName ?? o.buyerId,
+              newStatus:   status,
+            }));
+            await sendEmail(o.buyer!.email!, `Order Update — ${o.orderNumber}`, html, 'status_update');
+          } catch (e) {
+            console.error('[EMAIL] Bulk status update email failed:', e);
+          }
+        })();
+      }
+    }
+
+    res.json({ updated: orders.length, ids: orders.map((o) => o.id) });
   },
 );
 
@@ -675,6 +752,158 @@ router.get(
         }
       })();
     }
+  },
+);
+
+// ─── PATCH /api/orders/:id/cancel — BUYER cancels own order within 30 min ───
+router.patch(
+  '/:id/cancel',
+  requireAuth,
+  requireRole('BUYER'),
+  async (req: Request, res: Response): Promise<void> => {
+    const profile = (req as any).profile as { id: string; phone: string; email?: string | null };
+    const id = qs(req.params.id)!;
+
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: { items: true },
+    });
+
+    if (!order) {
+      res.status(404).json({ error: 'Order not found' });
+      return;
+    }
+    if (order.buyerId !== profile.id) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+    if (order.status !== 'PENDING') {
+      res.status(400).json({ error: 'Only PENDING orders can be cancelled' });
+      return;
+    }
+    if (Date.now() - order.createdAt.getTime() > 30 * 60 * 1000) {
+      res.status(400).json({ error: 'Cancellation window has passed (30 minutes)' });
+      return;
+    }
+
+    let cancelled: any;
+    try {
+      cancelled = await withTransaction(async (tx) => {
+        // a. Update order status
+        const upd = await tx.order.update({
+          where: { id },
+          data: { status: 'CANCELLED' },
+        });
+
+        // b. Restore stockQty for each item
+        for (const item of order.items) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stockQty: { increment: item.qty } },
+          });
+        }
+
+        // c. Create Ledger CREDIT entry (reverse the debit)
+        const lastEntry = await tx.ledger.findFirst({
+          where: { buyerId: profile.id },
+          orderBy: { createdAt: 'desc' },
+        });
+        const newBalance = (lastEntry?.balance ?? 0) - order.total;
+        await tx.ledger.create({
+          data: {
+            buyerId: profile.id,
+            type: 'CREDIT',
+            amount: order.total,
+            balance: newBalance,
+            note: `Cancel ${order.orderNumber}`,
+            orderId: order.id,
+          },
+        });
+
+        // d. Update Profile.creditUsed
+        await tx.profile.update({
+          where: { id: profile.id },
+          data: { creditUsed: { decrement: order.total } },
+        });
+
+        // e. OrderActivity
+        await tx.orderActivity.create({
+          data: { orderId: id, status: 'CANCELLED', note: 'Cancelled by buyer' },
+        });
+
+        return tx.order.findUnique({ where: { id }, include: { items: true } });
+      });
+    } catch (err) {
+      console.error('[ORDER] Cancel failed:', err);
+      res.status(500).json({ error: (err as Error).message || 'Cancel failed' });
+      return;
+    }
+
+    // Fire-and-forget notifications
+    void sendNotification(profile.phone, `Order ${order.orderNumber} has been cancelled.`);
+    if (profile.email) {
+      void (async () => {
+        try {
+          const html = await render(OrderStatusEmail({
+            orderNumber: order.orderNumber,
+            storeName: (profile as any).storeName ?? profile.phone,
+            newStatus: 'CANCELLED',
+          }));
+          await sendEmail(profile.email!, `Order Cancelled — ${order.orderNumber}`, html, 'status_update');
+        } catch (e) {
+          console.error('[EMAIL] Cancel notification failed:', e);
+        }
+      })();
+    }
+
+    res.json({ order: cancelled });
+  },
+);
+
+// ─── POST /api/orders/:id/reorder — BUYER pre-fills cart from past order ────
+router.post(
+  '/:id/reorder',
+  requireAuth,
+  requireRole('BUYER'),
+  async (req: Request, res: Response): Promise<void> => {
+    const profile = (req as any).profile as { id: string };
+    const id = qs(req.params.id)!;
+
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: { items: true },
+    });
+
+    if (!order) {
+      res.status(404).json({ error: 'Order not found' });
+      return;
+    }
+    if (order.buyerId !== profile.id) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const productIds = order.items.map((i) => i.productId);
+    const products = await prisma.product.findMany({ where: { id: { in: productIds } } });
+    const productMap = new Map(products.map((p) => [p.id, p]));
+
+    const items = order.items.map((row) => {
+      const p = productMap.get(row.productId);
+      const available = !!p && p.active && p.stockQty >= row.qty;
+      return {
+        productId: row.productId,
+        name: p?.name ?? row.name,
+        price: p?.price ?? row.price,
+        qty: row.qty,
+        stockQty: p?.stockQty ?? 0,
+        imageUrl: p?.imageUrl ?? null,
+        unit: p?.unit ?? 'piece',
+        moq: p?.moq ?? 1,
+        available,
+      };
+    });
+
+    res.json({ items });
   },
 );
 

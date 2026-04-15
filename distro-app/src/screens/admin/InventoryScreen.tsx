@@ -14,6 +14,7 @@ import {
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../../lib/api";
 import { colors, spacing, radius, shadow } from "../../lib/theme";
+import { fmtRs } from "../../lib/format";
 
 interface Product {
   id: number;
@@ -259,7 +260,7 @@ export function InventoryScreen() {
               <View style={styles.productLeft}>
                 <Text style={styles.productName}>{item.name}</Text>
                 {item.categoryName && <Text style={styles.productCat}>{item.categoryName}</Text>}
-                <Text style={styles.productPrice}>Rs {item.price.toLocaleString()} / {item.unit}</Text>
+                <Text style={styles.productPrice}>{fmtRs(item.price)} / {item.unit}</Text>
               </View>
               <View style={[
                 styles.stockBadge,

@@ -6,24 +6,30 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Linking,
+  Alert,
 } from "react-native";
 import { useState, useEffect } from "react";
 import { api } from "../../lib/api";
 import { StatusBadge } from "../../components/StatusBadge";
 import { colors, spacing, radius, shadow } from "../../lib/theme";
+import { fmtRs } from "../../lib/format";
+import { useCartStore } from "../../store/cartStore";
 
 interface OrderDetail {
   id: number;
   orderNumber: string;
   status: string;
-  totalAmount: number;
+  total: number;
+  totalAmount?: number;
   deliveryFee: number;
   paymentMethod: string;
-  paymentStatus: string;
-  district: string;
+  paymentStatus?: string;
+  deliveryDistrict?: string;
+  district?: string;
+  deliveryAddress?: string;
   address?: string;
   createdAt: string;
-  items: { productName: string; qty: number; unitPrice: number; unit: string }[];
+  items: { name: string; productName?: string; qty: number; price: number; unitPrice?: number; total?: number; unit?: string }[];
 }
 
 const TIMELINE_STEPS = [
@@ -118,23 +124,98 @@ export function OrderDetailScreen({ navigation, route }: any) {
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [remainingMs, setRemainingMs] = useState(0);
+  const [actionLoading, setActionLoading] = useState(false);
+  const { addItem, updateQty } = useCartStore();
+
+  const loadOrder = () => {
+    return api.get(`/orders/${orderId}`)
+      .then((res) => setOrder(res.data.order ?? res.data))
+      .catch((err) => setError(err.message ?? "Failed to load order."));
+  };
 
   useEffect(() => {
-    api.get(`/orders/${orderId}`)
-      .then((res) => setOrder(res.data.order ?? res.data))
-      .catch((err) => setError(err.message ?? "Failed to load order."))
-      .finally(() => setLoading(false));
+    loadOrder().finally(() => setLoading(false));
   }, [orderId]);
+
+  useEffect(() => {
+    if (!order || order.status !== "PENDING") return;
+    const deadline = new Date(order.createdAt).getTime() + 30 * 60 * 1000;
+    const tick = () => setRemainingMs(Math.max(0, deadline - Date.now()));
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [order]);
 
   if (loading) return <View style={styles.center}><ActivityIndicator color={colors.blue} /></View>;
   if (error || !order)
     return <View style={styles.center}><Text style={styles.errorText}>{error || "Order not found."}</Text></View>;
 
-  const subtotal = order.items.reduce((s, i) => s + i.unitPrice * i.qty, 0);
+  const subtotal = order.items.reduce((s, i) => s + (i.unitPrice ?? i.price ?? 0) * i.qty, 0);
+  const canCancel = order.status === "PENDING" && remainingMs > 0;
+  const mins = Math.floor(remainingMs / 60000);
+  const secs = Math.floor((remainingMs % 60000) / 1000);
 
   const handleDownloadInvoice = () => {
     const url = `${process.env.EXPO_PUBLIC_API_URL}/orders/${orderId}/invoice`;
     Linking.openURL(url).catch(() => {});
+  };
+
+  const handleCancel = () => {
+    Alert.alert(
+      "Cancel order",
+      "Are you sure you want to cancel this order?",
+      [
+        { text: "Keep order", style: "cancel" },
+        {
+          text: "Cancel order",
+          style: "destructive",
+          onPress: async () => {
+            setActionLoading(true);
+            try {
+              await api.patch(`/orders/${orderId}/cancel`);
+              await loadOrder();
+              Alert.alert("Cancelled", "Your order has been cancelled.");
+            } catch (err: any) {
+              Alert.alert("Error", err?.response?.data?.error ?? "Could not cancel the order.");
+            } finally {
+              setActionLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleReorder = async () => {
+    setActionLoading(true);
+    try {
+      const res = await api.post(`/orders/${orderId}/reorder`);
+      const items: Array<{ productId: string; name: string; price: number; qty: number; unit: string; imageUrl: string | null; available: boolean }> = res.data.items ?? [];
+      let unavailable = 0;
+      for (const it of items) {
+        if (!it.available) { unavailable++; continue; }
+        addItem({
+          productId: it.productId,
+          name: it.name,
+          price: it.price,
+          unit: it.unit,
+          image: it.imageUrl ?? undefined,
+        });
+        updateQty(it.productId, it.qty);
+      }
+      Alert.alert(
+        "Added to cart",
+        unavailable > 0
+          ? `Items added — ${unavailable} item(s) unavailable and skipped.`
+          : "Items have been added to your cart.",
+        [{ text: "View cart", onPress: () => navigation.navigate("Cart") }, { text: "OK" }]
+      );
+    } catch (err: any) {
+      Alert.alert("Error", err?.response?.data?.error ?? "Reorder failed.");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   return (
@@ -166,52 +247,55 @@ export function OrderDetailScreen({ navigation, route }: any) {
       {/* Items */}
       <View style={[styles.card, shadow.sm]}>
         <Text style={styles.cardTitle}>Items</Text>
-        {order.items.map((item, idx) => (
-          <View key={idx} style={styles.itemRow}>
-            <View style={styles.itemLeft}>
-              <Text style={styles.itemName}>{item.productName}</Text>
-              <Text style={styles.itemMeta}>
-                {item.qty} × Rs {item.unitPrice.toLocaleString()} / {item.unit}
+        {order.items.map((item, idx) => {
+          const unitPrice = item.unitPrice ?? item.price ?? 0;
+          return (
+            <View key={idx} style={styles.itemRow}>
+              <View style={styles.itemLeft}>
+                <Text style={styles.itemName}>{item.productName ?? item.name}</Text>
+                <Text style={styles.itemMeta}>
+                  {item.qty} × {fmtRs(unitPrice)}{item.unit ? ` / ${item.unit}` : ""}
+                </Text>
+              </View>
+              <Text style={styles.itemTotal}>
+                {fmtRs(unitPrice * item.qty)}
               </Text>
             </View>
-            <Text style={styles.itemTotal}>
-              Rs {(item.unitPrice * item.qty).toLocaleString()}
-            </Text>
-          </View>
-        ))}
+          );
+        })}
         <View style={styles.divider} />
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>Subtotal</Text>
-          <Text style={styles.summaryVal}>Rs {subtotal.toLocaleString()}</Text>
+          <Text style={styles.summaryVal}>{fmtRs(subtotal)}</Text>
         </View>
         {order.deliveryFee > 0 && (
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Delivery</Text>
-            <Text style={styles.summaryVal}>Rs {order.deliveryFee.toLocaleString()}</Text>
+            <Text style={styles.summaryVal}>{fmtRs(order.deliveryFee)}</Text>
           </View>
         )}
         <View style={styles.divider} />
         <View style={styles.summaryRow}>
           <Text style={styles.totalLabel}>Total</Text>
-          <Text style={styles.totalVal}>Rs {order.totalAmount.toLocaleString()}</Text>
+          <Text style={styles.totalVal}>{fmtRs(order.totalAmount ?? order.total)}</Text>
         </View>
       </View>
 
       {/* Payment & delivery */}
       <View style={[styles.card, shadow.sm]}>
         <Text style={styles.cardTitle}>Delivery & payment</Text>
-        {order.district && (
+        {(order.deliveryDistrict ?? order.district) ? (
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>District</Text>
-            <Text style={styles.infoVal}>{order.district}</Text>
+            <Text style={styles.infoLabel}>Location</Text>
+            <Text style={styles.infoVal}>{order.deliveryDistrict ?? order.district}</Text>
           </View>
-        )}
-        {order.address && (
+        ) : null}
+        {(order.deliveryAddress ?? order.address) ? (
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Address</Text>
-            <Text style={styles.infoVal}>{order.address}</Text>
+            <Text style={styles.infoVal}>{order.deliveryAddress ?? order.address}</Text>
           </View>
-        )}
+        ) : null}
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Payment</Text>
           <Text style={styles.infoVal}>{order.paymentMethod}</Text>
@@ -221,6 +305,37 @@ export function OrderDetailScreen({ navigation, route }: any) {
           <Text style={styles.infoVal}>{order.paymentStatus ?? "Pending"}</Text>
         </View>
       </View>
+
+      {canCancel && (
+        <View style={[styles.card, shadow.sm]}>
+          <Text style={styles.cancelHint}>
+            You can cancel for {mins}:{secs.toString().padStart(2, "0")} more minutes
+          </Text>
+          <TouchableOpacity
+            style={[styles.cancelBtn, actionLoading && styles.btnDisabled]}
+            onPress={handleCancel}
+            disabled={actionLoading}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.cancelBtnText}>Cancel Order</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {order.status === "DELIVERED" && (
+        <TouchableOpacity
+          style={[styles.reorderBtn, actionLoading && styles.btnDisabled]}
+          onPress={handleReorder}
+          disabled={actionLoading}
+          activeOpacity={0.85}
+        >
+          {actionLoading ? (
+            <ActivityIndicator color={colors.white} />
+          ) : (
+            <Text style={styles.reorderBtnText}>Reorder</Text>
+          )}
+        </TouchableOpacity>
+      )}
 
       <TouchableOpacity style={styles.invoiceBtn} onPress={handleDownloadInvoice} activeOpacity={0.85}>
         <Text style={styles.invoiceBtnText}>Download Invoice (PDF)</Text>
@@ -271,4 +386,22 @@ const styles = StyleSheet.create({
   },
   invoiceBtnText: { color: colors.blue, fontWeight: "700", fontSize: 14 },
   errorText: { color: "#DC2626", fontSize: 14 },
+  cancelHint: { fontSize: 12, color: colors.gray600, textAlign: "center" },
+  cancelBtn: {
+    borderWidth: 1.5,
+    borderColor: "#DC2626",
+    borderRadius: radius.md,
+    paddingVertical: 12,
+    alignItems: "center",
+    backgroundColor: "#FEF2F2",
+  },
+  cancelBtnText: { color: "#DC2626", fontWeight: "700", fontSize: 14 },
+  reorderBtn: {
+    backgroundColor: colors.blue,
+    borderRadius: radius.md,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  reorderBtnText: { color: colors.white, fontWeight: "700", fontSize: 15 },
+  btnDisabled: { opacity: 0.6 },
 });

@@ -21,6 +21,7 @@ import { Swipeable } from "react-native-gesture-handler";
 import { Ionicons } from "@expo/vector-icons";
 import { useCartStore } from "../../store/cartStore";
 import { colors, spacing, radius, shadow, typography } from "../../lib/theme";
+import { fmtRs } from "../../lib/format";
 
 const { width: W } = Dimensions.get("window");
 

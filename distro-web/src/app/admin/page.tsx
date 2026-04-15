@@ -35,7 +35,7 @@ const STATUS_STYLES: Record<string, string> = {
   PENDING: "bg-amber-50 text-amber-600",
   CONFIRMED: "bg-blue-light text-blue",
   PROCESSING: "bg-purple-50 text-purple-600",
-  SHIPPED: "bg-indigo-50 text-indigo-600",
+  DISPATCHED: "bg-indigo-50 text-indigo-600",
   DELIVERED: "bg-green-light text-green",
   CANCELLED: "bg-red-50 text-red-500",
 };

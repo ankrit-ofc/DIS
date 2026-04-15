@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { useAuthStore } from "@/store/authStore";
+import { getSessionInitial } from "@/lib/utils";
 
 const NAV = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
@@ -50,7 +51,8 @@ export default function AdminSidebar() {
 
   function handleLogout() {
     clearAuth();
-    router.push("/login");
+    // Hard reload wipes TanStack Query cache and any in-memory state from the previous user
+    window.location.href = "/login";
   }
 
   return (
@@ -115,13 +117,29 @@ export default function AdminSidebar() {
       {/* User + logout */}
       <div className="border-t border-white/10 p-3">
         {!collapsed && (
-          <div className="px-2 py-2 mb-1">
-            <p className="text-xs text-white/40 font-medium uppercase tracking-wider">
-              Admin
-            </p>
-            <p className="text-xs text-white/70 truncate mt-0.5">
-              {user?.storeName || user?.phone}
-            </p>
+          <div className="px-2 py-2 mb-1 flex items-center gap-2 min-w-0">
+            <span
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue text-white text-sm font-grotesk font-bold"
+              title={user?.ownerName || user?.storeName || user?.phone || "Admin"}
+              aria-hidden
+            >
+              {getSessionInitial(user ?? undefined)}
+            </span>
+            <div className="min-w-0">
+              <p className="text-xs text-white/40 font-medium uppercase tracking-wider">
+                Admin
+              </p>
+              <p className="text-xs text-white/70 truncate mt-0.5">
+                {user?.ownerName || user?.name || user?.storeName || user?.phone}
+              </p>
+            </div>
+          </div>
+        )}
+        {collapsed && (
+          <div className="flex justify-center mb-2" title={user?.ownerName || user?.storeName || user?.phone || "Admin"}>
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue text-white text-sm font-grotesk font-bold">
+              {getSessionInitial(user ?? undefined)}
+            </span>
           </div>
         )}
         <button

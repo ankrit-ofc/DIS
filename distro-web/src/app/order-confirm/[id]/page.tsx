@@ -9,17 +9,20 @@ import { formatPrice, routeParamId } from "@/lib/utils";
 
 interface OrderItem {
   id: number;
-  productName: string;
+  name: string;
+  productName?: string;
   qty: number;
   price: number;
-  unit: string;
+  total: number;
+  unit?: string;
 }
 
 interface Order {
   id: number;
   orderNumber: string;
   status: string;
-  storeName: string;
+  storeName?: string;
+  buyer?: { storeName?: string; phone?: string };
   deliveryAddress: string;
   deliveryDistrict: string;
   paymentMethod: string;
@@ -85,13 +88,13 @@ export default function OrderConfirmPage() {
             {order.items.map((item) => (
               <li key={item.id} className="flex items-center justify-between px-5 py-3">
                 <div>
-                  <p className="text-sm font-medium text-ink">{item.productName}</p>
+                  <p className="text-sm font-medium text-ink">{item.productName ?? item.name}</p>
                   <p className="text-xs text-gray-400">
-                    {item.qty} × {formatPrice(item.price)} {item.unit}
+                    {item.qty} × {formatPrice(item.price)}{item.unit ? ` ${item.unit}` : ""}
                   </p>
                 </div>
                 <p className="text-sm font-grotesk font-semibold text-ink">
-                  {formatPrice(item.price * item.qty)}
+                  {formatPrice(item.total ?? item.price * item.qty)}
                 </p>
               </li>
             ))}
@@ -117,7 +120,7 @@ export default function OrderConfirmPage() {
           <div className="px-5 py-4 border-t border-gray-200 text-xs text-gray-400 space-y-1">
             <p>
               <span className="font-medium text-gray-600">Store:</span>{" "}
-              {order.storeName}
+              {order.storeName ?? order.buyer?.storeName ?? "—"}
             </p>
             <p>
               <span className="font-medium text-gray-600">Address:</span>{" "}

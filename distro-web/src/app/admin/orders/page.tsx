@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { Fragment, useMemo, useState, Suspense } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Search, X, MapPin } from "lucide-react";
+import { Search, X, MapPin, RefreshCw, CheckCircle2 } from "lucide-react";
 import dynamic from "next/dynamic";
+import toast from "react-hot-toast";
 import api from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
 
@@ -20,7 +21,7 @@ const MapView = dynamic(() => import("@/components/admin/OrderMapView"), {
 interface Order {
   id: number;
   orderNumber: string;
-  status: "PENDING" | "CONFIRMED" | "PROCESSING" | "SHIPPED" | "DELIVERED" | "CANCELLED";
+  status: "PENDING" | "CONFIRMED" | "PROCESSING" | "DISPATCHED" | "DELIVERED" | "CANCELLED";
   storeName: string;
   buyerPhone: string;
   deliveryAddress: string;
@@ -36,16 +37,60 @@ interface Order {
   items: { id: number; productName: string; qty: number; price: number; unit: string }[];
 }
 
-const STATUSES = ["ALL", "PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"];
+const STATUSES = ["ALL", "PENDING", "CONFIRMED", "PROCESSING", "DISPATCHED", "DELIVERED", "CANCELLED"];
+const BULK_STATUSES = ["CONFIRMED", "PROCESSING", "DISPATCHED", "DELIVERED", "CANCELLED"];
+const DATE_RANGES = [
+  { key: "TODAY", label: "Today" },
+  { key: "YESTERDAY", label: "Yesterday" },
+  { key: "7D", label: "Last 7 days" },
+  { key: "30D", label: "Last 30 days" },
+  { key: "ALL", label: "All time" },
+];
 
 const STATUS_STYLES: Record<string, string> = {
   PENDING: "bg-amber-50 text-amber-600",
   CONFIRMED: "bg-blue-light text-blue",
   PROCESSING: "bg-purple-50 text-purple-600",
-  SHIPPED: "bg-indigo-50 text-indigo-600",
+  DISPATCHED: "bg-indigo-50 text-indigo-600",
   DELIVERED: "bg-green-light text-green",
   CANCELLED: "bg-red-50 text-red-500",
 };
+
+function dayKey(d: string | Date): string {
+  const date = new Date(d);
+  return date.toISOString().slice(0, 10);
+}
+
+function dayLabel(key: string): string {
+  const today = dayKey(new Date());
+  const yesterday = dayKey(new Date(Date.now() - 86400000));
+  if (key === today) return "Today";
+  if (key === yesterday) return "Yesterday";
+  return new Date(key).toLocaleDateString("en-NP", {
+    weekday: "short",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function rangeStart(key: string): Date | null {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (key === "TODAY") return start;
+  if (key === "YESTERDAY") return new Date(start.getTime() - 86400000);
+  if (key === "7D") return new Date(start.getTime() - 7 * 86400000);
+  if (key === "30D") return new Date(start.getTime() - 30 * 86400000);
+  return null;
+}
+
+function rangeEnd(key: string): Date | null {
+  if (key === "YESTERDAY") {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  }
+  return null;
+}
 
 function OrdersContent() {
   const searchParams = useSearchParams();
@@ -53,18 +98,20 @@ function OrdersContent() {
   const qc = useQueryClient();
 
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [dateRange, setDateRange] = useState("TODAY");
   const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [selectedId, setSelectedId] = useState<number | null>(
     searchParams.get("id") ? Number(searchParams.get("id")) : null
   );
 
-  const { data: ordersData, isLoading } = useQuery<{ orders: Order[]; total: number }>({
+  const { data: ordersData, isLoading, isFetching, refetch } = useQuery<{ orders: Order[]; total: number }>({
     queryKey: ["admin-orders", statusFilter, search],
     queryFn: () => {
       const p = new URLSearchParams();
       if (statusFilter !== "ALL") p.set("status", statusFilter);
       if (search) p.set("q", search);
-      p.set("limit", "50");
+      p.set("limit", "200");
       return api.get(`/orders?${p.toString()}`).then((r) =>
         Array.isArray(r.data)
           ? { orders: r.data, total: r.data.length }
@@ -73,7 +120,31 @@ function OrdersContent() {
     },
   });
 
-  const orders = ordersData?.orders || [];
+  const allOrders = ordersData?.orders || [];
+
+  const orders = useMemo(() => {
+    const start = rangeStart(dateRange);
+    const end = rangeEnd(dateRange);
+    if (!start) return allOrders;
+    return allOrders.filter((o) => {
+      const t = new Date(o.createdAt).getTime();
+      if (end) return t >= start.getTime() && t < end.getTime();
+      return t >= start.getTime();
+    });
+  }, [allOrders, dateRange]);
+
+  const grouped = useMemo(() => {
+    const byDay = new Map<string, { orders: Order[]; revenue: number }>();
+    for (const o of orders) {
+      const k = dayKey(o.createdAt);
+      const bucket = byDay.get(k) ?? { orders: [], revenue: 0 };
+      bucket.orders.push(o);
+      if (o.status !== "CANCELLED") bucket.revenue += o.total;
+      byDay.set(k, bucket);
+    }
+    return Array.from(byDay.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1));
+  }, [orders]);
+
   const selectedOrder = orders.find((o) => o.id === selectedId);
 
   const updateStatus = useMutation({
@@ -85,12 +156,87 @@ function OrdersContent() {
     },
   });
 
+  const bulkUpdate = useMutation({
+    mutationFn: ({ ids, status }: { ids: number[]; status: string }) =>
+      api.patch(`/orders/bulk-status`, { ids, status }),
+    onSuccess: (res, vars) => {
+      toast.success(`Updated ${res.data?.updated ?? vars.ids.length} orders → ${vars.status}`);
+      setSelectedIds(new Set());
+      qc.invalidateQueries({ queryKey: ["admin-orders"] });
+      qc.invalidateQueries({ queryKey: ["admin-stats"] });
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || "Bulk update failed";
+      toast.error(msg);
+    },
+  });
+
+  const toggleOne = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleGroup = (group: Order[]) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const allSelected = group.every((o) => next.has(o.id));
+      if (allSelected) group.forEach((o) => next.delete(o.id));
+      else group.forEach((o) => next.add(o.id));
+      return next;
+    });
+  };
+
+  const allVisibleIds = orders.map((o) => o.id);
+  const allSelected = allVisibleIds.length > 0 && allVisibleIds.every((id) => selectedIds.has(id));
+  const toggleAll = () => {
+    if (allSelected) setSelectedIds(new Set());
+    else setSelectedIds(new Set(allVisibleIds));
+  };
+
+  const runBulk = (status: string) => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    if (!confirm(`Update ${ids.length} order(s) to ${status}? Notifications will be sent to all buyers.`)) return;
+    bulkUpdate.mutate({ ids, status });
+  };
+
   return (
     <div className="flex gap-6 h-[calc(100vh-100px)]">
       {/* Left: orders list */}
       <div className="flex-1 flex flex-col min-w-0">
         <div className="mb-5 space-y-3">
-          <h1 className="font-grotesk font-bold text-2xl text-ink">Orders</h1>
+          <div className="flex items-center justify-between">
+            <h1 className="font-grotesk font-bold text-2xl text-ink">Orders</h1>
+            <button
+              onClick={() => refetch()}
+              disabled={isFetching}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-blue border border-blue rounded-lg px-3 py-1.5 hover:bg-blue-pale transition-colors disabled:opacity-60"
+            >
+              <RefreshCw size={13} className={isFetching ? "animate-spin" : ""} />
+              Refresh
+            </button>
+          </div>
+
+          {/* Date range picker */}
+          <div className="flex gap-1 overflow-x-auto pb-1">
+            {DATE_RANGES.map((r) => (
+              <button
+                key={r.key}
+                onClick={() => setDateRange(r.key)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+                  dateRange === r.key
+                    ? "bg-ink text-white"
+                    : "bg-white border border-gray-200 text-gray-600 hover:border-ink"
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
 
           {/* Status tabs */}
           <div className="flex gap-1 overflow-x-auto pb-1">
@@ -133,7 +279,34 @@ function OrdersContent() {
           </div>
         </div>
 
-        {/* Table */}
+        {/* Bulk action bar */}
+        {selectedIds.size > 0 && (
+          <div className="mb-3 flex flex-wrap items-center gap-2 bg-blue-pale border border-blue/30 rounded-xl px-4 py-2.5">
+            <CheckCircle2 size={16} className="text-blue" />
+            <span className="text-sm font-medium text-ink">
+              {selectedIds.size} selected
+            </span>
+            <span className="text-xs text-gray-400 mr-2">Mark as:</span>
+            {BULK_STATUSES.map((s) => (
+              <button
+                key={s}
+                onClick={() => runBulk(s)}
+                disabled={bulkUpdate.isPending}
+                className="text-xs font-medium px-2.5 py-1 rounded-lg bg-white border border-gray-200 text-gray-600 hover:border-blue hover:text-blue disabled:opacity-60"
+              >
+                {s}
+              </button>
+            ))}
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="ml-auto text-xs text-gray-400 hover:text-ink"
+            >
+              Clear
+            </button>
+          </div>
+        )}
+
+        {/* Table — grouped by day */}
         <div className="flex-1 overflow-auto bg-white border border-gray-200 rounded-2xl">
           {isLoading ? (
             <div className="space-y-2 p-4">
@@ -146,66 +319,106 @@ function OrdersContent() {
             </div>
           ) : orders.length === 0 ? (
             <div className="text-center py-16 text-gray-400">
-              <p>No orders found.</p>
+              <p>No orders in this range.</p>
             </div>
           ) : (
             <table className="w-full text-sm">
-              <thead className="bg-off-white sticky top-0">
+              <thead className="bg-off-white sticky top-0 z-10">
                 <tr>
-                  {["#", "Store", "Status", "Payment", "Total", "Date"].map(
-                    (h) => (
-                      <th
-                        key={h}
-                        className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide"
-                      >
-                        {h}
-                      </th>
-                    )
-                  )}
+                  <th className="w-10 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleAll}
+                      className="accent-blue"
+                    />
+                  </th>
+                  {["#", "Store", "Status", "Payment", "Total", "Time"].map((h) => (
+                    <th
+                      key={h}
+                      className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide"
+                    >
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {orders.map((o) => (
-                  <tr
-                    key={o.id}
-                    onClick={() => {
-                      setSelectedId(o.id);
-                      router.replace(`/admin/orders?id=${o.id}`, { scroll: false });
-                    }}
-                    className={`cursor-pointer hover:bg-off-white transition-colors ${
-                      selectedId === o.id ? "bg-blue-pale" : ""
-                    }`}
-                  >
-                    <td className="px-4 py-3 font-grotesk font-semibold text-ink">
-                      #{o.orderNumber}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 max-w-[140px] truncate">
-                      <p className="truncate">{o.storeName}</p>
-                      <p className="text-xs text-gray-400">{o.buyerPhone}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${
-                          STATUS_STYLES[o.status] || ""
-                        }`}
-                      >
-                        {o.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-600">
-                      {o.paymentMethod}
-                    </td>
-                    <td className="px-4 py-3 font-grotesk font-semibold text-blue">
-                      {formatPrice(o.total)}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
-                      {new Date(o.createdAt).toLocaleDateString("en-NP", {
-                        day: "numeric",
-                        month: "short",
-                      })}
-                    </td>
-                  </tr>
-                ))}
+                {grouped.map(([day, bucket]) => {
+                  const groupAllSelected =
+                    bucket.orders.length > 0 &&
+                    bucket.orders.every((o) => selectedIds.has(o.id));
+                  return (
+                    <Fragment key={day}>
+                      <tr className="bg-off-white">
+                        <td className="px-4 py-2">
+                          <input
+                            type="checkbox"
+                            checked={groupAllSelected}
+                            onChange={() => toggleGroup(bucket.orders)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="accent-blue"
+                          />
+                        </td>
+                        <td colSpan={5} className="px-4 py-2 text-xs font-semibold text-ink">
+                          {dayLabel(day)}{" "}
+                          <span className="text-gray-400 font-normal">
+                            · {bucket.orders.length} orders · {formatPrice(bucket.revenue)} revenue
+                          </span>
+                        </td>
+                      </tr>
+                      {bucket.orders.map((o) => (
+                        <tr
+                          key={o.id}
+                          onClick={() => {
+                            setSelectedId(o.id);
+                            router.replace(`/admin/orders?id=${o.id}`, { scroll: false });
+                          }}
+                          className={`cursor-pointer hover:bg-off-white transition-colors ${
+                            selectedId === o.id ? "bg-blue-pale" : ""
+                          }`}
+                        >
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(o.id)}
+                              onChange={() => toggleOne(o.id)}
+                              className="accent-blue"
+                            />
+                          </td>
+                          <td className="px-4 py-3 font-grotesk font-semibold text-ink">
+                            #{o.orderNumber}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600 max-w-[140px] truncate">
+                            <p className="truncate">{o.storeName}</p>
+                            <p className="text-xs text-gray-400">{o.buyerPhone}</p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${
+                                STATUS_STYLES[o.status] || ""
+                              }`}
+                            >
+                              {o.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-600">
+                            {o.paymentMethod}
+                          </td>
+                          <td className="px-4 py-3 font-grotesk font-semibold text-blue">
+                            {formatPrice(o.total)}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
+                            {new Date(o.createdAt).toLocaleTimeString("en-NP", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           )}

@@ -2,27 +2,18 @@
 
 import { useState, Suspense } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import { useCartStore } from "@/store/cartStore";
 import { useAuthStore } from "@/store/authStore";
-import { formatPrice, normalizeDistrictsList } from "@/lib/utils";
+import { formatPrice } from "@/lib/utils";
 import api from "@/lib/api";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, MapPin } from "lucide-react";
 import toast from "react-hot-toast";
 
 const MapLocationPicker = dynamic(
   () => import("@/components/MapLocationPicker"),
   { ssr: false, loading: () => <div className="h-72 bg-blue-pale rounded-xl animate-pulse" /> }
 );
-
-interface District {
-  id: string;
-  name: string;
-  deliveryFee: number;
-  estimatedDays: number;
-  active: boolean;
-}
 
 function CheckoutForm() {
   const router = useRouter();
@@ -31,31 +22,26 @@ function CheckoutForm() {
 
   const [storeName, setStoreName] = useState(user?.storeName || "");
   const [address, setAddress] = useState("");
-  const [districtId, setDistrictId] = useState<string>("");
+  const [deliveryArea, setDeliveryArea] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"COD">("COD");
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: districts = [] } = useQuery<District[]>({
-    queryKey: ["districts"],
-    queryFn: () =>
-      api.get("/districts").then((r) => normalizeDistrictsList<District>(r.data)),
-    retry: false,
-  });
-
-  const activeDistricts = districts.filter((d) => d.active === true);
-  const selectableDistricts =
-    activeDistricts.length > 0 ? activeDistricts : districts;
-  const selectedDistrict = selectableDistricts.find((d) => d.id === districtId);
-  const deliveryFee = selectedDistrict?.deliveryFee || 0;
-  const total = subtotal() + deliveryFee;
+  const MIN_ORDER = 50000;
+  const total = subtotal();
+  const belowMin = total < MIN_ORDER;
+  const needed = Math.max(0, MIN_ORDER - total);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (items.length === 0) return;
-    if (!districtId || !selectedDistrict) {
-      setError("Please select a delivery district.");
+    if (belowMin) {
+      setError(`Minimum order is Rs ${MIN_ORDER.toLocaleString("en-IN")}. Add Rs ${needed.toLocaleString("en-IN")} more.`);
+      return;
+    }
+    if (!deliveryArea.trim()) {
+      setError("Please enter your delivery area.");
       return;
     }
     setSubmitting(true);
@@ -65,7 +51,7 @@ function CheckoutForm() {
       const res = await api.post("/orders", {
         storeName,
         deliveryAddress: address,
-        deliveryDistrict: selectedDistrict.name,
+        deliveryDistrict: deliveryArea.trim(),
         deliveryLat: location?.lat ?? null,
         deliveryLng: location?.lng ?? null,
         paymentMethod,
@@ -88,9 +74,8 @@ function CheckoutForm() {
       }
       router.push(`/order-confirm/${orderId}`);
     } catch (err: unknown) {
-      const message =
-        (err as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message || "Failed to place order. Please try again.";
+      const errData = (err as { response?: { data?: { message?: string; error?: string } } })?.response?.data;
+      const message = errData?.message || errData?.error || "Failed to place order. Please try again.";
       setError(message);
       toast.error(message);
       setSubmitting(false);
@@ -149,21 +134,22 @@ function CheckoutForm() {
 
               <div>
                 <label className="text-sm font-medium text-ink block mb-1.5">
-                  District
+                  Delivery Area
                 </label>
-                <select
-                  value={districtId}
-                  onChange={(e) => setDistrictId(e.target.value)}
-                  required
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm bg-white focus:outline-none focus:border-blue text-ink"
-                >
-                  <option value="">Select district…</option>
-                  {selectableDistricts.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name} — Rs {d.deliveryFee.toLocaleString()}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <MapPin size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={deliveryArea}
+                    onChange={(e) => setDeliveryArea(e.target.value)}
+                    required
+                    placeholder="e.g. Balaju, Kathmandu"
+                    className="w-full border border-gray-200 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-blue"
+                  />
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  We currently deliver within the Kathmandu Valley area
+                </p>
               </div>
             </div>
           </section>
@@ -284,16 +270,21 @@ function CheckoutForm() {
                 </span>
               </div>
               <div className="flex justify-between text-gray-600">
-                <span>Delivery ({selectedDistrict?.name || "—"})</span>
-                <span className="font-grotesk font-medium">
-                  {deliveryFee > 0 ? formatPrice(deliveryFee) : "—"}
-                </span>
+                <span>Delivery</span>
+                <span className="font-grotesk font-medium text-green">Free</span>
               </div>
               <div className="flex justify-between font-grotesk font-bold text-base text-ink border-t border-gray-200 pt-3">
                 <span>Total</span>
                 <span className="text-blue">{formatPrice(total)}</span>
               </div>
             </div>
+
+            {belowMin && (
+              <div className="mt-4 flex items-start gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs">
+                <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+                Minimum order is Rs {MIN_ORDER.toLocaleString("en-IN")}. Add Rs {needed.toLocaleString("en-IN")} more to proceed.
+              </div>
+            )}
 
             {error && (
               <div className="mt-4 flex items-start gap-2 text-red-500 bg-red-50 rounded-xl p-3 text-xs">
@@ -304,7 +295,7 @@ function CheckoutForm() {
 
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || belowMin}
               className="mt-5 w-full bg-blue hover:bg-blue-dark disabled:bg-gray-200 disabled:cursor-not-allowed text-white font-medium py-3.5 rounded-xl transition-colors shadow-lg shadow-blue/20"
             >
               {submitting ? "Placing Order…" : "Place Order"}

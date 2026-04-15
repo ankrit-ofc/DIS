@@ -18,6 +18,9 @@ model Profile {
   ownerName     String?
   district      String?
   address       String?
+  companyName   String?
+  panNumber     String?   @unique
+  googleId      String?   @unique
   phoneVerified Boolean   @default(false)
   status        Status    @default(ACTIVE)
   creditLimit   Float     @default(0)

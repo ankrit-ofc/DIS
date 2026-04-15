@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import axios from 'axios';
 import { prisma } from '../lib/prisma';
 import {
   hashPassword,
@@ -19,61 +20,83 @@ import { authLimiter, otpLimiter } from '../middleware/rateLimiter';
 const router = Router();
 
 // ─── POST /api/auth/request-otp ──────────────────────────────────────────────
-// Find or create a PENDING profile by email, generate OTP, send via email.
+// Accepts { email } OR { phone }. Email → Resend. Phone → Sparrow (stubbed).
 router.post('/request-otp', otpLimiter, async (req: Request, res: Response): Promise<void> => {
-  const { email } = req.body as { email?: string };
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  const { email, phone } = req.body as { email?: string; phone?: string };
+
+  if (!email && !phone) {
+    res.status(400).json({ error: 'email or phone is required' });
+    return;
+  }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     res.status(400).json({ error: 'Valid email address required' });
+    return;
+  }
+  if (phone && !/^9[6-8]\d{8}$/.test(phone)) {
+    res.status(400).json({ error: 'Valid Nepal phone number required (98XXXXXXXX)' });
     return;
   }
 
   const otp = generateOTP();
   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-  let profile = await prisma.profile.findUnique({ where: { email } });
-
-  if (!profile) {
-    // Create PENDING profile with temporary unique phone placeholder
-    const tempPhone = `PENDING_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    profile = await prisma.profile.create({
-      data: { email, phone: tempPhone, passwordHash: '', otpCode: otp, otpExpiry, status: 'PENDING' },
-    });
-  } else {
-    await prisma.profile.update({
-      where: { email },
-      data: { otpCode: otp, otpExpiry },
-    });
-  }
-
-  // Send OTP via email
-  void (async () => {
-    try {
-      const html = await render(OtpEmail({ otp, email }));
-      await sendEmail(email, 'Your DISTRO verification code', html, 'otp');
-    } catch (e) {
-      console.error('[EMAIL] OTP pipeline failed:', e);
+  if (email) {
+    let profile = await prisma.profile.findUnique({ where: { email } });
+    if (!profile) {
+      const tempPhone = `PENDING_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      profile = await prisma.profile.create({
+        data: { email, phone: tempPhone, passwordHash: '', otpCode: otp, otpExpiry, status: 'PENDING' },
+      });
+    } else {
+      await prisma.profile.update({ where: { email }, data: { otpCode: otp, otpExpiry } });
     }
-  })();
 
-  // [SMS - UNCOMMENT WHEN SPARROW ACCOUNT READY]
-  // void sendSMS(phone, otpMessage(otp));
-  // [/SMS]
+    void (async () => {
+      try {
+        const html = await render(OtpEmail({ otp, email }));
+        await sendEmail(email, 'Your DISTRO verification code', html, 'otp');
+      } catch (e) {
+        console.error('[EMAIL] OTP pipeline failed:', e);
+      }
+    })();
 
-  res.json({ message: 'OTP sent' });
-});
-
-// ─── POST /api/auth/verify-otp ───────────────────────────────────────────────
-// Validate OTP code + expiry, mark emailVerified + phoneVerified, clear OTP fields.
-router.post('/verify-otp', authLimiter, async (req: Request, res: Response): Promise<void> => {
-  const { email, otp } = req.body as { email?: string; otp?: string };
-  if (!email || !otp) {
-    res.status(400).json({ error: 'email and otp are required' });
+    res.json({ message: 'OTP sent', method: 'email' });
     return;
   }
 
-  const profile = await prisma.profile.findUnique({ where: { email } });
+  // phone branch
+  let profile = await prisma.profile.findUnique({ where: { phone: phone! } });
+  if (!profile) {
+    profile = await prisma.profile.create({
+      data: { phone: phone!, passwordHash: '', otpCode: otp, otpExpiry, status: 'PENDING' },
+    });
+  } else {
+    await prisma.profile.update({ where: { phone: phone! }, data: { otpCode: otp, otpExpiry } });
+  }
+
+  // [SMS - UNCOMMENT WHEN SPARROW ACCOUNT READY]
+  // void sendSMS(phone!, otpMessage(otp));
+  // [/SMS]
+  console.log(`[OTP][SMS STUB] phone=${phone} otp=${otp}`);
+
+  res.json({ message: 'OTP sent', method: 'phone' });
+});
+
+// ─── POST /api/auth/verify-otp ───────────────────────────────────────────────
+// Accepts { email, otp } OR { phone, otp }.
+router.post('/verify-otp', authLimiter, async (req: Request, res: Response): Promise<void> => {
+  const { email, phone, otp } = req.body as { email?: string; phone?: string; otp?: string };
+  if ((!email && !phone) || !otp) {
+    res.status(400).json({ error: 'email or phone, and otp are required' });
+    return;
+  }
+
+  const profile = email
+    ? await prisma.profile.findUnique({ where: { email } })
+    : await prisma.profile.findUnique({ where: { phone: phone! } });
+
   if (!profile || !profile.otpCode || !profile.otpExpiry) {
-    res.status(400).json({ error: 'No OTP requested for this email' });
+    res.status(400).json({ error: 'No OTP requested' });
     return;
   }
   if (profile.otpExpiry < new Date()) {
@@ -85,18 +108,29 @@ router.post('/verify-otp', authLimiter, async (req: Request, res: Response): Pro
     return;
   }
 
-  await prisma.profile.update({
-    where: { email },
-    data: { phoneVerified: true, emailVerified: true, otpCode: null, otpExpiry: null },
+  const updated = await prisma.profile.update({
+    where: { id: profile.id },
+    data: email
+      ? { emailVerified: true, phoneVerified: true, otpCode: null, otpExpiry: null, loginAttempts: 0, lockedUntil: null }
+      : { phoneVerified: true, otpCode: null, otpExpiry: null, loginAttempts: 0, lockedUntil: null },
   });
 
-  res.json({ message: 'Email verified' });
+  // If this is an already-registered user, issue a session so OTP works as a login.
+  if (updated.status === 'ACTIVE') {
+    const token = await createSession(updated.id);
+    const { passwordHash, otpCode, otpExpiry, ...safeProfile } = updated;
+    res.json({ message: 'Verified', token, profile: safeProfile });
+    return;
+  }
+
+  // Otherwise just confirm verification; client routes to registration.
+  res.json({ message: 'Verified', requiresRegistration: true });
 });
 
 // ─── POST /api/auth/register ─────────────────────────────────────────────────
 // Requires prior OTP verification. Email is primary identifier; phone is additional info.
 router.post('/register', authLimiter, async (req: Request, res: Response): Promise<void> => {
-  const { email, password, storeName, ownerName, district, phone, address } =
+  const { email, password, storeName, ownerName, district, phone, address, companyName, panNumber } =
     req.body as {
       email?: string;
       password?: string;
@@ -105,6 +139,8 @@ router.post('/register', authLimiter, async (req: Request, res: Response): Promi
       district?: string;
       phone?: string;
       address?: string;
+      companyName?: string;
+      panNumber?: string;
     };
 
   if (!email || !password) {
@@ -117,6 +153,10 @@ router.post('/register', authLimiter, async (req: Request, res: Response): Promi
   }
   if (!phone) {
     res.status(400).json({ error: 'phone is required' });
+    return;
+  }
+  if (panNumber && !/^\d{9}$/.test(panNumber)) {
+    res.status(400).json({ error: 'PAN number must be exactly 9 digits' });
     return;
   }
 
@@ -143,6 +183,17 @@ router.post('/register', authLimiter, async (req: Request, res: Response): Promi
     return;
   }
 
+  // Validate PAN uniqueness if provided
+  if (panNumber) {
+    const panTaken = await prisma.profile.findFirst({
+      where: { panNumber, id: { not: profile.id } },
+    });
+    if (panTaken) {
+      res.status(409).json({ error: 'PAN number already in use' });
+      return;
+    }
+  }
+
   const passwordHash = await hashPassword(password);
 
   const updated = await prisma.profile.update({
@@ -155,6 +206,8 @@ router.post('/register', authLimiter, async (req: Request, res: Response): Promi
       ownerName,
       district,
       address,
+      companyName: companyName ?? null,
+      panNumber: panNumber ?? null,
       emailVerified: true,
       phoneVerified: true,
     },
@@ -251,6 +304,211 @@ router.get('/me', requireAuth, (req: Request, res: Response): void => {
   const profile = (req as any).profile;
   const { passwordHash, otpCode, otpExpiry, ...safeProfile } = profile;
   res.json(safeProfile);
+});
+
+// ─── POST /api/auth/google ───────────────────────────────────────────────────
+// Verify Google ID token → find/link/create profile → return session token.
+router.post('/google', authLimiter, async (req: Request, res: Response): Promise<void> => {
+  const { idToken } = req.body as { idToken?: string };
+  if (!idToken) {
+    res.status(400).json({ error: 'idToken is required' });
+    return;
+  }
+
+  let payload: { email?: string; name?: string; sub?: string; email_verified?: string | boolean };
+  try {
+    const { data } = await axios.get(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
+    );
+    payload = data;
+  } catch (e) {
+    res.status(401).json({ error: 'Invalid Google token' });
+    return;
+  }
+
+  const email = payload.email;
+  const name = payload.name;
+  const googleId = payload.sub;
+
+  if (!email || !googleId) {
+    res.status(400).json({ error: 'Google token missing email or sub' });
+    return;
+  }
+
+  let profile = await prisma.profile.findFirst({
+    where: { OR: [{ googleId }, { email }] },
+  });
+
+  let requiresOnboarding = false;
+
+  if (!profile) {
+    // Create new PENDING profile
+    const tempPhone = `PENDING_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    profile = await prisma.profile.create({
+      data: {
+        email,
+        phone: tempPhone,
+        passwordHash: '',
+        googleId,
+        ownerName: name ?? null,
+        emailVerified: true,
+        phoneVerified: false,
+        status: 'PENDING',
+      },
+    });
+    requiresOnboarding = true;
+  } else if (!profile.googleId) {
+    // Link Google to existing profile
+    profile = await prisma.profile.update({
+      where: { id: profile.id },
+      data: { googleId, emailVerified: true },
+    });
+  }
+
+  if (profile.status === 'PENDING' || profile.phone.startsWith('PENDING_')) {
+    requiresOnboarding = true;
+  }
+  if (profile.status === 'SUSPENDED') {
+    res.status(403).json({ error: 'Account suspended' });
+    return;
+  }
+
+  const token = await createSession(profile.id);
+  const { passwordHash, otpCode, otpExpiry, ...safeProfile } = profile;
+  res.json({ token, profile: safeProfile, requiresOnboarding });
+});
+
+// ─── PATCH /api/auth/me — update own profile ────────────────────────────────
+router.patch('/me', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const authProfile = (req as any).profile as { id: string };
+  const { storeName, ownerName, district, address, companyName, panNumber } = req.body as {
+    storeName?: string;
+    ownerName?: string;
+    district?: string;
+    address?: string;
+    companyName?: string;
+    panNumber?: string;
+  };
+
+  if (panNumber && !/^\d{9}$/.test(panNumber)) {
+    res.status(400).json({ error: 'PAN number must be exactly 9 digits' });
+    return;
+  }
+  if (panNumber) {
+    const panTaken = await prisma.profile.findFirst({
+      where: { panNumber, id: { not: authProfile.id } },
+      select: { id: true },
+    });
+    if (panTaken) {
+      res.status(409).json({ error: 'PAN number already in use' });
+      return;
+    }
+  }
+
+  const data: Record<string, any> = {};
+  if (storeName   !== undefined) data.storeName   = storeName;
+  if (ownerName   !== undefined) data.ownerName   = ownerName;
+  if (district    !== undefined) data.district    = district;
+  if (address     !== undefined) data.address     = address;
+  if (companyName !== undefined) data.companyName = companyName || null;
+  if (panNumber   !== undefined) data.panNumber   = panNumber   || null;
+
+  const updated = await prisma.profile.update({ where: { id: authProfile.id }, data });
+  const { passwordHash, otpCode, otpExpiry, ...safeProfile } = updated;
+  res.json(safeProfile);
+});
+
+// ─── POST /api/auth/change-password — change own password ───────────────────
+router.post('/change-password', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const authProfile = (req as any).profile as { id: string };
+  const { oldPassword, newPassword } = req.body as { oldPassword?: string; newPassword?: string };
+
+  if (!oldPassword || !newPassword) {
+    res.status(400).json({ error: 'oldPassword and newPassword are required' });
+    return;
+  }
+  if (newPassword.length < 8) {
+    res.status(400).json({ error: 'New password must be at least 8 characters' });
+    return;
+  }
+
+  const profile = await prisma.profile.findUnique({ where: { id: authProfile.id } });
+  if (!profile) {
+    res.status(404).json({ error: 'Profile not found' });
+    return;
+  }
+
+  const valid = await verifyPassword(oldPassword, profile.passwordHash);
+  if (!valid) {
+    res.status(401).json({ error: 'Current password is incorrect' });
+    return;
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  await prisma.profile.update({ where: { id: authProfile.id }, data: { passwordHash } });
+  res.json({ message: 'Password changed' });
+});
+
+// ─── POST /api/auth/complete-onboarding ──────────────────────────────────────
+// For Google users (or any PENDING user) to complete required profile fields.
+router.post('/complete-onboarding', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const authProfile = (req as any).profile as { id: string };
+  const { phone, storeName, companyName, panNumber, district, address } = req.body as {
+    phone?: string;
+    storeName?: string;
+    companyName?: string;
+    panNumber?: string;
+    district?: string;
+    address?: string;
+  };
+
+  if (!phone || !storeName || !district) {
+    res.status(400).json({ error: 'phone, storeName, and district are required' });
+    return;
+  }
+  if (!/^9[6-8]\d{8}$/.test(phone)) {
+    res.status(400).json({ error: 'Valid Nepal phone number required (98XXXXXXXX)' });
+    return;
+  }
+  if (panNumber && !/^\d{9}$/.test(panNumber)) {
+    res.status(400).json({ error: 'PAN number must be exactly 9 digits' });
+    return;
+  }
+
+  const phoneTaken = await prisma.profile.findFirst({
+    where: { phone, id: { not: authProfile.id } },
+  });
+  if (phoneTaken) {
+    res.status(409).json({ error: 'Phone number already in use' });
+    return;
+  }
+  if (panNumber) {
+    const panTaken = await prisma.profile.findFirst({
+      where: { panNumber, id: { not: authProfile.id } },
+    });
+    if (panTaken) {
+      res.status(409).json({ error: 'PAN number already in use' });
+      return;
+    }
+  }
+
+  const existing = await prisma.profile.findUnique({ where: { id: authProfile.id } });
+  const updated = await prisma.profile.update({
+    where: { id: authProfile.id },
+    data: {
+      phone,
+      storeName,
+      companyName: companyName ?? null,
+      panNumber: panNumber ?? null,
+      district,
+      address: address ?? null,
+      phoneVerified: true,
+      status: existing?.status === 'PENDING' ? 'ACTIVE' : existing?.status ?? 'ACTIVE',
+    },
+  });
+
+  const { passwordHash, otpCode, otpExpiry, ...safeProfile } = updated;
+  res.json({ profile: safeProfile });
 });
 
 export default router;

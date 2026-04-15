@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   RefreshControl,
   ScrollView,
-  Platform,
   ActivityIndicator,
 } from "react-native";
 import { useState, useEffect, useCallback } from "react";
@@ -25,21 +24,25 @@ import { api } from "../../lib/api";
 import { BottomSheet } from "../../components/BottomSheet";
 import { StatusBadge } from "../../components/StatusBadge";
 import { colors, spacing, radius, shadow, typography, statusColors } from "../../lib/theme";
+import { fmtRs } from "../../lib/format";
 
 interface Order {
   id: number;
   orderNumber: string;
   status: string;
-  totalAmount: number;
+  total?: number;
+  totalAmount?: number;
   buyerName: string;
   storeName: string;
   createdAt: string;
   deliveryLat?: number;
   deliveryLng?: number;
+  deliveryDistrict?: string;
   district?: string;
+  deliveryAddress?: string;
   address?: string;
   paymentMethod?: string;
-  items?: { productName: string; qty: number; unitPrice: number }[];
+  items?: { name?: string; productName?: string; qty: number; price?: number; unitPrice?: number }[];
 }
 
 const STATUS_TABS = ["ALL", "PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"];
@@ -102,7 +105,7 @@ function OrderCard({ order, index, onPress }: { order: Order; index: number; onP
               {new Date(order.createdAt).toLocaleDateString("en-NP", { month: "short", day: "numeric" })}
             </Text>
           </View>
-          <Text style={styles.cardAmount}>Rs {order.totalAmount.toLocaleString()}</Text>
+          <Text style={styles.cardAmount}>{fmtRs(order.totalAmount ?? order.total)}</Text>
         </View>
       </TouchableOpacity>
     </Animated.View>
@@ -245,14 +248,14 @@ export function AdminOrdersScreen() {
 
             {/* Meta info */}
             <View style={styles.sheetMeta}>
-              {selected.district && (
+              {(selected.deliveryDistrict ?? selected.district) ? (
                 <View style={styles.sheetMetaRow}>
                   <Ionicons name="location-outline" size={14} color={colors.gray400} />
                   <Text style={styles.sheetMetaText}>
-                    {selected.district}{selected.address ? `, ${selected.address}` : ""}
+                    {selected.deliveryDistrict ?? selected.district}{(selected.deliveryAddress ?? selected.address) ? `, ${selected.deliveryAddress ?? selected.address}` : ""}
                   </Text>
                 </View>
-              )}
+              ) : null}
               {selected.paymentMethod && (
                 <View style={styles.sheetMetaRow}>
                   <Ionicons name="card-outline" size={14} color={colors.gray400} />
@@ -264,16 +267,19 @@ export function AdminOrdersScreen() {
             {/* Items */}
             {selected.items && selected.items.length > 0 && (
               <View style={styles.itemsCard}>
-                {selected.items.map((item, idx) => (
-                  <View key={idx} style={[styles.itemRow, idx > 0 && styles.itemRowBorder]}>
-                    <Text style={styles.itemName} numberOfLines={1}>{item.productName}</Text>
-                    <Text style={styles.itemQty}>×{item.qty}</Text>
-                    <Text style={styles.itemAmt}>Rs {(item.unitPrice * item.qty).toLocaleString()}</Text>
-                  </View>
-                ))}
+                {selected.items.map((item, idx) => {
+                  const price = item.unitPrice ?? item.price ?? 0;
+                  return (
+                    <View key={idx} style={[styles.itemRow, idx > 0 && styles.itemRowBorder]}>
+                      <Text style={styles.itemName} numberOfLines={1}>{item.productName ?? item.name}</Text>
+                      <Text style={styles.itemQty}>×{item.qty}</Text>
+                      <Text style={styles.itemAmt}>{fmtRs(price * item.qty)}</Text>
+                    </View>
+                  );
+                })}
                 <View style={[styles.itemRow, styles.itemRowBorder, styles.itemTotalRow]}>
                   <Text style={styles.itemTotalLabel}>Total</Text>
-                  <Text style={styles.itemTotalAmt}>Rs {selected.totalAmount.toLocaleString()}</Text>
+                  <Text style={styles.itemTotalAmt}>{fmtRs(selected.totalAmount ?? selected.total)}</Text>
                 </View>
               </View>
             )}
@@ -309,7 +315,7 @@ export function AdminOrdersScreen() {
             <Text style={styles.sheetSectionTitle}>Delivery location</Text>
             {mapRegion ? (
               <MapView
-                provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
+                provider={PROVIDER_GOOGLE}
                 style={styles.map}
                 region={mapRegion}
                 scrollEnabled={false}

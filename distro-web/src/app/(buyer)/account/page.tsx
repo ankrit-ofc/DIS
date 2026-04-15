@@ -1,27 +1,27 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, MapPin, LogOut } from "lucide-react";
 import toast from "react-hot-toast";
 import api from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
-import { formatPrice, normalizeDistrictsList } from "@/lib/utils";
+import { formatPrice } from "@/lib/utils";
 
 interface Profile {
-  id: number;
+  id: string;
   storeName: string;
   ownerName: string;
   phone: string;
-  district: { id: string; name: string } | null;
+  email?: string | null;
+  district: string | null;
+  address?: string | null;
+  companyName?: string | null;
+  panNumber?: string | null;
   creditLimit: number;
   creditUsed: number;
   status: string;
-}
-
-interface District {
-  id: string;
-  name: string;
 }
 
 function CreditBar({ used, limit }: { used: number; limit: number }) {
@@ -53,13 +53,23 @@ function CreditBar({ used, limit }: { used: number; limit: number }) {
 }
 
 export default function AccountPage() {
-  const { user, setAuth, token } = useAuthStore();
+  const router = useRouter();
+  const { user, setAuth, token, clearAuth } = useAuthStore();
   const qc = useQueryClient();
+
+  function handleLogout() {
+    clearAuth();
+    qc.clear();
+    router.push("/login");
+  }
 
   const [editMode, setEditMode] = useState(false);
   const [storeName, setStoreName] = useState("");
   const [ownerName, setOwnerName] = useState("");
-  const [districtId, setDistrictId] = useState<string>("");
+  const [locationArea, setLocationArea] = useState("");
+  const [address, setAddress] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [panNumber, setPanNumber] = useState("");
   const [profileMsg, setProfileMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   const [oldPw, setOldPw] = useState("");
@@ -69,26 +79,29 @@ export default function AccountPage() {
 
   const { data: profile } = useQuery<Profile>({
     queryKey: ["my-profile"],
-    queryFn: () => api.get("/users/me").then((r) => r.data),
+    queryFn: () => api.get("/auth/me").then((r) => r.data),
   });
 
   useEffect(() => {
     if (profile) {
-      setStoreName(profile.storeName);
+      setStoreName(profile.storeName || "");
       setOwnerName(profile.ownerName || "");
-      setDistrictId(profile.district?.id ? String(profile.district.id) : "");
+      setLocationArea(profile.district || "");
+      setAddress(profile.address || "");
+      setCompanyName(profile.companyName || "");
+      setPanNumber(profile.panNumber || "");
     }
   }, [profile]);
 
-  const { data: districts = [] } = useQuery<District[]>({
-    queryKey: ["districts"],
-    queryFn: () =>
-      api.get("/districts").then((r) => normalizeDistrictsList<District>(r.data)),
-  });
-
   const updateProfile = useMutation({
-    mutationFn: (body: { storeName: string; ownerName: string; districtId?: string }) =>
-      api.patch("/users/me", body).then((r) => r.data),
+    mutationFn: (body: {
+      storeName: string;
+      ownerName: string;
+      district?: string;
+      address?: string;
+      companyName?: string;
+      panNumber?: string;
+    }) => api.patch("/auth/me", body).then((r) => r.data),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["my-profile"] });
       if (token && user) {
@@ -98,15 +111,18 @@ export default function AccountPage() {
       setEditMode(false);
       toast.success("Profile updated");
     },
-    onError: () => {
-      setProfileMsg({ type: "err", text: "Failed to update profile." });
-      toast.error("Failed to update profile");
+    onError: (err: unknown) => {
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+        "Failed to update profile.";
+      setProfileMsg({ type: "err", text: msg });
+      toast.error(msg);
     },
   });
 
   const changePassword = useMutation({
     mutationFn: (body: { oldPassword: string; newPassword: string }) =>
-      api.post("/users/me/change-password", body),
+      api.post("/auth/change-password", body),
     onSuccess: () => {
       setPwMsg({ type: "ok", text: "Password changed successfully." });
       setOldPw("");
@@ -115,8 +131,10 @@ export default function AccountPage() {
     },
     onError: (err: unknown) => {
       const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message || "Failed to change password.";
+        (err as { response?: { data?: { error?: string; message?: string } } })?.response?.data
+          ?.error ||
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        "Failed to change password.";
       setPwMsg({ type: "err", text: msg });
     },
   });
@@ -124,10 +142,18 @@ export default function AccountPage() {
   function handleProfileSave(e: React.FormEvent) {
     e.preventDefault();
     setProfileMsg(null);
+    const pan = panNumber.trim();
+    if (pan && !/^\d{9}$/.test(pan)) {
+      setProfileMsg({ type: "err", text: "PAN number must be exactly 9 digits." });
+      return;
+    }
     updateProfile.mutate({
       storeName,
       ownerName,
-      districtId: districtId || undefined,
+      district: locationArea.trim() || undefined,
+      address: address.trim() || undefined,
+      companyName: companyName.trim() || undefined,
+      panNumber: pan || undefined,
     });
   }
 
@@ -147,7 +173,25 @@ export default function AccountPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-      <h1 className="font-grotesk font-bold text-2xl text-ink">My Account</h1>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="font-grotesk font-bold text-2xl text-ink truncate">My Account</h1>
+          {user && (
+            <p className="text-xs text-gray-500 mt-1 truncate">
+              Signed in as <span className="font-medium text-ink">{user.phone}</span>
+              {" · "}
+              <span className="uppercase tracking-wider text-blue font-semibold">{user.role}</span>
+            </p>
+          )}
+        </div>
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-2 text-sm font-medium text-red-500 border border-red-200 hover:bg-red-50 rounded-xl px-3 py-2 transition-colors shrink-0"
+        >
+          <LogOut size={15} />
+          Logout
+        </button>
+      </div>
 
       {/* Credit */}
       {profile && (
@@ -186,24 +230,21 @@ export default function AccountPage() {
 
         {!editMode ? (
           <div className="space-y-3 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-400">Store Name</span>
-              <span className="font-medium text-ink">{profile?.storeName}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-400">Owner Name</span>
-              <span className="font-medium text-ink">{profile?.ownerName || "—"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-400">Phone</span>
-              <span className="font-medium text-ink">{profile?.phone}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-400">District</span>
-              <span className="font-medium text-ink">
-                {profile?.district?.name || "—"}
-              </span>
-            </div>
+            {[
+              ["Store Name", profile?.storeName || "—"],
+              ["Owner Name", profile?.ownerName || "—"],
+              ["Phone", profile?.phone || "—"],
+              ["Email", profile?.email || "—"],
+              ["Location", profile?.district || "—"],
+              ["Address", profile?.address || "—"],
+              ["Company", profile?.companyName || "—"],
+              ["PAN Number", profile?.panNumber || "—"],
+            ].map(([label, val]) => (
+              <div key={label} className="flex justify-between gap-3">
+                <span className="text-gray-400 shrink-0">{label}</span>
+                <span className="font-medium text-ink text-right break-words min-w-0">{val}</span>
+              </div>
+            ))}
             <div className="flex justify-between">
               <span className="text-gray-400">Status</span>
               <span
@@ -214,6 +255,14 @@ export default function AccountPage() {
                 {profile?.status}
               </span>
             </div>
+            {(!profile?.panNumber || !profile?.companyName || !profile?.address) && (
+              <div className="mt-3 flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl p-3 text-xs">
+                <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                <span>
+                  Your store profile is incomplete. Add your company name, PAN number and address for VAT-compliant invoices.
+                </span>
+              </div>
+            )}
           </div>
         ) : (
           <form onSubmit={handleProfileSave} className="space-y-4">
@@ -240,18 +289,52 @@ export default function AccountPage() {
             </div>
             <div>
               <label className="text-xs font-medium text-gray-600 block mb-1">
-                District
+                Location (District)
               </label>
-              <select
-                value={districtId}
-                onChange={(e) => setDistrictId(e.target.value)}
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm bg-white focus:outline-none focus:border-blue"
-              >
-                <option value="">Select…</option>
-                {districts.map((d) => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
+              <div className="relative">
+                <MapPin size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  value={locationArea}
+                  onChange={(e) => setLocationArea(e.target.value)}
+                  placeholder="e.g. Balaju, Kathmandu"
+                  className="w-full border border-gray-200 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-blue"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 block mb-1">
+                Delivery Address
+              </label>
+              <input
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="Street, landmark, etc."
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 block mb-1">
+                Company Name <span className="text-gray-400 font-normal">(optional)</span>
+              </label>
+              <input
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="Registered company name (for VAT)"
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 block mb-1">
+                PAN Number <span className="text-gray-400 font-normal">(9 digits, for VAT invoices)</span>
+              </label>
+              <input
+                value={panNumber}
+                onChange={(e) => setPanNumber(e.target.value.replace(/\D/g, "").slice(0, 9))}
+                inputMode="numeric"
+                maxLength={9}
+                placeholder="123456789"
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
+              />
             </div>
 
             {profileMsg && (

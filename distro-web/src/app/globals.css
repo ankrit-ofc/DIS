@@ -3,18 +3,23 @@
 @tailwind utilities;
 
 :root {
-  --blue: #1A4BDB;
-  --blue-dark: #1239B0;
-  --blue-light: #E8EFFE;
+  --blue: #2563EB;
+  --blue-dark: #1D4ED8;
+  --blue-light: #EFF6FF;
+  --blue-mid: #BFDBFE;
   --blue-pale: #F0F4FF;
+  --ink: #0D1120;
   --green: #00C46F;
   --green-dark: #00A05A;
-  --green-light: #E0FAF0;
-  --ink: #0D1120;
+  --green-light: #D1FAE5;
+  --off: #F8FAFF;
   --off-white: #F7F9FF;
+  --gray: #E0E4F0;
   --gray-200: #E0E4F0;
+  --gray2: #9BA3BF;
   --gray-400: #9BA3BF;
   --gray-600: #5C6480;
+  --amber: #F59E0B;
 }
 
 html {
@@ -22,27 +27,75 @@ html {
 }
 
 body {
-  background-color: var(--off-white);
+  background-color: var(--off);
   color: var(--ink);
-  font-family: "Plus Jakarta Sans", sans-serif;
+  font-family: var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif;
 }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: "Space Grotesk", sans-serif;
+h1, h2, h3, h4, h5, h6, .font-display {
+  font-family: var(--font-grotesk), "Space Grotesk", system-ui, sans-serif;
 }
 
-/* Ticker / marquee */
+/* ── Animations ─────────────────────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-12px); }
+}
 @keyframes ticker {
   0%   { transform: translateX(0); }
   100% { transform: translateX(-50%); }
 }
+@keyframes popIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+@keyframes slideRight {
+  from { width: 0; }
+  to   { width: 100%; }
+}
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
 
+.fade-up { animation: fadeUp .7s ease forwards; opacity: 0; }
+.delay-1 { animation-delay: .1s; }
+.delay-2 { animation-delay: .2s; }
+.delay-3 { animation-delay: .3s; }
+.delay-4 { animation-delay: .4s; }
+.delay-5 { animation-delay: .5s; }
+
+.float-anim { animation: float 4s ease-in-out infinite; }
+.pop-in     { animation: popIn .5s ease forwards; opacity: 0; }
+
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity .6s ease, transform .6s ease;
+}
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.skeleton {
+  background: linear-gradient(90deg,
+    #E0E4F0 25%, #F0F4FF 50%, #E0E4F0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 8px;
+}
+
+/* Ticker / marquee */
 .ticker-track {
   display: flex;
   width: max-content;
   animation: ticker 30s linear infinite;
 }
-
 .ticker-track:hover {
   animation-play-state: paused;
 }

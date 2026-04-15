@@ -8,6 +8,29 @@ const router = Router();
 const qs = (v: string | string[] | undefined): string | undefined =>
   typeof v === 'string' ? v : Array.isArray(v) ? v[0] : undefined;
 
+// ─── GET /api/admin/stats — ADMIN dashboard KPIs ─────────────────────────────
+router.get('/stats', requireAuth, isAdmin, async (_req: Request, res: Response): Promise<void> => {
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const [todayOrders, todayRevenueAgg, pendingOrders, lowStockItems] = await Promise.all([
+    prisma.order.count({ where: { createdAt: { gte: todayStart } } }),
+    prisma.order.aggregate({
+      where: { createdAt: { gte: todayStart } },
+      _sum: { total: true },
+    }),
+    prisma.order.count({ where: { status: 'PENDING' } }),
+    prisma.product.count({ where: { active: true, stockQty: { lte: 5 } } }),
+  ]);
+
+  res.json({
+    todayOrders,
+    todayRevenue: todayRevenueAgg._sum?.total ?? 0,
+    pendingOrders,
+    lowStockItems,
+  });
+});
+
 // ─── GET /api/admin/email-logs — ADMIN ───────────────────────────────────────
 router.get('/email-logs', requireAuth, isAdmin, async (req: Request, res: Response): Promise<void> => {
   const type   = qs(req.query.type   as string | string[] | undefined);

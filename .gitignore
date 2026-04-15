@@ -33,3 +33,6 @@ Thumbs.db
 
 # Misc
 .claude/
+
+# Editor temp/backup files
+**/*.tmp.*

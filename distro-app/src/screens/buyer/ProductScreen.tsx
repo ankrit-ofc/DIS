@@ -11,6 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../lib/api";
 import { useCartStore } from "../../store/cartStore";
 import { colors, spacing, radius, shadow, typography } from "../../lib/theme";
+import { fmtRs, fmtUnitPrice, fmtCartonPrice } from "../../lib/format";
 
 let Haptics: any = null;
 try { Haptics = require("expo-haptics"); } catch {}
@@ -146,15 +147,19 @@ export function ProductScreen({ navigation, route }: any) {
           {/* Name */}
           <Animated.Text entering={FadeInDown.delay(100).springify()} style={s.name}>{product.name}</Animated.Text>
 
-          {/* Price row */}
-          <Animated.View entering={FadeInDown.delay(140).springify()} style={s.priceRow}>
-            <Text style={s.price}>Rs {product.price.toLocaleString()}</Text>
-            <Text style={s.priceUnit}>/{product.unit}</Text>
-            {product.mrp && product.mrp > product.price && (
-              <Text style={s.mrp}>Rs {product.mrp.toLocaleString()}</Text>
-            )}
-            {discount > 0 && (
-              <View style={s.discountPill}><Text style={s.discountPillText}>{discount}% off</Text></View>
+          {/* Price row — dual pricing (unit + carton) */}
+          <Animated.View entering={FadeInDown.delay(140).springify()} style={s.priceBlock}>
+            <View style={s.priceRow}>
+              <Text style={s.price}>{fmtUnitPrice(product.price, product.unit)}</Text>
+              {product.mrp && product.mrp > product.price && (
+                <Text style={s.mrp}>{fmtRs(product.mrp)}</Text>
+              )}
+              {discount > 0 && (
+                <View style={s.discountPill}><Text style={s.discountPillText}>{discount}% off</Text></View>
+              )}
+            </View>
+            {moq > 1 && (
+              <Text style={s.cartonPrice}>{fmtCartonPrice(product.price, moq, product.unit)}</Text>
             )}
           </Animated.View>
 
@@ -198,7 +203,7 @@ export function ProductScreen({ navigation, route }: any) {
               </View>
               <QtyBtn icon="+" disabled={qty >= (product.stockQty ?? 0)} onPress={() => setQty(q => q + 1)} />
               <View style={s.qtyTotal}>
-                <Text style={s.qtyTotalText}>Total: Rs {(product.price * qty).toLocaleString()}</Text>
+                <Text style={s.qtyTotalText}>Total: {fmtRs(product.price * qty)}</Text>
               </View>
             </View>
           </Animated.View>
@@ -224,7 +229,7 @@ export function ProductScreen({ navigation, route }: any) {
       {/* Sticky bottom bar */}
       <Animated.View style={[s.bar, shadow.lg, barStyle, { paddingBottom: insets.bottom + spacing.md }]}>
         <View style={s.barTotal}>
-          <Text style={s.barAmount}>Rs {(product.price * qty).toLocaleString()}</Text>
+          <Text style={s.barAmount}>{fmtRs(product.price * qty)}</Text>
           <Text style={s.barNote}>{qty} {product.unit}{qty > 1 ? "s" : ""}</Text>
         </View>
         <Animated.View style={[{ flex: 1 }, btnStyle]}>
@@ -278,8 +283,10 @@ const s = StyleSheet.create({
   name:      { fontSize: 24, fontFamily: typography.heading, color: colors.ink, lineHeight: 30 },
 
   // Price
+  priceBlock:       { gap: 2 },
   priceRow:         { flexDirection: "row", alignItems: "center", gap: spacing.xs, flexWrap: "wrap" },
-  price:            { fontSize: 28, fontFamily: typography.heading, color: colors.blue },
+  price:            { fontSize: 24, fontFamily: typography.heading, color: "#2563EB", fontWeight: "700" },
+  cartonPrice:      { fontSize: 13, color: "#9BA3BF", fontFamily: typography.body },
   priceUnit:        { fontSize: 14, color: colors.gray400, fontFamily: typography.body },
   mrp:              { fontSize: 16, color: colors.gray300, textDecorationLine: "line-through", fontFamily: typography.body },
   discountPill:     { backgroundColor: colors.greenLight, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 3 },

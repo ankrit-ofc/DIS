@@ -24,6 +24,7 @@ import Animated, {
 import { Ionicons } from "@expo/vector-icons";
 import { notifyOrderConfirmed } from "../../lib/notifications";
 import { colors, spacing, radius, shadow, typography } from "../../lib/theme";
+import { fmtRs } from "../../lib/format";
 
 const { width: W, height: H } = Dimensions.get("window");
 
@@ -212,7 +213,7 @@ export function OrderConfirmScreen({ navigation, route }: any) {
         {totalAmount && (
           <Animated.View entering={FadeInDown.delay(680).springify().damping(18)} style={styles.amountRow}>
             <Text style={styles.amountLabel}>Order total</Text>
-            <Text style={styles.amountValue}>Rs {Number(totalAmount).toLocaleString()}</Text>
+            <Text style={styles.amountValue}>{fmtRs(Number(totalAmount))}</Text>
           </Animated.View>
         )}
       </View>

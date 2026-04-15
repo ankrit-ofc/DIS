@@ -23,6 +23,7 @@ import { api } from "../../lib/api";
 import { useAuthStore } from "../../store/authStore";
 import { StatusBadge } from "../../components/StatusBadge";
 import { colors, spacing, radius, shadow, typography } from "../../lib/theme";
+import { fmtRs, sessionInitial } from "../../lib/format";
 
 const { width: W } = Dimensions.get("window");
 
@@ -38,7 +39,8 @@ interface RecentOrder {
   id: number;
   orderNumber: string;
   status: string;
-  totalAmount: number;
+  total?: number;
+  totalAmount?: number;
   buyerName: string;
   storeName: string;
   createdAt: string;
@@ -91,7 +93,7 @@ function OrderRow({ order, index, onPress }: { order: RecentOrder; index: number
         </View>
         <View style={styles.orderRight}>
           <StatusBadge status={order.status} />
-          <Text style={styles.orderAmt}>Rs {order.totalAmount.toLocaleString()}</Text>
+          <Text style={styles.orderAmt}>{fmtRs(order.totalAmount ?? order.total)}</Text>
         </View>
       </TouchableOpacity>
     </Animated.View>
@@ -163,7 +165,7 @@ export function DashboardScreen({ navigation }: any) {
         },
         {
           label: "Today's revenue",
-          value: `Rs ${stats.todayRevenue.toLocaleString()}`,
+          value: fmtRs(stats.todayRevenue),
           icon: "cash-outline" as const,
           iconBg: colors.greenLight,
           iconColor: colors.greenDark,
@@ -203,11 +205,16 @@ export function DashboardScreen({ navigation }: any) {
 
       {/* Header */}
       <Animated.View entering={FadeInDown.springify().damping(18)} style={styles.header}>
-        <View>
-          <Text style={styles.headerLabel}>ADMIN</Text>
-          <Text style={styles.headerName}>
-            {profile?.name?.split(" ")[0] ?? "Admin"} 👋
-          </Text>
+        <View style={styles.headerLeft}>
+          <View style={styles.headerAvatar}>
+            <Text style={styles.headerAvatarText}>{sessionInitial(profile)}</Text>
+          </View>
+          <View>
+            <Text style={styles.headerLabel}>ADMIN</Text>
+            <Text style={styles.headerName}>
+              {(profile?.ownerName ?? profile?.name ?? "Admin").split(" ")[0]} 👋
+            </Text>
+          </View>
         </View>
         <TouchableOpacity
           style={styles.signOutBtn}
@@ -224,7 +231,7 @@ export function DashboardScreen({ navigation }: any) {
         <Animated.View entering={FadeInDown.delay(80).springify().damping(18)} style={[styles.overviewBanner, shadow.md]}>
           <View>
             <Text style={styles.overviewLabel}>Today's Revenue</Text>
-            <Text style={styles.overviewValue}>Rs {stats.todayRevenue.toLocaleString()}</Text>
+            <Text style={styles.overviewValue}>{fmtRs(stats.todayRevenue)}</Text>
           </View>
           <View style={styles.overviewRight}>
             <View style={styles.overviewBadge}>
@@ -340,6 +347,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
+  },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    flex: 1,
+    minWidth: 0,
+  },
+  headerAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.blueLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerAvatarText: {
+    fontSize: 20,
+    fontFamily: typography.heading,
+    color: colors.blue,
   },
   headerLabel: {
     fontSize: 11,

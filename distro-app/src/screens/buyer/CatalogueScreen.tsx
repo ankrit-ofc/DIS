@@ -8,6 +8,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../lib/api";
 import { useCartStore } from "../../store/cartStore";
 import { colors, spacing, radius, shadow, typography } from "../../lib/theme";
+import { fmtRs, fmtUnitPrice } from "../../lib/format";
 
 const { width: W } = Dimensions.get("window");
 const CARD_W = (W - spacing.lg * 2 - spacing.sm) / 2;
@@ -35,8 +36,12 @@ function ProductCard({ item, onPress, onAdd }: { item: Product; onPress: () => v
       <View style={pc.body}>
         {item.brand && <Text style={pc.brand} numberOfLines={1}>{item.brand}</Text>}
         <Text style={pc.name} numberOfLines={2}>{item.name}</Text>
-        <Text style={pc.price}>Rs {item.price.toLocaleString()}</Text>
-        <Text style={pc.meta}>/{item.unit}{item.moq && item.moq > 1 ? ` · MOQ ${item.moq}` : ""}</Text>
+        <Text style={pc.price}>{fmtUnitPrice(item.price, item.unit)}</Text>
+        {item.moq && item.moq > 1 ? (
+          <Text style={pc.cartonMeta}>{fmtRs(item.price * item.moq)} / carton ({item.moq} pcs)</Text>
+        ) : (
+          <Text style={pc.meta}>per {item.unit}</Text>
+        )}
         {!outOfStock && (
           <TouchableOpacity style={pc.addBtn} onPress={onAdd} activeOpacity={0.8} hitSlop={8}>
             <Ionicons name="add" size={18} color={colors.white} />
@@ -58,7 +63,8 @@ const pc = StyleSheet.create({
   body:           { padding: 10, paddingBottom: 42, gap: 2 },
   brand:          { fontSize: 10, fontFamily: typography.bodySemiBold, color: colors.blue, letterSpacing: 0.3, textTransform: "uppercase" },
   name:           { fontSize: 13, fontFamily: typography.bodySemiBold, color: colors.ink, lineHeight: 17, minHeight: 34 },
-  price:          { fontSize: 15, fontFamily: typography.heading, color: colors.blue, marginTop: 2 },
+  price:          { fontSize: 15, fontFamily: typography.heading, color: "#2563EB", marginTop: 2, fontWeight: "700" },
+  cartonMeta:     { fontSize: 10, fontFamily: typography.body, color: "#9BA3BF" },
   meta:           { fontSize: 11, fontFamily: typography.body, color: colors.gray400 },
   addBtn:         { position: "absolute", bottom: 10, right: 10, width: 32, height: 32, borderRadius: 16, backgroundColor: colors.blue, alignItems: "center", justifyContent: "center" },
 });

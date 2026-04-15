@@ -7,21 +7,23 @@ import api from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
 
 interface Customer {
-  id: number;
+  id: string;
   storeName: string;
-  ownerName?: string;
+  ownerName?: string | null;
   phone: string;
-  district?: { name: string };
-  status: "ACTIVE" | "SUSPENDED";
+  email?: string | null;
+  district?: string | null;
+  address?: string | null;
+  companyName?: string | null;
+  panNumber?: string | null;
+  status: "ACTIVE" | "SUSPENDED" | "PENDING";
   creditLimit: number;
   creditUsed: number;
-  totalOrders: number;
-  totalSpend: number;
   createdAt: string;
 }
 
 interface CustomerOrder {
-  id: number;
+  id: string;
   orderNumber: string;
   status: string;
   total: number;
@@ -29,18 +31,17 @@ interface CustomerOrder {
 }
 
 interface LedgerEntry {
-  id: number;
+  id: string;
   type: "DEBIT" | "CREDIT";
   amount: number;
-  description: string;
+  note?: string | null;
   createdAt: string;
 }
 
 interface Note {
-  id: number;
-  content: string;
+  id: string;
+  note: string;
   createdAt: string;
-  createdBy: string;
 }
 
 type Tab = "profile" | "orders" | "ledger" | "notes";
@@ -61,7 +62,7 @@ function CreditMiniBar({ used, limit }: { used: number; limit: number }) {
 export default function AdminCustomersPage() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("profile");
   const [newNote, setNewNote] = useState("");
   const [editCredit, setEditCredit] = useState<string | null>(null);
@@ -70,8 +71,8 @@ export default function AdminCustomersPage() {
     queryKey: ["admin-customers", search],
     queryFn: () =>
       api
-        .get(`/users?role=BUYER${search ? `&q=${search}` : ""}&limit=100`)
-        .then((r) => (Array.isArray(r.data) ? r.data : r.data.users || [])),
+        .get(`/customers?limit=100${search ? `&search=${encodeURIComponent(search)}` : ""}`)
+        .then((r) => r.data?.customers ?? []),
   });
 
   const selectedCustomer = customers.find((c) => c.id === selectedId);
@@ -88,26 +89,28 @@ export default function AdminCustomersPage() {
   const { data: ledger = [] } = useQuery<LedgerEntry[]>({
     queryKey: ["customer-ledger", selectedId],
     queryFn: () =>
-      api.get(`/ledger?customerId=${selectedId}&limit=20`).then((r) => r.data),
+      api.get(`/ledger?buyerId=${selectedId}&limit=20`).then((r) =>
+        Array.isArray(r.data) ? r.data : r.data.entries ?? []
+      ),
     enabled: !!selectedId && tab === "ledger",
   });
 
   const { data: notes = [] } = useQuery<Note[]>({
     queryKey: ["customer-notes", selectedId],
     queryFn: () =>
-      api.get(`/users/${selectedId}/notes`).then((r) => r.data),
+      api.get(`/customers/${selectedId}`).then((r) => r.data?.notes ?? []),
     enabled: !!selectedId && tab === "notes",
   });
 
   const toggleStatus = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: string }) =>
-      api.patch(`/users/${id}`, { status }),
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      api.patch(`/customers/${id}/status`, { status }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-customers"] }),
   });
 
   const updateCredit = useMutation({
-    mutationFn: ({ id, creditLimit }: { id: number; creditLimit: number }) =>
-      api.patch(`/users/${id}`, { creditLimit }),
+    mutationFn: ({ id, creditLimit }: { id: string; creditLimit: number }) =>
+      api.patch(`/customers/${id}/credit`, { creditLimit }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-customers"] });
       setEditCredit(null);
@@ -115,8 +118,8 @@ export default function AdminCustomersPage() {
   });
 
   const addNote = useMutation({
-    mutationFn: (content: string) =>
-      api.post(`/users/${selectedId}/notes`, { content }),
+    mutationFn: (note: string) =>
+      api.post(`/customers/${selectedId}/notes`, { note }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["customer-notes", selectedId] });
       setNewNote("");
@@ -190,7 +193,7 @@ export default function AdminCustomersPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-600">{c.phone}</td>
                     <td className="px-4 py-3 text-gray-600 text-xs">
-                      {c.district?.name || "—"}
+                      {c.district || "—"}
                     </td>
                     <td className="px-4 py-3 w-32">
                       <CreditMiniBar used={c.creditUsed} limit={c.creditLimit} />
@@ -254,18 +257,21 @@ export default function AdminCustomersPage() {
               <div className="space-y-4">
                 <div className="space-y-2 text-sm">
                   {[
+                    ["Owner", selectedCustomer.ownerName || "—"],
                     ["Phone", selectedCustomer.phone],
-                    ["District", selectedCustomer.district?.name || "—"],
-                    ["Total Orders", String(selectedCustomer.totalOrders)],
-                    ["Total Spend", formatPrice(selectedCustomer.totalSpend)],
+                    ["Email", selectedCustomer.email || "—"],
+                    ["District", selectedCustomer.district || "—"],
+                    ["Address", selectedCustomer.address || "—"],
+                    ["Company", selectedCustomer.companyName || "—"],
+                    ["PAN", selectedCustomer.panNumber || "—"],
                     [
                       "Member since",
                       new Date(selectedCustomer.createdAt).toLocaleDateString(),
                     ],
                   ].map(([label, val]) => (
-                    <div key={label} className="flex justify-between">
-                      <span className="text-gray-400">{label}</span>
-                      <span className="font-medium text-ink">{val}</span>
+                    <div key={label} className="flex justify-between gap-3">
+                      <span className="text-gray-400 shrink-0">{label}</span>
+                      <span className="font-medium text-ink text-right break-words min-w-0">{val}</span>
                     </div>
                   ))}
                 </div>
@@ -410,7 +416,7 @@ export default function AdminCustomersPage() {
                         >
                           {e.type}
                         </span>
-                        <p className="text-gray-400 mt-1">{e.description}</p>
+                        <p className="text-gray-400 mt-1">{e.note || "—"}</p>
                       </div>
                       <p className="font-grotesk font-semibold text-ink">
                         {formatPrice(e.amount)}
@@ -453,9 +459,8 @@ export default function AdminCustomersPage() {
                       key={n.id}
                       className="bg-off-white rounded-xl p-3 text-xs"
                     >
-                      <p className="text-ink">{n.content}</p>
+                      <p className="text-ink">{n.note}</p>
                       <p className="text-gray-400 mt-1">
-                        {n.createdBy} ·{" "}
                         {new Date(n.createdAt).toLocaleDateString()}
                       </p>
                     </div>

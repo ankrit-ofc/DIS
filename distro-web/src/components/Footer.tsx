@@ -30,6 +30,9 @@ export default function Footer() {
                 { href: "/coverage", label: "Coverage" },
                 { href: "/track", label: "Track Order" },
                 { href: "/faq", label: "FAQ" },
+                { href: "/about", label: "About" },
+                { href: "/privacy", label: "Privacy Policy" },
+                { href: "/terms", label: "Terms & Conditions" },
               ].map((l) => (
                 <li key={l.href}>
                   <Link
