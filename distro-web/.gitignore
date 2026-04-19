@@ -32,3 +32,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# editor atomic-save backups
+*.tmp.*
+
+# local reference assets
+/Screenshot/
+.env
