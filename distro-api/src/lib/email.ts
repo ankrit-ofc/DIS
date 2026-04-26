@@ -6,11 +6,17 @@ export { render };
 
 const resend = new Resend(process.env.RESEND_API_KEY || 're_dev_placeholder');
 
+export interface EmailAttachment {
+  filename: string;
+  content: Buffer;
+}
+
 export async function sendEmail(
   to: string,
   subject: string,
   html: string,
-  type: string
+  type: string,
+  attachments?: EmailAttachment[]
 ): Promise<void> {
   const testTo = process.env.RESEND_TEST_TO?.trim();
   // With RESEND_TEST_TO set, send via Resend even in development (all mail → one inbox).
@@ -42,6 +48,14 @@ export async function sendEmail(
       to: recipient,
       subject,
       html,
+      ...(attachments && attachments.length > 0
+        ? {
+            attachments: attachments.map((a) => ({
+              filename: a.filename,
+              content: a.content,
+            })),
+          }
+        : {}),
     });
 
     if (result.error) {

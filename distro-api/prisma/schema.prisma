@@ -50,13 +50,15 @@ model Session {
 }
 
 model Category {
-  id       String     @id @default(cuid())
-  name     String
-  emoji    String?
-  parentId String?
-  parent   Category?  @relation("SubCategories", fields: [parentId], references: [id])
-  children Category[] @relation("SubCategories")
-  products Product[]
+  id          String     @id @default(cuid())
+  name        String
+  emoji       String?
+  imageUrl    String?
+  description String?    @db.Text
+  parentId    String?
+  parent      Category?  @relation("SubCategories", fields: [parentId], references: [id])
+  children    Category[] @relation("SubCategories")
+  products    Product[]
 }
 
 model District {
@@ -114,6 +116,8 @@ model Order {
   deliveryLat      Decimal?        @db.Decimal(10, 8)
   deliveryLng      Decimal?        @db.Decimal(11, 8)
   notes            String?         @db.Text
+  invoicePdfPath   String?
+  invoiceEmailSent Boolean         @default(false)
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   buyer            Profile         @relation(fields: [buyerId], references: [id])
@@ -192,6 +196,18 @@ model Announcement {
   startsAt  DateTime?
   endsAt    DateTime?
   createdAt DateTime  @default(now())
+}
+
+model Banner {
+  id        String   @id @default(cuid())
+  title     String
+  subtitle  String?
+  imageUrl  String?
+  bgColor   String   @default("#1A4BDB")
+  textColor String   @default("#FFFFFF")
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
 }
 
 model Setting {

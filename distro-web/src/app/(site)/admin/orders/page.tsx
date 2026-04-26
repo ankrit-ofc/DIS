@@ -36,6 +36,8 @@ interface Order {
   total: number;
   createdAt: string;
   items: { id: number; productName: string; qty: number; price: number; unit: string }[];
+  invoicePdfPath?: string | null;
+  invoiceEmailSent?: boolean;
 }
 
 const STATUSES = ["ALL", "PENDING", "CONFIRMED", "PROCESSING", "DISPATCHED", "DELIVERED", "CANCELLED"];
@@ -495,6 +497,26 @@ function OrdersContent() {
                 ))}
               </div>
             </div>
+
+            {/* Invoice PDF */}
+            {selectedOrder.invoicePdfPath && (
+              <div>
+                <label className="text-xs font-medium text-gray-400 uppercase tracking-wide block mb-2">
+                  Invoice
+                </label>
+                <a
+                  href={`${(process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api").replace(/\/api\/?$/, "")}${selectedOrder.invoicePdfPath}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-xs font-medium px-3 py-2 rounded-lg border border-blue text-blue hover:bg-blue-pale transition-colors"
+                >
+                  Download Invoice PDF
+                </a>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Email {selectedOrder.invoiceEmailSent ? "sent to buyer." : "not sent (check server logs)."}
+                </p>
+              </div>
+            )}
 
             {/* Map */}
             {selectedOrder.deliveryLat && selectedOrder.deliveryLng && (

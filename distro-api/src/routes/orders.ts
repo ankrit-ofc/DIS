@@ -11,7 +11,7 @@ import { OrderConfirmEmail } from '../emails/OrderConfirmEmail';
 import { OrderStatusEmail } from '../emails/OrderStatusEmail';
 import { InvoiceEmail } from '../emails/InvoiceEmail';
 import { NewOrderAdminEmail } from '../emails/NewOrderAdminEmail';
-import { EBillEmail } from '../emails/EBillEmail';
+import { generateInvoicePdf } from '../services/invoice';
 
 const router = Router();
 
@@ -398,45 +398,51 @@ router.patch(
           }
         })();
 
-        // Send e-bill when order is CONFIRMED
-        if (status === 'CONFIRMED') {
-          void (async () => {
-            try {
-              const fullOrder = await prisma.order.findUnique({
-                where: { id },
-                include: { items: true },
-              });
-              if (!fullOrder) return;
-
-              const vatRate    = parseFloat(process.env.VAT_RATE ?? '0.13');
-              const vatAmount  = fullOrder.subtotal * vatRate;
-              const grandTotal = fullOrder.subtotal + vatAmount + fullOrder.deliveryFee;
-
-              const html = await render(EBillEmail({
-                orderNumber:      fullOrder.orderNumber,
-                storeName:        buyer!.storeName ?? order.buyerId,
-                items:            fullOrder.items.map(item => ({
-                  name: item.name, qty: item.qty, price: item.price, total: item.total,
-                })),
-                subtotal:         fullOrder.subtotal,
-                vatAmount,
-                deliveryFee:      fullOrder.deliveryFee,
-                grandTotal,
-                deliveryDistrict: fullOrder.deliveryDistrict ?? '',
-                paymentMethod:    fullOrder.paymentMethod,
-                companyName:      process.env.COMPANY_NAME ?? 'DISTRO Nepal Pvt Ltd',
-                companyPan:       process.env.COMPANY_PAN ?? '',
-                invoiceDate:      fullOrder.createdAt.toLocaleDateString('en-GB', {
-                  day: '2-digit', month: 'short', year: 'numeric',
-                }),
-              }));
-              await sendEmail(buyer!.email!, `E-Bill — ${fullOrder.orderNumber}`, html, 'ebill');
-            } catch (e) {
-              console.error('[EMAIL] E-Bill pipeline failed:', e);
-            }
-          })();
-        }
       }
+    }
+
+    // PDF invoice generation + email on CONFIRMED — runs regardless of buyer email
+    if (status === 'CONFIRMED') {
+      void (async () => {
+        try {
+          const invoice = await generateInvoicePdf(id);
+          await prisma.order.update({
+            where: { id },
+            data: { invoicePdfPath: invoice.relativeUrl },
+          });
+
+          if (buyer?.email) {
+            try {
+              const greetingName = buyer.storeName ?? 'there';
+              const html = `
+                <div style="font-family: system-ui, sans-serif; color: #0D1120; max-width: 560px; margin: 0 auto;">
+                  <h2 style="color: #1A4BDB;">Your DISTRO order is confirmed</h2>
+                  <p>Hi ${greetingName},</p>
+                  <p>Your order <strong>${order.orderNumber}</strong> has been confirmed.
+                  The PDF invoice is attached to this email for your records.</p>
+                  <p>Thank you for ordering with DISTRO Nepal.</p>
+                </div>
+              `;
+              await sendEmail(
+                buyer.email,
+                `Your DISTRO order ${order.orderNumber} is confirmed`,
+                html,
+                'invoice_confirmed',
+                [{ filename: invoice.fileName, content: invoice.buffer }],
+              );
+              await prisma.order.update({
+                where: { id },
+                data: { invoiceEmailSent: true },
+              });
+            } catch (mailErr) {
+              const msg = mailErr instanceof Error ? mailErr.message : String(mailErr);
+              console.error(`[INVOICE EMAIL] order ${order.orderNumber} send failed: ${msg}`);
+            }
+          }
+        } catch (pdfErr) {
+          console.error(`[INVOICE PDF] order ${order.orderNumber} generation failed:`, pdfErr);
+        }
+      })();
     }
 
     res.json({ order: updated });
