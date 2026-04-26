@@ -1,8 +1,9 @@
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  RefreshControl, Dimensions, FlatList,
+  RefreshControl, Dimensions, FlatList, NativeScrollEvent,
+  NativeSyntheticEvent, Image,
 } from "react-native";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../store/authStore";
@@ -11,16 +12,153 @@ import { api } from "../../lib/api";
 import { colors, spacing, radius, shadow, typography } from "../../lib/theme";
 import { fmtRs, fmtUnitPrice, sessionInitial } from "../../lib/format";
 import { SkeletonLoader, SkeletonProductCard, SkeletonCategoryChip } from "../../components/SkeletonLoader";
+import { imgUri } from "../../lib/image";
 
 const { width: W } = Dimensions.get("window");
 const CARD_W = (W - spacing.lg * 2 - spacing.sm) / 2;
+const IMG_H  = 160;
+const IMG_BG = "#F4F6F8";
+const PRIMARY = "#2563EB";
+const BANNER_W = W;
 
 interface Announcement { id: string; text: string; }
-interface Category { id: string; name: string; emoji?: string; }
+interface Banner {
+  id: string; title: string; subtitle?: string;
+  imageUrl?: string; bgColor: string; textColor: string;
+}
+interface Category { id: string; name: string; emoji?: string; imageUrl?: string; }
 interface Product {
   id: string; name: string; price: number; mrp?: number;
   unit: string; stockQty: number; moq?: number; imageUrl?: string; brand?: string;
 }
+
+// ─── Banner carousel ─────────────────────────────────────────────────────────
+function BannerCarousel({ banners }: { banners: Banner[] }) {
+  const [activeIdx, setActiveIdx] = useState(0);
+  const listRef = useRef<FlatList>(null);
+
+  useEffect(() => {
+    if (banners.length <= 1) return;
+    const t = setInterval(() => {
+      setActiveIdx(i => {
+        const next = (i + 1) % banners.length;
+        listRef.current?.scrollToIndex({ index: next, animated: true });
+        return next;
+      });
+    }, 4000);
+    return () => clearInterval(t);
+  }, [banners.length]);
+
+  if (!banners.length) return null;
+
+  function onScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
+    const idx = Math.round(e.nativeEvent.contentOffset.x / BANNER_W);
+    setActiveIdx(idx);
+  }
+
+  return (
+    <View style={bc.wrap}>
+      <FlatList
+        ref={listRef}
+        data={banners}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        decelerationRate="fast"
+        keyExtractor={item => item.id}
+        onMomentumScrollEnd={onScroll}
+        contentContainerStyle={{}}
+        renderItem={({ item }) => {
+          const uri = imgUri(item.imageUrl);
+          return (
+            <View style={[bc.card, { backgroundColor: item.bgColor, width: BANNER_W }]}>
+              {uri ? (
+                <Image source={{ uri }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+              ) : (
+                <>
+                  <View style={[bc.circle, { backgroundColor: item.textColor }]} />
+                  <View style={[bc.circleSm, { backgroundColor: item.textColor }]} />
+                </>
+              )}
+              <Text style={[bc.title, { color: uri ? "#fff" : item.textColor }]} numberOfLines={2}>
+                {item.title}
+              </Text>
+              {item.subtitle ? (
+                <Text style={[bc.subtitle, { color: uri ? "rgba(255,255,255,0.88)" : item.textColor }]} numberOfLines={1}>
+                  {item.subtitle}
+                </Text>
+              ) : null}
+            </View>
+          );
+        }}
+      />
+      {banners.length > 1 && (
+        <View style={bc.dots}>
+          {banners.map((_, i) => (
+            <View key={i} style={[bc.dot, i === activeIdx && bc.dotActive]} />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+const bc = StyleSheet.create({
+  wrap: { marginTop: spacing.md },
+  card: {
+    width: W,
+    height: 160,
+    overflow: "hidden",
+    justifyContent: "flex-end",
+    padding: spacing.md,
+  },
+  circle: {
+    position: "absolute",
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    opacity: 0.08,
+    right: -30,
+    top: -30,
+  },
+  circleSm: {
+    position: "absolute",
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    opacity: 0.06,
+    right: 60,
+    bottom: -20,
+  },
+  title: {
+    fontSize: 18,
+    fontFamily: typography.heading,
+    letterSpacing: -0.4,
+    lineHeight: 22,
+  },
+  subtitle: {
+    fontSize: 13,
+    fontFamily: typography.bodyMedium,
+    marginTop: 3,
+    opacity: 0.85,
+  },
+  dots: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 5,
+    marginTop: 8,
+  },
+  dot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: colors.gray300,
+  },
+  dotActive: {
+    backgroundColor: colors.blue,
+    width: 14,
+  },
+});
 
 // ─── Announcement ticker ──────────────────────────────────────────────────────
 function AnnouncementTicker({ items, loading }: { items: Announcement[]; loading: boolean }) {
@@ -88,14 +226,10 @@ function ProductCard({ item, onPress, onAdd }: { item: Product; onPress: () => v
     <TouchableOpacity style={[pc.card, shadow.card]} onPress={onPress} activeOpacity={0.88}>
       {/* Image area */}
       <View style={pc.imgWrap}>
-        <View style={pc.imgPlaceholder}>
-          <Ionicons name="cube-outline" size={28} color={colors.blue} style={{ opacity: 0.4 }} />
-        </View>
-        {discount > 0 && !outOfStock && (
-          <View style={pc.badge}>
-            <Text style={pc.badgeText}>{discount}%</Text>
-          </View>
-        )}
+        {imgUri(item.imageUrl)
+          ? <Image source={{ uri: imgUri(item.imageUrl) }} style={pc.img} resizeMode="contain" />
+          : <View style={pc.imgPlaceholder}><Ionicons name="cube-outline" size={32} color={colors.blue} style={{ opacity: 0.35 }} /></View>
+        }
         {outOfStock && (
           <View style={pc.oosBanner}>
             <Text style={pc.oosText}>Out of stock</Text>
@@ -107,18 +241,22 @@ function ProductCard({ item, onPress, onAdd }: { item: Product; onPress: () => v
       <View style={pc.body}>
         {item.brand && <Text style={pc.brand} numberOfLines={1}>{item.brand}</Text>}
         <Text style={pc.name} numberOfLines={2}>{item.name}</Text>
-        <Text style={pc.price}>{fmtUnitPrice(item.price, item.unit)}</Text>
-        {item.moq && item.moq > 1 && (
-          <Text style={pc.moq}>{fmtRs(item.price * item.moq)} / carton ({item.moq} pcs)</Text>
-        )}
+        <View style={pc.priceRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={pc.price}>{fmtUnitPrice(item.price, item.unit)}</Text>
+            {item.mrp && item.mrp > item.price ? (
+              <Text style={pc.mrp}>{fmtRs(item.mrp)}</Text>
+            ) : item.moq && item.moq > 1 ? (
+              <Text style={pc.moq}>{fmtRs(item.price * item.moq)} / carton ({item.moq} pcs)</Text>
+            ) : null}
+          </View>
+          {!outOfStock && (
+            <TouchableOpacity style={pc.addBtn} onPress={onAdd} activeOpacity={0.8} hitSlop={8}>
+              <Ionicons name="add" size={18} color={colors.white} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
-
-      {/* Add button */}
-      {!outOfStock && (
-        <TouchableOpacity style={pc.addBtn} onPress={onAdd} activeOpacity={0.8} hitSlop={8}>
-          <Text style={pc.addBtnText}>Add</Text>
-        </TouchableOpacity>
-      )}
     </TouchableOpacity>
   );
 }
@@ -129,16 +267,25 @@ const pc = StyleSheet.create({
     backgroundColor: colors.white,
     borderRadius: radius.lg,
     overflow: "hidden",
+    borderWidth: 1,
+    borderColor: colors.gray100,
   },
   imgWrap: {
     width: "100%",
-    height: 56,
+    height: IMG_H,
     position: "relative",
+    backgroundColor: IMG_BG,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 10,
+  },
+  img: {
+    width: "100%",
+    height: "100%",
   },
   imgPlaceholder: {
     width: "100%",
     height: "100%",
-    backgroundColor: colors.blueLight,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -174,19 +321,17 @@ const pc = StyleSheet.create({
     lineHeight: 16,
     minHeight: 32,
   },
-  price: { fontSize: 14, fontFamily: typography.heading, color: colors.blue, marginTop: 2 },
+  priceRow: { flexDirection: "row", alignItems: "center", marginTop: 4, gap: 8 },
+  price: { fontSize: 14, fontFamily: typography.heading, color: PRIMARY, fontWeight: "700" },
+  mrp: { fontSize: 11, fontFamily: typography.body, color: colors.gray400, textDecorationLine: "line-through" },
   moq: { fontSize: 10, fontFamily: typography.body, color: colors.gray400 },
   addBtn: {
-    backgroundColor: colors.blue,
-    paddingVertical: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: PRIMARY,
     alignItems: "center",
-    borderBottomLeftRadius: radius.lg,
-    borderBottomRightRadius: radius.lg,
-  },
-  addBtnText: {
-    color: colors.white,
-    fontSize: 12,
-    fontFamily: typography.bodySemiBold,
+    justifyContent: "center",
   },
 });
 
@@ -196,6 +341,7 @@ export function HomeScreen({ navigation }: any) {
   const { addItem } = useCartStore();
   const insets = useSafeAreaInsets();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [banners, setBanners] = useState<Banner[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [featured, setFeatured] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -203,13 +349,16 @@ export function HomeScreen({ navigation }: any) {
 
   const load = useCallback(async () => {
     try {
-      const [annRes, catRes, prodRes] = await Promise.allSettled([
+      const [annRes, bannerRes, catRes, prodRes] = await Promise.allSettled([
         api.get("/announcements"),
+        api.get("/banners"),
         api.get("/categories"),
         api.get("/products", { params: { sort: "newest", limit: 12 } }),
       ]);
       if (annRes.status === "fulfilled")
         setAnnouncements(annRes.value.data.announcements ?? annRes.value.data ?? []);
+      if (bannerRes.status === "fulfilled")
+        setBanners(bannerRes.value.data.banners ?? []);
       if (catRes.status === "fulfilled")
         setCategories(catRes.value.data.categories ?? catRes.value.data ?? []);
       if (prodRes.status === "fulfilled")
@@ -280,6 +429,9 @@ export function HomeScreen({ navigation }: any) {
       {/* Announcement ticker */}
       <AnnouncementTicker items={announcements} loading={loading} />
 
+      {/* Banner carousel — just above categories */}
+      {banners.length > 0 && <BannerCarousel banners={banners} />}
+
       {/* Categories */}
       <View style={s.sectionHeaderRow}>
         <Text style={s.sectionTitle}>Categories</Text>
@@ -299,7 +451,11 @@ export function HomeScreen({ navigation }: any) {
               activeOpacity={0.8}
               onPress={() => goCatalogue({ categoryId: item.id, categoryName: item.name })}
             >
-              {item.emoji && <Text style={s.categoryEmoji}>{item.emoji}</Text>}
+              <View style={s.categoryIconWrap}>
+                {imgUri(item.imageUrl)
+                  ? <Image source={{ uri: imgUri(item.imageUrl)! }} style={s.categoryImg} resizeMode="cover" />
+                  : <Text style={s.categoryEmoji}>{item.emoji ?? "📦"}</Text>}
+              </View>
               <Text style={s.categoryName}>{item.name}</Text>
             </TouchableOpacity>
           )
@@ -424,11 +580,10 @@ const s = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   sectionTitle: {
-    fontSize: 12,
+    fontSize: 16,
     fontFamily: typography.heading,
     color: colors.ink,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: -0.2,
   },
   seeAll: {
     fontSize: 12,
@@ -443,20 +598,32 @@ const s = StyleSheet.create({
   },
   categoryChip: {
     backgroundColor: colors.white,
-    borderRadius: 8,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.gray200,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     alignItems: "center",
-    gap: 4,
-    minWidth: 64,
+    justifyContent: "center",
+    minWidth: 80,
+    gap: 6,
   },
-  categoryEmoji: { fontSize: 20 },
+  categoryIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+    backgroundColor: colors.blueLight,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  categoryImg: { width: "100%", height: "100%" },
+  categoryEmoji: { fontSize: 22 },
   categoryName: {
-    fontSize: 8,
+    fontSize: 13,
     fontFamily: typography.heading,
     color: colors.ink,
+    letterSpacing: -0.2,
   },
 
   // Grid

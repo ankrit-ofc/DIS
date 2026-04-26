@@ -117,7 +117,7 @@ function QuickAction({
   index: number;
 }) {
   return (
-    <Animated.View entering={FadeInRight.delay(300 + index * 60).springify().damping(18)} style={{ flex: 1 }}>
+    <Animated.View entering={FadeInRight.delay(300 + index * 60).springify().damping(18)} style={styles.quickActionWrap}>
       <TouchableOpacity style={[styles.quickAction, { backgroundColor: bg }]} onPress={onPress} activeOpacity={0.85}>
         <View style={[styles.quickActionIcon, { backgroundColor: color + "18" }]}>
           <Ionicons name={icon} size={22} color={color} />
@@ -275,6 +275,22 @@ export function DashboardScreen({ navigation }: any) {
           bg={colors.greenLight}
           onPress={() => navigation.navigate("Customers")}
           index={2}
+        />
+        <QuickAction
+          label="Banners"
+          icon="image-outline"
+          color="#BE185D"
+          bg="#FCE7F3"
+          onPress={() => navigation.navigate("Banners")}
+          index={3}
+        />
+        <QuickAction
+          label="Categories"
+          icon="pricetag-outline"
+          color="#D97706"
+          bg="#FEF3C7"
+          onPress={() => navigation.navigate("Categories")}
+          index={4}
         />
       </View>
 
@@ -444,8 +460,15 @@ const styles = StyleSheet.create({
 
   quickActionsRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     paddingHorizontal: spacing.lg,
     gap: spacing.sm,
+    rowGap: spacing.sm,
+  },
+  quickActionWrap: {
+    flexBasis: "22%",
+    flexGrow: 1,
+    minWidth: (W - spacing.lg * 2 - spacing.sm * 3) / 4,
   },
   quickAction: {
     borderRadius: radius.xl,

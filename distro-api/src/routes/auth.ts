@@ -8,9 +8,7 @@ import {
   createSession,
   deleteSession,
 } from '../lib/auth';
-// [SMS - UNCOMMENT WHEN SPARROW ACCOUNT READY]
-// import { sendSMS, otpMessage } from '../lib/sms';
-// [/SMS]
+import { sendSMS, otpMessage } from '../lib/sms';
 import { sendEmail, render } from '../lib/email';
 import { WelcomeEmail } from '../emails/WelcomeEmail';
 import { OtpEmail } from '../emails/OtpEmail';
@@ -74,10 +72,13 @@ router.post('/request-otp', otpLimiter, async (req: Request, res: Response): Pro
     await prisma.profile.update({ where: { phone: phone! }, data: { otpCode: otp, otpExpiry } });
   }
 
-  // [SMS - UNCOMMENT WHEN SPARROW ACCOUNT READY]
-  // void sendSMS(phone!, otpMessage(otp));
-  // [/SMS]
-  console.log(`[OTP][SMS STUB] phone=${phone} otp=${otp}`);
+  try {
+    await sendSMS(phone!, otpMessage(otp));
+  } catch (e) {
+    console.error('[OTP][SMS] Sparrow send failed:', e);
+    res.status(502).json({ error: 'Could not send OTP. Please try again.' });
+    return;
+  }
 
   res.json({ message: 'OTP sent', method: 'phone' });
 });

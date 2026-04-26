@@ -1,3 +1,10 @@
+import { type ClassValue, clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
 export function formatPrice(amount: number): string {
   return "Rs " + new Intl.NumberFormat("en-IN", {
     minimumFractionDigits: 0,
@@ -23,13 +30,6 @@ export function formatCartonPrice(price: number, moq: number): string {
 
 export function formatNumber(n: number): string {
   return new Intl.NumberFormat("en-IN").format(n);
-}
-
-import { type ClassValue, clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
 }
 
 export function debounce(fn: (val: string) => void, ms: number): (val: string) => void {

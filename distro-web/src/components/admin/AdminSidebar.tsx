@@ -6,6 +6,7 @@ import {
   ShoppingCart,
   Package,
   Tag,
+  Tags,
   Users,
   BookOpen,
   Warehouse,
@@ -17,6 +18,7 @@ import {
   MessageSquare,
   ChevronLeft,
   ChevronRight,
+  Image,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/authStore";
@@ -26,11 +28,13 @@ const NAV = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/admin/orders", label: "Orders", icon: ShoppingCart },
   { href: "/admin/products", label: "Products", icon: Package },
+  { href: "/admin/categories", label: "Categories", icon: Tags },
   { href: "/admin/pricing", label: "Pricing", icon: Tag },
   { href: "/admin/customers", label: "Customers", icon: Users },
   { href: "/admin/ledger", label: "Ledger", icon: BookOpen },
   { href: "/admin/inventory", label: "Inventory", icon: Warehouse },
   { href: "/admin/payments", label: "Payments", icon: CreditCard },
+  { href: "/admin/banners",       label: "Banners",       icon: Image },
   { href: "/admin/announcements", label: "Announcements", icon: Megaphone },
   { href: "/admin/chat",          label: "Chat",          icon: MessageSquare },
   { href: "/admin/reports",       label: "Reports",       icon: BarChart2 },

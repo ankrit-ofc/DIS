@@ -12,6 +12,7 @@ import { api } from "../../lib/api";
 import { useCartStore } from "../../store/cartStore";
 import { colors, spacing, radius, shadow, typography } from "../../lib/theme";
 import { fmtRs, fmtUnitPrice, fmtCartonPrice } from "../../lib/format";
+import { imgUri } from "../../lib/image";
 
 let Haptics: any = null;
 try { Haptics = require("expo-haptics"); } catch {}
@@ -124,12 +125,9 @@ export function ProductScreen({ navigation, route }: any) {
 
         {/* Hero image */}
         <View style={s.hero}>
-          {product.imageUrl
-            ? <Image source={{ uri: product.imageUrl }} style={s.heroImg} resizeMode="cover" />
+          {imgUri(product.imageUrl)
+            ? <Image source={{ uri: imgUri(product.imageUrl) }} style={s.heroImg} resizeMode="cover" />
             : <View style={s.heroPlaceholder}><Ionicons name="cube-outline" size={36} color={colors.blue} style={{ opacity: 0.35 }} /></View>}
-          {discount > 0 && (
-            <View style={s.discountBadge}><Text style={s.discountText}>−{discount}%</Text></View>
-          )}
           <TouchableOpacity style={[s.backBtn, { top: insets.top + 8 }]} onPress={() => navigation.goBack()} activeOpacity={0.8}>
             <Ionicons name="chevron-back" size={20} color={colors.ink} />
           </TouchableOpacity>
@@ -153,9 +151,6 @@ export function ProductScreen({ navigation, route }: any) {
               <Text style={s.price}>{fmtUnitPrice(product.price, product.unit)}</Text>
               {product.mrp && product.mrp > product.price && (
                 <Text style={s.mrp}>{fmtRs(product.mrp)}</Text>
-              )}
-              {discount > 0 && (
-                <View style={s.discountPill}><Text style={s.discountPillText}>{discount}% off</Text></View>
               )}
             </View>
             {moq > 1 && (
@@ -285,7 +280,7 @@ const s = StyleSheet.create({
   // Price
   priceBlock:       { gap: 2 },
   priceRow:         { flexDirection: "row", alignItems: "center", gap: spacing.xs, flexWrap: "wrap" },
-  price:            { fontSize: 24, fontFamily: typography.heading, color: "#2563EB", fontWeight: "700" },
+  price:            { fontSize: 24, fontFamily: typography.heading, color: colors.blue, fontWeight: "700" },
   cartonPrice:      { fontSize: 13, color: "#9BA3BF", fontFamily: typography.body },
   priceUnit:        { fontSize: 14, color: colors.gray400, fontFamily: typography.body },
   mrp:              { fontSize: 16, color: colors.gray300, textDecorationLine: "line-through", fontFamily: typography.body },

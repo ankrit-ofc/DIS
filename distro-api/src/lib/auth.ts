@@ -17,6 +17,11 @@ export async function createSession(profileId: string): Promise<string> {
 }
 
 export async function validateSession(token: string) {
+  try {
+    jwt.verify(token, process.env.JWT_SECRET!);
+  } catch {
+    return null;
+  }
   const session = await prisma.session.findUnique({
     where: { token },
     include: { profile: true },

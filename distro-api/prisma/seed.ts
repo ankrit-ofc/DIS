@@ -31,84 +31,112 @@ const INACTIVE_DISTRICTS = [
 ];
 
 async function main() {
-  console.log('Seeding database...');
+  const isProd = process.env.NODE_ENV === 'production';
+  const allowReset = process.env.SEED_RESET === '1';
 
-  // ── 1. Delete all data in FK-safe order ────────────────────────────────────
-  await prisma.message.deleteMany();
-  await prisma.conversation.deleteMany();
-  await prisma.emailLog.deleteMany();
-  await prisma.orderActivity.deleteMany();
-  await prisma.orderItem.deleteMany();
-  await prisma.payment.deleteMany();
-  await prisma.ledger.deleteMany();
-  await prisma.order.deleteMany();
-  await prisma.stockMovement.deleteMany();
-  await prisma.priceHistory.deleteMany();
-  await prisma.customerNote.deleteMany();
-  await prisma.session.deleteMany();
-  await prisma.product.deleteMany();
-  await prisma.category.deleteMany();
-  await prisma.profile.deleteMany();
-  await prisma.district.deleteMany();
-  await prisma.announcement.deleteMany();
-  await prisma.setting.deleteMany();
+  console.log(`Seeding database... (NODE_ENV=${process.env.NODE_ENV ?? 'development'})`);
 
-  console.log('  Cleared existing data.');
+  // ── 1. Delete all data (dev only, or prod with explicit opt-in) ───────────
+  if (!isProd || allowReset) {
+    await prisma.message.deleteMany();
+    await prisma.conversation.deleteMany();
+    await prisma.emailLog.deleteMany();
+    await prisma.orderActivity.deleteMany();
+    await prisma.orderItem.deleteMany();
+    await prisma.payment.deleteMany();
+    await prisma.ledger.deleteMany();
+    await prisma.order.deleteMany();
+    await prisma.stockMovement.deleteMany();
+    await prisma.priceHistory.deleteMany();
+    await prisma.customerNote.deleteMany();
+    await prisma.session.deleteMany();
+    await prisma.product.deleteMany();
+    await prisma.category.deleteMany();
+    await prisma.profile.deleteMany();
+    await prisma.district.deleteMany();
+    await prisma.announcement.deleteMany();
+    await prisma.setting.deleteMany();
+    console.log('  Cleared existing data.');
+  } else {
+    console.log('  Skipping reset (prod — set SEED_RESET=1 to force).');
+  }
+
+  // In prod without reset, skip catalog seeding if it has already run once.
+  const existingCategoryCount = await prisma.category.count();
+  const skipCatalog = isProd && !allowReset && existingCategoryCount > 0;
+  if (skipCatalog) {
+    console.log('  Catalog data already present — skipping categories/districts/products/settings.');
+  }
 
   // ── 2. Categories ──────────────────────────────────────────────────────────
-  const catLiquor = await prisma.category.create({
-    data: { name: 'Liquor', emoji: '🍶' },
-  });
-  const catBeer = await prisma.category.create({
-    data: { name: 'Beer', emoji: '🍺' },
-  });
-  const catEnergy = await prisma.category.create({
-    data: { name: 'Energy Drinks', emoji: '⚡' },
-  });
+  const catLiquor = skipCatalog
+    ? await prisma.category.findFirstOrThrow({ where: { name: 'Liquor' } })
+    : await prisma.category.create({ data: { name: 'Liquor', emoji: '🍶' } });
+  const catBeer = skipCatalog
+    ? await prisma.category.findFirstOrThrow({ where: { name: 'Beer' } })
+    : await prisma.category.create({ data: { name: 'Beer', emoji: '🍺' } });
+  const catEnergy = skipCatalog
+    ? await prisma.category.findFirstOrThrow({ where: { name: 'Energy Drinks' } })
+    : await prisma.category.create({ data: { name: 'Energy Drinks', emoji: '⚡' } });
 
-  console.log('  Categories: 3');
+  if (!skipCatalog) console.log('  Categories: 3');
 
   // ── 3. Profiles ────────────────────────────────────────────────────────────
-  const adminHash = await bcrypt.hash('admin123', 12);
-  const buyerHash = await bcrypt.hash('distro123', 12);
+  const adminPhone    = process.env.ADMIN_SEED_PHONE    ?? '9800000000';
+  const adminPassword = process.env.ADMIN_SEED_PASSWORD ?? (isProd ? '' : 'admin123');
+  if (isProd && !process.env.ADMIN_SEED_PASSWORD) {
+    throw new Error('ADMIN_SEED_PASSWORD env var is required in production');
+  }
 
-  await prisma.profile.create({
-    data: {
-      phone: '9800000000',
-      passwordHash: adminHash,
-      role: 'ADMIN',
-      ownerName: 'DISTRO Admin',
-      phoneVerified: true,
-      status: 'ACTIVE',
-    },
-  });
+  const existingAdmin = await prisma.profile.findUnique({ where: { phone: adminPhone } });
+  if (!existingAdmin) {
+    const adminHash = await bcrypt.hash(adminPassword, 12);
+    await prisma.profile.create({
+      data: {
+        phone: adminPhone,
+        passwordHash: adminHash,
+        role: 'ADMIN',
+        ownerName: 'DISTRO Admin',
+        phoneVerified: true,
+        status: 'ACTIVE',
+      },
+    });
+    console.log(`  Admin profile created (${adminPhone}).`);
+  } else {
+    console.log(`  Admin profile already exists (${adminPhone}) — left unchanged.`);
+  }
 
-  await prisma.profile.create({
-    data: {
-      phone: '9841100001',
-      passwordHash: buyerHash,
-      role: 'BUYER',
-      storeName: 'Demo Store',
-      ownerName: 'Demo Owner',
-      district: 'Kathmandu',
-      phoneVerified: true,
-      status: 'ACTIVE',
-    },
-  });
-
-  console.log('  Profiles: admin (9800000000) + buyer (9841100001)');
+  if (!isProd) {
+    const buyerHash = await bcrypt.hash('distro123', 12);
+    await prisma.profile.create({
+      data: {
+        phone: '9841100001',
+        passwordHash: buyerHash,
+        role: 'BUYER',
+        storeName: 'Demo Store',
+        ownerName: 'Demo Owner',
+        district: 'Kathmandu',
+        phoneVerified: true,
+        status: 'ACTIVE',
+      },
+    });
+    console.log('  Demo buyer profile created (9841100001).');
+  } else {
+    console.log('  Skipping demo buyer (prod).');
+  }
 
   // ── 4. Districts ──────────────────────────────────────────────────────────
-  for (const d of ACTIVE_DISTRICTS) {
-    await prisma.district.create({ data: d });
+  if (!skipCatalog) {
+    for (const d of ACTIVE_DISTRICTS) {
+      await prisma.district.create({ data: d });
+    }
+    for (const name of INACTIVE_DISTRICTS) {
+      await prisma.district.create({
+        data: { name, active: false, estimatedDays: 5, deliveryFee: 0 },
+      });
+    }
+    console.log(`  Districts: ${ACTIVE_DISTRICTS.length + INACTIVE_DISTRICTS.length} (${ACTIVE_DISTRICTS.length} active)`);
   }
-  for (const name of INACTIVE_DISTRICTS) {
-    await prisma.district.create({
-      data: { name, active: false, estimatedDays: 5, deliveryFee: 0 },
-    });
-  }
-
-  console.log(`  Districts: ${ACTIVE_DISTRICTS.length + INACTIVE_DISTRICTS.length} (${ACTIVE_DISTRICTS.length} active)`);
 
   // ── 5. Products ───────────────────────────────────────────────────────────
   const liquorProducts = [
@@ -159,37 +187,38 @@ async function main() {
     { sku: '4.11', name: 'Xtreme 330ml',     brand: 'Xtreme',    price: 106.25, mrp: 122.19, moq: 24, unit: 'can 330ml', stockQty: 500, description: 'Carton price: Rs 2,550' },
   ];
 
-  for (const p of liquorProducts) {
-    await prisma.product.create({ data: { ...p, categoryId: catLiquor.id } });
+  if (!skipCatalog) {
+    for (const p of liquorProducts) {
+      await prisma.product.create({ data: { ...p, categoryId: catLiquor.id } });
+    }
+    for (const p of beerProducts) {
+      await prisma.product.create({ data: { ...p, categoryId: catBeer.id } });
+    }
+    for (const p of energyProducts) {
+      await prisma.product.create({ data: { ...p, categoryId: catEnergy.id } });
+    }
+    const total = liquorProducts.length + beerProducts.length + energyProducts.length;
+    console.log(`  Products: ${total} (Liquor: ${liquorProducts.length}, Beer: ${beerProducts.length}, Energy: ${energyProducts.length})`);
+
+    // ── 6. Announcement ─────────────────────────────────────────────────────
+    await prisma.announcement.create({
+      data: {
+        text: "Welcome to DISTRO — Nepal's wholesale ordering platform. Free delivery in Kathmandu, Lalitpur and Bhaktapur!",
+        active: true,
+      },
+    });
+
+    // ── 7. Settings ─────────────────────────────────────────────────────────
+    await prisma.setting.createMany({
+      data: [
+        { key: 'minOrderAmount', value: '1000' },
+        { key: 'companyName',    value: 'DISTRO Nepal Pvt Ltd' },
+        { key: 'vatRate',        value: '0.13' },
+      ],
+    });
   }
-  for (const p of beerProducts) {
-    await prisma.product.create({ data: { ...p, categoryId: catBeer.id } });
-  }
-  for (const p of energyProducts) {
-    await prisma.product.create({ data: { ...p, categoryId: catEnergy.id } });
-  }
 
-  const total = liquorProducts.length + beerProducts.length + energyProducts.length;
-  console.log(`  Products: ${total} (Liquor: ${liquorProducts.length}, Beer: ${beerProducts.length}, Energy: ${energyProducts.length})`);
-
-  // ── 6. Announcement ───────────────────────────────────────────────────────
-  await prisma.announcement.create({
-    data: {
-      text: "Welcome to DISTRO — Nepal's wholesale ordering platform. Free delivery in Kathmandu, Lalitpur and Bhaktapur!",
-      active: true,
-    },
-  });
-
-  // ── 7. Settings ───────────────────────────────────────────────────────────
-  await prisma.setting.createMany({
-    data: [
-      { key: 'minOrderAmount', value: '1000' },
-      { key: 'companyName',    value: 'DISTRO Nepal Pvt Ltd' },
-      { key: 'vatRate',        value: '0.13' },
-    ],
-  });
-
-  console.log('Seed complete. 39 products seeded.');
+  console.log('Seed complete.');
 }
 
 main()

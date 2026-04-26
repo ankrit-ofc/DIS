@@ -4,6 +4,10 @@ dist/
 web-build/
 .env
 .env.local
+
+# editor atomic-save backups (never commit — can contain secrets from .env edits)
+*.tmp.*
+
 *.orig.*
 *.jks
 *.p8

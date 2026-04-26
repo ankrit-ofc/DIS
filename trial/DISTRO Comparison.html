@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DISTRO — Before / After</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:'Plus Jakarta Sans', system-ui, sans-serif;
+    background:#EEF1F7; color:#0D1120;
+    -webkit-font-smoothing:antialiased;
+  }
+  .display{font-family:'Space Grotesk', sans-serif; letter-spacing:-0.02em}
+  .mono{font-family: ui-monospace, 'SF Mono', Menlo, monospace}
+
+  .page{ max-width:1400px; margin:0 auto; padding:40px; }
+  .head{ border-bottom:1px solid rgba(13,17,32,0.1); padding-bottom:16px; margin-bottom:36px; }
+  .head h1{
+    font-family:'Space Grotesk', sans-serif;
+    font-size:28px; font-weight:700; letter-spacing:-0.03em; margin:0 0 4px;
+  }
+  .head p{ margin:0; color:#6A7087; font-size:14px; }
+
+  .cols{ display:grid; grid-template-columns: 1fr 1fr; gap:32px; align-items:flex-start; }
+  @media (max-width: 1000px){ .cols{ grid-template-columns: 1fr; } }
+
+  .col h2{
+    font-family:'Space Grotesk', sans-serif;
+    font-size:13px; font-weight:700; letter-spacing:0.12em;
+    text-transform:uppercase; margin:0 0 4px;
+  }
+  .col h2 .dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:8px; vertical-align:middle; }
+  .col .tag-before .dot{ background:#D81F26 }
+  .col .tag-after .dot{ background:#00C46F }
+  .col .sub{ font-size:13px; color:#6A7087; margin:0 0 16px; }
+
+  .phone-wrap{
+    background:#fff; border-radius:20px; padding:24px;
+    border:1px solid rgba(13,17,32,0.08);
+    box-shadow:0 20px 50px rgba(13,17,32,0.06);
+    display:flex; justify-content:center;
+  }
+  .phone-wrap img{ display:block; max-width:280px; width:100%; border-radius:24px; border:1px solid rgba(13,17,32,0.1); }
+
+  .issues{
+    margin-top:20px; background:#fff; border:1px solid rgba(13,17,32,0.08);
+    border-radius:12px; overflow:hidden;
+  }
+  .issues-hd{
+    padding:12px 16px; font-size:11px; font-weight:700; letter-spacing:0.08em;
+    text-transform:uppercase; border-bottom:1px solid rgba(13,17,32,0.08);
+    background:#F7F9FF;
+  }
+  .issues-hd.bad{ color:#8C1D18; background:#FDECEA }
+  .issues-hd.good{ color:#007D45; background:#E6F9F1 }
+  .issue{
+    display:grid; grid-template-columns: 28px 1fr; gap:10px;
+    padding:12px 16px; border-bottom:1px solid rgba(13,17,32,0.05);
+    font-size:13px; line-height:1.5;
+  }
+  .issue:last-child{ border-bottom:none }
+  .issue .n{
+    font-family:'Space Grotesk', sans-serif; font-weight:700;
+    font-size:13px; color:#6A7087;
+  }
+  .issue b{ font-weight:700; color:#0D1120 }
+
+  .handoff{
+    margin-top:40px; background:#0D1120; color:#fff;
+    border-radius:16px; padding:28px;
+  }
+  .handoff h3{
+    font-family:'Space Grotesk', sans-serif; font-size:18px;
+    font-weight:700; letter-spacing:-0.02em; margin:0 0 12px;
+  }
+  .handoff p{ margin:0 0 14px; color:rgba(255,255,255,0.75); font-size:14px; line-height:1.6; }
+  .handoff pre{
+    background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);
+    padding:14px 16px; border-radius:10px; font-size:12px; line-height:1.6;
+    color:#E8EFFE; overflow-x:auto; margin:0;
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+
+  /* ── Mobile target mock ── */
+  .target{
+    width:280px; background:#F7F9FF;
+    border-radius:28px; border:8px solid #0D1120;
+    overflow:hidden;
+  }
+  .t-status{
+    padding:8px 16px 4px; font-size:10px; font-weight:600;
+    display:flex; justify-content:space-between; color:#0D1120;
+  }
+  .t-head{ padding:8px 14px 10px; }
+  .t-greet-row{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .t-greet-sm{ font-size:10px; color:#6A7087; font-weight:500; }
+  .t-greet-lg{
+    font-family:'Space Grotesk', sans-serif; font-size:16px; font-weight:700;
+    letter-spacing:-0.02em; margin-top:1px; line-height:1.2;
+  }
+  .t-greet-shop{ font-size:10px; color:#6A7087; margin-top:3px; }
+  .t-avatar{
+    width:30px; height:30px; border-radius:8px; background:#0D1120; color:#fff;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:11px;
+  }
+  .t-credit{
+    margin-top:10px; background:#fff; border:1px solid rgba(13,17,32,0.08);
+    border-radius:10px; padding:10px 12px;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .t-credit-lbl{ font-size:9px; color:#6A7087; font-weight:600; }
+  .t-credit-num{
+    font-family:'Space Grotesk', sans-serif; font-size:14px; font-weight:700;
+    margin-top:2px;
+  }
+  .t-credit-num span{ font-size:10px; color:#6A7087; font-weight:500 }
+  .t-credit-settle{ font-size:9px; color:#6A7087; margin-top:2px; }
+  .t-pay{
+    background:#1A4BDB; color:#fff; border:none; padding:6px 10px;
+    border-radius:6px; font-size:10px; font-weight:600;
+  }
+  .t-search{
+    margin:10px 14px 0; background:#fff; border:1px solid rgba(13,17,32,0.08);
+    border-radius:8px; padding:8px 10px; font-size:11px; color:#6A7087;
+    display:flex; gap:8px; align-items:center;
+  }
+  .t-chips{ display:flex; gap:5px; padding:8px 14px 4px; overflow:hidden; }
+  .t-chip{
+    padding:5px 10px; border-radius:7px; font-size:10px; font-weight:600;
+    white-space:nowrap; border:1px solid rgba(13,17,32,0.1); background:#fff;
+  }
+  .t-chip.on{ background:#0D1120; color:#fff; border:none }
+  .t-chip span{ opacity:0.55; font-weight:500; margin-left:3px }
+  .t-sect{
+    padding:10px 14px 4px; display:flex; justify-content:space-between;
+    align-items:baseline;
+  }
+  .t-sect-t{ font-family:'Space Grotesk', sans-serif; font-size:13px; font-weight:700; letter-spacing:-0.01em; }
+  .t-sect-l{ font-size:10px; color:#1A4BDB; font-weight:600; }
+  .t-rail{ display:flex; gap:6px; padding:0 14px 4px; overflow:hidden; }
+  .t-card{
+    width:100px; flex-shrink:0;
+    color:#fff; padding:8px; height:80px;
+    border-radius:8px; display:flex; flex-direction:column;
+    justify-content:space-between; position:relative; overflow:hidden;
+  }
+  .t-card .k{ font-size:7px; font-weight:600; text-transform:uppercase; opacity:0.6; letter-spacing:0.04em; }
+  .t-card .n{
+    font-family:'Space Grotesk', sans-serif; font-size:13px; font-weight:700;
+    letter-spacing:-0.02em; line-height:1;
+  }
+  .t-card .s{ font-size:8px; opacity:0.7; margin-top:2px; }
+  .t-card .stripe{ position:absolute; top:0; left:0; right:0; height:2px; opacity:0.85; }
+  .t-list{
+    margin:8px 14px 0; background:#fff; border:1px solid rgba(13,17,32,0.08);
+    border-radius:10px; overflow:hidden;
+  }
+  .t-row{
+    display:grid; grid-template-columns: 30px 1fr auto 22px;
+    gap:8px; align-items:center; padding:8px 10px;
+    border-bottom:1px solid rgba(13,17,32,0.05);
+  }
+  .t-row:last-child{ border-bottom:none }
+  .t-swatch{
+    width:30px; height:30px; border-radius:5px; color:#fff;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Space Grotesk', sans-serif; font-weight:700;
+    font-size:8px; letter-spacing:-0.02em; text-align:center; line-height:1;
+  }
+  .t-row .t{ font-size:11px; font-weight:600; }
+  .t-row .m{ font-size:9px; color:#6A7087; margin-top:1px; }
+  .t-row .p{ font-family:'Space Grotesk', sans-serif; font-size:11px; font-weight:700; text-align:right; }
+  .t-row .c{ font-size:8px; color:#6A7087; text-align:right; }
+  .t-add{
+    width:22px; height:22px; border-radius:5px; background:#0D1120; color:#fff;
+    font-weight:600; font-size:13px; display:flex; align-items:center; justify-content:center;
+  }
+  .t-foot{ padding:8px 14px 4px; font-size:9px; color:#6A7087; text-align:center; }
+  .t-nav{
+    display:flex; justify-content:space-around; padding:7px 10px 10px;
+    border-top:1px solid rgba(13,17,32,0.08); background:#fff;
+  }
+  .t-nav div{ display:flex; flex-direction:column; align-items:center; gap:2px; color:#6A7087; }
+  .t-nav div.on{ color:#0D1120 }
+  .t-nav div .i{ width:14px; height:14px; border-radius:3px; background:rgba(13,17,32,0.12); }
+  .t-nav div.on .i{ background:#1A4BDB }
+  .t-nav div .lb{ font-size:8px; font-weight:600 }
+
+  /* annotations */
+  .anno{
+    display:flex; gap:8px; margin-top:14px; padding:10px 14px;
+    background:#FFF4DC; border:1px solid #F0C765; border-radius:10px;
+    font-size:12px; line-height:1.5;
+  }
+  .anno b{ color:#6A4A00 }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="head">
+    <h1>DISTRO — Home screen redesign</h1>
+    <p>Your current home vs. target. Annotated for handoff to Claude Code.</p>
+  </div>
+
+  <div class="cols">
+    <!-- BEFORE -->
+    <div class="col">
+      <h2 class="tag-before"><span class="dot"></span>Before — current screen</h2>
+      <p class="sub">Screenshot from device · Blue-heavy, identical cards, placeholder icons.</p>
+      <div class="phone-wrap">
+        <img src="distro/current-screenshot.jpeg" alt="Current DISTRO home screen"/>
+      </div>
+      <div class="issues">
+        <div class="issues-hd bad">7 things to fix</div>
+        <div class="issue"><div class="n">1</div><div><b>Massive blue header</b> — eats the top third of the screen. Shrink to ~120px so the catalogue breathes.</div></div>
+        <div class="issue"><div class="n">2</div><div><b>Grey cube placeholders on every card</b> — reads as "missing image". Replace with solid brand-color tiles showing brand name typed.</div></div>
+        <div class="issue"><div class="n">3</div><div><b>Global "13%" badge on every product</b> — a discount on everything is not a discount, it's noise. Only show badges for real deals.</div></div>
+        <div class="issue"><div class="n">4</div><div><b>Full-width blue Add buttons</b> — too much blue, every row looks the same. Shrink to a small + square in the card corner.</div></div>
+        <div class="issue"><div class="n">5</div><div><b>Cartoon emoji categories</b> (🍺 ⚡ 🥃) — feels like a kids' app, not a B2B wholesale tool. Use typed chips.</div></div>
+        <div class="issue"><div class="n">6</div><div><b>No shop identity</b> beyond "Demo Store". No credit balance, no "order again", no context.</div></div>
+        <div class="issue"><div class="n">7</div><div><b>Announcement card</b> takes space but says "Welcome to DISTRO…" — marketing fluff. Either remove or use for real info (today's deal, delivery cutoff).</div></div>
+      </div>
+    </div>
+
+    <!-- AFTER -->
+    <div class="col">
+      <h2 class="tag-after"><span class="dot"></span>After — target design</h2>
+      <p class="sub">Warm B2B distributor feel. Real brand colors. Credit front-and-center.</p>
+      <div class="phone-wrap">
+        <div class="target">
+          <div class="t-status"><span>9:41</span><span>••• 5G</span></div>
+          <div class="t-head">
+            <div class="t-greet-row">
+              <div>
+                <div class="t-greet-sm">Namaste,</div>
+                <div class="t-greet-lg">Ram Bahadur</div>
+                <div class="t-greet-shop">Shrestha Kirana Pasal · Kalanki</div>
+              </div>
+              <div class="t-avatar">RS</div>
+            </div>
+            <div class="t-credit">
+              <div>
+                <div class="t-credit-lbl">Credit available</div>
+                <div class="t-credit-num">Rs 48,240 <span>of 75,000</span></div>
+                <div class="t-credit-settle">Settle by Baisakh 22</div>
+              </div>
+              <button class="t-pay">Pay now</button>
+            </div>
+          </div>
+          <div class="t-search">
+            <span>⌕</span><span>Search brand or category…</span>
+          </div>
+          <div class="t-chips">
+            <div class="t-chip on">All<span>124</span></div>
+            <div class="t-chip">Beer<span>38</span></div>
+            <div class="t-chip">Whisky<span>22</span></div>
+            <div class="t-chip">Energy<span>18</span></div>
+          </div>
+          <div class="t-sect">
+            <div class="t-sect-t">Order again</div>
+            <div class="t-sect-l">See all</div>
+          </div>
+          <div class="t-rail">
+            <div class="t-card" style="background:#1E2761">
+              <div class="stripe" style="background:#FFD700"></div>
+              <div class="k" style="color:#FFD700">energy</div>
+              <div>
+                <div class="n">Red Bull</div>
+                <div class="s">Original · 250ml</div>
+              </div>
+            </div>
+            <div class="t-card" style="background:#5B2A10">
+              <div class="stripe" style="background:#E8C878"></div>
+              <div class="k" style="color:#E8C878">spirits</div>
+              <div>
+                <div class="n">Khukri Rum</div>
+                <div class="s">XXX · 750ml</div>
+              </div>
+            </div>
+            <div class="t-card" style="background:#00A859">
+              <div class="stripe" style="background:#FFD700"></div>
+              <div class="k">beer</div>
+              <div>
+                <div class="n">Tuborg</div>
+                <div class="s">Strong · 650ml</div>
+              </div>
+            </div>
+          </div>
+          <div class="t-sect">
+            <div class="t-sect-t">Full catalogue</div>
+            <div class="t-sect-l" style="color:#6A7087; font-weight:500">124 items</div>
+          </div>
+          <div class="t-list">
+            <div class="t-row">
+              <div class="t-swatch" style="background:#8B1F1F; color:#FFD85A">Gork</div>
+              <div>
+                <div class="t">Gorkha</div>
+                <div class="m">Strong · 650ml</div>
+              </div>
+              <div>
+                <div class="p">Rs 470</div>
+                <div class="c">Case 5,640</div>
+              </div>
+              <div class="t-add">+</div>
+            </div>
+            <div class="t-row">
+              <div class="t-swatch" style="background:#0E3A5F">Rusl</div>
+              <div>
+                <div class="t">Ruslan Vodka</div>
+                <div class="m">Premium · 750ml</div>
+              </div>
+              <div>
+                <div class="p">Rs 860</div>
+                <div class="c">Case 10,320</div>
+              </div>
+              <div class="t-add">+</div>
+            </div>
+            <div class="t-row">
+              <div class="t-swatch" style="background:#000; color:#00FF41">Mons</div>
+              <div>
+                <div class="t">Monster</div>
+                <div class="m">Green · 500ml</div>
+              </div>
+              <div>
+                <div class="p">Rs 220</div>
+                <div class="c">Case 5,280</div>
+              </div>
+              <div class="t-add">+</div>
+            </div>
+          </div>
+          <div class="t-foot">Prices excl. 13% VAT · Updated 9:02 am</div>
+          <div class="t-nav">
+            <div class="on"><div class="i"></div><div class="lb">Shop</div></div>
+            <div><div class="i"></div><div class="lb">Cart</div></div>
+            <div><div class="i"></div><div class="lb">Orders</div></div>
+            <div><div class="i"></div><div class="lb">Ledger</div></div>
+            <div><div class="i"></div><div class="lb">Me</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="issues">
+        <div class="issues-hd good">7 changes applied</div>
+        <div class="issue"><div class="n">1</div><div><b>Header reduced to greeting only</b> — no full-bleed blue. Shop name + credit card replace it.</div></div>
+        <div class="issue"><div class="n">2</div><div><b>Solid brand-color tiles</b> (Red Bull navy+gold, Tuborg green, Khukri brown). Brand name typed, no grey cube.</div></div>
+        <div class="issue"><div class="n">3</div><div><b>No global discount badge.</b> Badges only appear on actual deals/low-stock.</div></div>
+        <div class="issue"><div class="n">4</div><div><b>Small "+" square</b> in card corner, not a full-width button. Card visual does the selling.</div></div>
+        <div class="issue"><div class="n">5</div><div><b>Typed category chips</b> with item counts, no emoji.</div></div>
+        <div class="issue"><div class="n">6</div><div><b>Credit balance card</b> right under the greeting — this is a credit-first wholesale app, make it the hero.</div></div>
+        <div class="issue"><div class="n">7</div><div><b>"Order again" horizontal rail</b> above full catalogue — repeat orders are 80% of wholesale, surface them first.</div></div>
+      </div>
+
+      <div class="anno">
+        <b>Note:</b> The miniature preview on the right approximates the final look. See <code>./DISTRO Design.html</code> + <code>./distro/mobile.jsx</code> for the actual React source to port from.
+      </div>
+    </div>
+  </div>
+
+  <div class="handoff">
+    <h3>Handoff instructions for Claude Code</h3>
+    <p>Drop <code>DISTRO Design.html</code>, the <code>distro/</code> folder, and <code>DISTRO Comparison.html</code> into <code>distroo-main/</code>, then paste this prompt into Claude Code:</p>
+    <pre>Open ./DISTRO Comparison.html to see the before/after annotated.
+Then open ./DISTRO Design.html and ./distro/mobile.jsx — use them as the
+visual target for the mobile home screen in distro-app.
+
+Apply these specific changes to the current Home screen:
+
+1. Shrink the blue header — greeting + avatar only, no full-bleed blue block.
+2. Add a credit-balance card below the greeting (available / limit / settle date / Pay now button).
+3. Keep the search bar but style it as a neutral input, not inside the blue block.
+4. Replace emoji category tiles with typed chips (All 124, Beer 38, Whisky 22, Energy 18…).
+5. Add an "Order again" horizontal scroller above Featured, using solid brand-color product cards
+   (see BRANDS map in ./distro/data.jsx — each brand has bg/fg/accent colors).
+6. Replace every grey-cube product card with a solid brand-color card; brand name typed large,
+   sub + size small, with a 3px accent stripe at the top.
+7. Remove the global "13%" badge. Only show badges for real deals ("Rs 40 off"), low stock, or out of stock.
+8. Replace full-width blue "Add" buttons with a small 28x28 dark-square "+" button in the card corner.
+9. Below the Order-again rail, show the Full catalogue as a dense list (not 2-col grid):
+   swatch + name/sub + unit/case prices + small "+" button per row.
+10. Footer line: "Prices excl. 13% VAT · Updated HH:MM am".
+
+Use the brand color map from ./distro/data.jsx for product tile backgrounds.
+Keep the existing tab bar but swap the blue pill for the brand ink color.
+Do NOT use emoji anywhere.</pre>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,8 +1,48 @@
 "use client";
 
 import { TimelineContent } from "@/components/ui/timeline-animation";
-import Image from "next/image";
 import { useRef } from "react";
+
+function initialsFromName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+type AvatarTone = "blue" | "green" | "ink";
+
+function TestimonialAvatar({
+  name,
+  tone,
+  size = "md",
+}: {
+  name: string;
+  tone: AvatarTone;
+  size?: "md" | "sm";
+}) {
+  const initials = initialsFromName(name);
+  const sizeClass =
+    size === "sm"
+      ? "w-12 h-12 text-sm lg:w-12 lg:h-12"
+      : "w-16 h-16 text-base lg:w-16 lg:h-16";
+
+  const toneClass =
+    tone === "blue"
+      ? "bg-white/95 text-[color:var(--blue)] shadow-sm"
+      : tone === "green"
+        ? "bg-white/95 text-[color:var(--green-dark)] shadow-sm"
+        : "bg-zinc-600 text-white border border-zinc-500/80";
+
+  return (
+    <div
+      className={`flex shrink-0 items-center justify-center rounded-xl font-display font-bold leading-none ${sizeClass} ${toneClass}`}
+      aria-hidden
+    >
+      <span className="select-none">{initials}</span>
+    </div>
+  );
+}
 
 const TESTIMONIALS = [
   {
@@ -10,56 +50,42 @@ const TESTIMONIALS = [
       "DISTRO completely changed how I restock my shop. I place orders at midnight and everything arrives by morning — no more waking up early for the wholesale market.",
     name: "Ram Bahadur Thapa",
     role: "Owner, Thapa General Store",
-    image:
-      "https://images.unsplash.com/photo-1599566150163-29194dcaad36?q=80&w=687&auto=format&fit=crop",
   },
   {
     quote:
       "The wholesale prices are genuinely lower than what I was getting before. My margins improved within the first month.",
     name: "Sita Sharma",
     role: "Sharma Wines & Spirits",
-    image:
-      "https://images.unsplash.com/photo-1512485694743-9c9538b4e6e0?q=80&w=687&auto=format&fit=crop",
   },
   {
     quote:
       "Delivery inside Kathmandu valley is incredibly fast. I ordered at 10 AM and had stock on my shelves by 4 PM the same day.",
     name: "Bikash Rai",
     role: "Owner, Rai Corner Shop",
-    image:
-      "https://images.unsplash.com/photo-1566753323558-f4e0952af115?q=80&w=1021&auto=format&fit=crop",
   },
   {
     quote:
       "As a small shop owner, I couldn't meet the minimum orders from big distributors. DISTRO's low MOQ means I can order what I actually need.",
     name: "Anita Gurung",
     role: "Gurung Beverages, Pokhara",
-    image:
-      "https://images.unsplash.com/photo-1615109398623-88346a601842?q=80&w=687&auto=format&fit=crop",
   },
   {
     quote:
       "The credit facility is what sold me. I can order stock, sell it, and then pay — just like the old udhari system but digitized and transparent.",
     name: "Deepak Shrestha",
     role: "Shrestha Mart, Lalitpur",
-    image:
-      "https://images.unsplash.com/photo-1740102074295-c13fae3e4f8a?q=80&w=687&auto=format&fit=crop",
   },
   {
     quote:
       "I used to spend half my day calling distributors and negotiating. Now I just open the app, compare prices, and order. Simple.",
     name: "Sunita Adhikari",
     role: "Adhikari Store, Bhaktapur",
-    image:
-      "https://images.unsplash.com/photo-1563237023-b1e970526dcb?q=80&w=765&auto=format&fit=crop",
   },
   {
     quote:
       "DISTRO has been a true game-changer for our business. Proper VAT invoices, reliable delivery schedule, and a product range that keeps growing. We've recommended it to every shopkeeper we know.",
     name: "Rajesh Maharjan",
     role: "Maharjan Wholesale, Kirtipur",
-    image:
-      "https://images.unsplash.com/photo-1590086782957-93c06ef21604?q=80&w=687&auto=format&fit=crop",
   },
 ];
 
@@ -135,13 +161,7 @@ export default function ClientFeedback() {
                     {TESTIMONIALS[0].role}
                   </p>
                 </div>
-                <Image
-                  src={TESTIMONIALS[0].image}
-                  alt={TESTIMONIALS[0].name}
-                  width={200}
-                  height={200}
-                  className="w-16 h-16 rounded-xl object-cover"
-                />
+                <TestimonialAvatar name={TESTIMONIALS[0].name} tone="blue" />
               </div>
             </article>
           </TimelineContent>
@@ -166,13 +186,7 @@ export default function ClientFeedback() {
                     {TESTIMONIALS[1].role}
                   </p>
                 </div>
-                <Image
-                  src={TESTIMONIALS[1].image}
-                  alt={TESTIMONIALS[1].name}
-                  width={200}
-                  height={200}
-                  className="w-16 h-16 rounded-xl object-cover"
-                />
+                <TestimonialAvatar name={TESTIMONIALS[1].name} tone="green" />
               </div>
             </article>
           </TimelineContent>
@@ -201,12 +215,10 @@ export default function ClientFeedback() {
                       {TESTIMONIALS[idx].role}
                     </p>
                   </div>
-                  <Image
-                    src={TESTIMONIALS[idx].image}
-                    alt={TESTIMONIALS[idx].name}
-                    width={200}
-                    height={200}
-                    className="lg:w-16 lg:h-16 w-12 h-12 rounded-xl object-cover"
+                  <TestimonialAvatar
+                    name={TESTIMONIALS[idx].name}
+                    tone="ink"
+                    size="sm"
                   />
                 </div>
               </article>
@@ -236,13 +248,7 @@ export default function ClientFeedback() {
                     {TESTIMONIALS[5].role}
                   </p>
                 </div>
-                <Image
-                  src={TESTIMONIALS[5].image}
-                  alt={TESTIMONIALS[5].name}
-                  width={200}
-                  height={200}
-                  className="w-16 h-16 rounded-xl object-cover"
-                />
+                <TestimonialAvatar name={TESTIMONIALS[5].name} tone="green" />
               </div>
             </article>
           </TimelineContent>
@@ -268,13 +274,7 @@ export default function ClientFeedback() {
                     {TESTIMONIALS[6].role}
                   </p>
                 </div>
-                <Image
-                  src={TESTIMONIALS[6].image}
-                  alt={TESTIMONIALS[6].name}
-                  width={200}
-                  height={200}
-                  className="w-16 h-16 rounded-xl object-cover"
-                />
+                <TestimonialAvatar name={TESTIMONIALS[6].name} tone="blue" />
               </div>
             </article>
           </TimelineContent>

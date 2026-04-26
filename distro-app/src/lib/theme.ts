@@ -1,14 +1,14 @@
 // DISTRO Design System
-// Primary: #2563EB  |  Slogan: Wholesale, made simple.
+// Primary: #1A4BDB  |  Slogan: Wholesale, made simple.
 
 export const colors = {
   // Primary
-  blue: "#2563EB",
-  blueDark: "#1D4ED8",
-  blueDarker: "#1E40AF",
-  blueLight: "#EFF6FF",
+  blue: "#1A4BDB",
+  blueDark: "#1239B0",
+  blueDarker: "#0E2E8F",
+  blueLight: "#E8EFFE",
   blueMid: "#BFDBFE",
-  bluePale: "#DBEAFE",
+  bluePale: "#F0F4FF",
 
   // Success
   green: "#00C46F",
@@ -88,7 +88,7 @@ export const shadow = {
     elevation: 5,
   },
   lg: {
-    shadowColor: "#2563EB",
+    shadowColor: "#1A4BDB",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2,
     shadowRadius: 24,
@@ -125,7 +125,7 @@ export const animation = {
 // Status → color mapping
 export const statusColors: Record<string, { bg: string; text: string; dot: string }> = {
   PENDING:    { bg: "#FEF3C7", text: "#92400E", dot: "#F59E0B" },
-  CONFIRMED:  { bg: "#EFF6FF", text: "#1D4ED8", dot: "#2563EB" },
+  CONFIRMED:  { bg: "#E8EFFE", text: "#1239B0", dot: "#1A4BDB" },
   PROCESSING: { bg: "#EDE9FE", text: "#5B21B6", dot: "#7C3AED" },
   PACKED:     { bg: "#F0FDF4", text: "#166534", dot: "#16A34A" },
   SHIPPED:    { bg: "#ECFDF5", text: "#065F46", dot: "#10B981" },

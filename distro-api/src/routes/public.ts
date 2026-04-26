@@ -42,13 +42,29 @@ router.get('/districts', async (req: Request, res: Response): Promise<void> => {
   res.json({ districts });
 });
 
-// ─── GET /api/categories — full category tree ─────────────────────────────────
+// ─── GET /api/categories — top-level categories + children, with product counts ─
 router.get('/categories', async (_req: Request, res: Response): Promise<void> => {
-  const categories = await prisma.category.findMany({
-    where:   { parentId: null },
-    include: { children: true },
+  const rows = await prisma.category.findMany({
+    where: { parentId: null },
+    include: {
+      children: {
+        orderBy: { name: 'asc' },
+        include: { _count: { select: { products: true } } },
+      },
+      _count: { select: { products: true } },
+    },
     orderBy: { name: 'asc' },
   });
+
+  const categories = rows.map((c) => {
+    const childProductSum = c.children.reduce(
+      (sum, ch) => sum + ch._count.products,
+      0
+    );
+    const productCount = c._count.products + childProductSum;
+    return { ...c, productCount };
+  });
+
   res.json({ categories });
 });
 
@@ -65,6 +81,15 @@ router.get('/brands', async (_req: Request, res: Response): Promise<void> => {
     .filter((b): b is string => typeof b === 'string' && b.length > 0);
   const brands = names.map((name, i) => ({ id: i + 1, name }));
   res.json({ brands });
+});
+
+// ─── GET /api/banners — active banners ordered by sortOrder ──────────────────
+router.get('/banners', async (_req: Request, res: Response): Promise<void> => {
+  const banners = await prisma.banner.findMany({
+    where: { active: true },
+    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+  });
+  res.json({ banners });
 });
 
 export default router;

@@ -1,5 +1,8 @@
-import { View, Text, StyleSheet, Dimensions } from "react-native";
-import { useEffect } from "react";
+import { View, StyleSheet, Platform } from "react-native";
+import { useEffect, useLayoutEffect } from "react";
+import * as ExpoSplashScreen from "expo-splash-screen";
+import { StatusBar } from "expo-status-bar";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -12,7 +15,8 @@ import Animated, {
 } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 
-const { width: W, height: H } = Dimensions.get("window");
+/** Matches marketing mockup — full-bleed screen to device bezels */
+const SPLASH_BLUE = "#2554F1";
 
 // ─── Loading dot ──────────────────────────────────────────────────────────────
 function LoadingDot({
@@ -47,11 +51,16 @@ interface SplashScreenProps {
 }
 
 export function SplashScreen({ onFinish }: SplashScreenProps) {
+  const insets = useSafeAreaInsets();
   const logoScale = useSharedValue(0.6);
   const titleOpacity = useSharedValue(0);
   const taglineOpacity = useSharedValue(0);
   const dotsOpacity = useSharedValue(0);
   const activeDot = useSharedValue(0);
+
+  useLayoutEffect(() => {
+    ExpoSplashScreen.hideAsync().catch(() => {});
+  }, []);
 
   useEffect(() => {
     // Logo box: scale 0.6 → 1.0 over 600ms spring
@@ -107,97 +116,93 @@ export function SplashScreen({ onFinish }: SplashScreenProps) {
   }));
 
   return (
-    <View style={s.container}>
-      {/* Concentric circles */}
-      <View style={[s.circle, s.circleOuter]} />
-      <View style={[s.circle, s.circleMiddle]} />
-      <View style={[s.circle, s.circleInner]} />
+    <View style={s.root}>
+      <StatusBar style="light" backgroundColor={SPLASH_BLUE} translucent={Platform.OS === "android"} />
+      <View
+        style={[
+          s.fill,
+          {
+            backgroundColor: SPLASH_BLUE,
+            paddingTop: insets.top,
+            paddingBottom: insets.bottom,
+            paddingLeft: insets.left,
+            paddingRight: insets.right,
+          },
+        ]}
+      >
+        <View style={s.centerColumn}>
+          <View style={s.center}>
+            <Animated.View style={[s.logoRing, logoStyle]}>
+              <Ionicons name="cube-outline" size={30} color="#fff" />
+            </Animated.View>
 
-      {/* Center content */}
-      <View style={s.center}>
-        {/* Logo box */}
-        <Animated.View style={[s.logoBox, logoStyle]}>
-          <Ionicons name="cube-outline" size={28} color="#fff" />
-        </Animated.View>
+            <Animated.Text style={[s.title, titleStyle]}>DISTRO</Animated.Text>
 
-        {/* DISTRO title */}
-        <Animated.Text style={[s.title, titleStyle]}>DISTRO</Animated.Text>
+            <Animated.Text style={[s.tagline, taglineStyle]}>
+              Wholesale, made simple
+            </Animated.Text>
+          </View>
 
-        {/* Tagline */}
-        <Animated.Text style={[s.tagline, taglineStyle]}>
-          Wholesale, made simple.
-        </Animated.Text>
-
-        {/* Loading dots */}
-        <Animated.View style={[s.dotsRow, dotsStyle]}>
-          <LoadingDot index={0} activeDot={activeDot} />
-          <LoadingDot index={1} activeDot={activeDot} />
-          <LoadingDot index={2} activeDot={activeDot} />
-        </Animated.View>
+          <Animated.View style={[s.dotsRow, dotsStyle]}>
+            <LoadingDot index={0} activeDot={activeDot} />
+            <LoadingDot index={1} activeDot={activeDot} />
+            <LoadingDot index={2} activeDot={activeDot} />
+          </Animated.View>
+        </View>
       </View>
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    backgroundColor: "#2563EB",
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: SPLASH_BLUE,
   },
-  circle: {
-    position: "absolute",
-    alignSelf: "center",
-    borderRadius: 9999,
+  fill: {
+    flex: 1,
   },
-  circleOuter: {
-    width: 280,
-    height: 280,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-  },
-  circleMiddle: {
-    width: 200,
-    height: 200,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-  },
-  circleInner: {
-    width: 120,
-    height: 120,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
+  centerColumn: {
+    flex: 1,
+    justifyContent: "space-between",
   },
   center: {
+    flex: 1,
+    justifyContent: "center",
     alignItems: "center",
-    gap: 6,
+    paddingHorizontal: 24,
+    gap: 8,
   },
-  logoBox: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.25)",
+  /** Thin white ring + cube — aligned to visible “screen” via safe area, blue to physical bezel */
+  logoRing: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.95)",
+    backgroundColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   title: {
-    fontSize: 32,
+    fontSize: 34,
     fontWeight: "800",
     color: "#fff",
-    letterSpacing: 3,
+    letterSpacing: 4,
   },
   tagline: {
-    fontSize: 13,
-    color: "rgba(255,255,255,0.65)",
-    marginTop: 6,
+    fontSize: 14,
+    fontWeight: "400",
+    color: "rgba(255,255,255,0.88)",
+    marginTop: 4,
+    letterSpacing: 0.2,
   },
   dotsRow: {
     flexDirection: "row",
-    gap: 6,
-    marginTop: 32,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    paddingBottom: Platform.OS === "ios" ? 8 : 12,
   },
 });

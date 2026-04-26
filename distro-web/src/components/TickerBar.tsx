@@ -32,7 +32,7 @@ export default function TickerBar() {
 
   return (
     <div
-      className="h-9 bg-blue text-white text-xs font-medium overflow-hidden flex items-center"
+      className="h-7 bg-blue text-white text-[11px] font-medium overflow-hidden flex items-center"
       aria-label="Announcements"
     >
       <div className="ticker-track whitespace-nowrap select-none">
