@@ -18,6 +18,7 @@ import reportsRouter   from './routes/reports';
 import publicRouter    from './routes/public';
 import adminRouter     from './routes/admin';
 import chatRouter      from './routes/chat';
+import driverRouter    from './routes/driver';
 import { startCleanupCron } from './lib/cleanup';
 import { apiLimiter } from './middleware/rateLimiter';
 
@@ -62,6 +63,7 @@ app.use('/api/payments',  paymentsRouter);
 app.use('/api/reports',   reportsRouter);
 app.use('/api/admin',     adminRouter);
 app.use('/api/chat',      chatRouter);
+app.use('/api/driver',    driverRouter);
 app.use('/api',           publicRouter);  // announcements, districts, categories
 
 // Global error handler — log full error server-side, sanitize for client on 5xx

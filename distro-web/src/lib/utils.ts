@@ -113,7 +113,7 @@ export function getSessionDisplayName(
     name?: string | null;
     storeName?: string | null;
     phone: string;
-    role: "BUYER" | "ADMIN";
+    role: "BUYER" | "ADMIN" | "DRIVER";
   } | null
 ): string {
   if (!user) return "";

@@ -16,6 +16,15 @@ export function middleware(request: NextRequest) {
     }
   }
 
+  // Driver dashboard — DRIVER only. /driver/login is public.
+  if (pathname === "/driver" || (pathname.startsWith("/driver/") && pathname !== "/driver/login")) {
+    if (!token || role !== "DRIVER") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/driver/login";
+      return NextResponse.redirect(url);
+    }
+  }
+
   // Buyer-authenticated routes
   if (pathname.startsWith("/orders") || pathname === "/account") {
     if (!token) {
@@ -30,5 +39,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/orders/:path*", "/account"],
+  matcher: ["/admin/:path*", "/orders/:path*", "/account", "/driver", "/driver/:path*"],
 };

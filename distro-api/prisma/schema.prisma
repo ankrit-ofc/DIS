@@ -235,6 +235,7 @@ model EmailLog {
 enum Role {
   ADMIN
   BUYER
+  DRIVER
 }
 
 enum Status {

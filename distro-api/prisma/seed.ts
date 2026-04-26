@@ -121,8 +121,21 @@ async function main() {
       },
     });
     console.log('  Demo buyer profile created (9841100001).');
+
+    const driverHash = await bcrypt.hash('Driver@12345', 12);
+    await prisma.profile.create({
+      data: {
+        phone: '9800000002',
+        passwordHash: driverHash,
+        role: 'DRIVER',
+        ownerName: 'Demo Driver',
+        phoneVerified: true,
+        status: 'ACTIVE',
+      },
+    });
+    console.log('  Demo driver profile created (9800000002).');
   } else {
-    console.log('  Skipping demo buyer (prod).');
+    console.log('  Skipping demo buyer + driver (prod).');
   }
 
   // ── 4. Districts ──────────────────────────────────────────────────────────
