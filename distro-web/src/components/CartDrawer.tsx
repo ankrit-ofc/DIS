@@ -24,7 +24,7 @@ export default function CartDrawer() {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
           <h2 className="font-grotesk font-semibold text-lg text-ink">
-            Cart{" "}
+            Distro Van{" "}
             {items.length > 0 && (
               <span className="text-blue">({items.length})</span>
             )}
@@ -32,7 +32,7 @@ export default function CartDrawer() {
           <button
             onClick={closeCart}
             className="p-2 rounded-lg hover:bg-gray-200 transition-colors"
-            aria-label="Close cart"
+            aria-label="Close distro van"
           >
             <X size={20} />
           </button>
@@ -43,7 +43,7 @@ export default function CartDrawer() {
           {items.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-4 text-gray-400">
               <ShoppingBag size={48} strokeWidth={1.2} />
-              <p className="font-medium text-base">Your cart is empty</p>
+              <p className="font-medium text-base">Your distro van is empty</p>
               <p className="text-sm text-center">
                 Browse the catalogue to add products
               </p>
@@ -138,7 +138,7 @@ export default function CartDrawer() {
               onClick={closeCart}
               className="block w-full text-center border border-gray-200 hover:bg-blue-pale text-gray-600 text-sm font-medium py-2.5 rounded-xl transition-colors"
             >
-              View Full Cart
+              View Full Van
             </Link>
           </div>
         )}

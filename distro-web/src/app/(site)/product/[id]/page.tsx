@@ -68,7 +68,7 @@ export default function ProductPage() {
       },
       currentQty
     );
-    toast.success(`${product.name} added to cart`);
+    toast.success(`${product.name} added to your van`);
   }
 
   if (isLoading) {
@@ -219,7 +219,7 @@ export default function ProductPage() {
             className="w-full flex items-center justify-center gap-2 bg-blue hover:bg-blue-dark disabled:bg-gray-200 disabled:cursor-not-allowed text-white font-medium py-3.5 rounded-xl text-base transition-colors shadow-lg shadow-blue/20"
           >
             <ShoppingCart size={20} />
-            {isOutOfStock ? "Out of Stock" : "Add to Cart"}
+            {isOutOfStock ? "Out of Stock" : "Add to Van"}
           </button>
 
           <p className="text-xs text-gray-400 text-center">

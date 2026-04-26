@@ -43,7 +43,7 @@ export default function ProductCard({ product }: { product: Product }) {
       image: productImage,
       brand: product.brand,
     });
-    toast.success("Added to cart");
+    toast.success("Added to your van");
   }
 
   return (
@@ -103,7 +103,7 @@ export default function ProductCard({ product }: { product: Product }) {
           className="mt-2 flex items-center justify-center gap-2 disabled:bg-gray-200 disabled:cursor-not-allowed w-full rounded-xl py-2.5 text-sm font-semibold bg-blue text-white hover:bg-blue/90 transition-colors"
         >
           <ShoppingCart size={15} />
-          {isOutOfStock ? "Out of Stock" : "Add to Cart"}
+          {isOutOfStock ? "Out of Stock" : "Add to Van"}
         </button>
       </div>
     </Link>

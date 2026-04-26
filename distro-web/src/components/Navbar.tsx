@@ -105,7 +105,7 @@ export default function Navbar() {
               type="button"
               className="nav-circle-btn"
               onClick={openCart}
-              aria-label="Open cart"
+              aria-label="Open distro van"
             >
               <ShoppingCart size={16} />
               <span

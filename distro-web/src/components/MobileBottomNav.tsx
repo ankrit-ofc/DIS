@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 const TABS = [
   { href: "/catalogue", label: "Catalogue", icon: LayoutGrid },
   { href: "/track", label: "Track", icon: Search },
-  { href: "/cart", label: "Cart", icon: ShoppingCart, showBadge: true },
+  { href: "/cart", label: "Van", icon: ShoppingCart, showBadge: true },
   { href: "/orders", label: "Orders", icon: Package, auth: true },
   { href: "/account", label: "Account", icon: User, auth: true },
 ];
@@ -18,7 +18,7 @@ const TABS = [
 const GUEST_TABS = [
   { href: "/catalogue", label: "Catalogue", icon: LayoutGrid },
   { href: "/track", label: "Track", icon: Search },
-  { href: "/cart", label: "Cart", icon: ShoppingCart, showBadge: true },
+  { href: "/cart", label: "Van", icon: ShoppingCart, showBadge: true },
   { href: "/coverage", label: "Coverage", icon: Package },
   { href: "/login", label: "Login", icon: User },
 ];

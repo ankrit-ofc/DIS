@@ -134,7 +134,7 @@ function CheckoutForm() {
   if (items.length === 0) {
     return (
       <div className="text-center py-24 text-gray-400">
-        <p className="text-lg font-medium">Your cart is empty</p>
+        <p className="text-lg font-medium">Your distro van is empty</p>
         <a href="/catalogue" className="mt-4 inline-block text-blue hover:underline text-sm">
           Browse Catalogue
         </a>
@@ -147,7 +147,7 @@ function CheckoutForm() {
       {stockIssues.length > 0 && (
         <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <p className="font-semibold flex items-center gap-2">
-            <AlertCircle size={16} /> Some items in your cart no longer have enough stock
+            <AlertCircle size={16} /> Some items in your van no longer have enough stock
           </p>
           <ul className="mt-2 list-disc pl-5 space-y-0.5 text-xs">
             {stockIssues.map((s) => (
@@ -157,7 +157,7 @@ function CheckoutForm() {
             ))}
           </ul>
           <p className="mt-2 text-xs">
-            Reduce the quantity in your cart or remove the item before checking out.
+            Reduce the quantity in your van or remove the item before checking out.
           </p>
         </div>
       )}

@@ -256,7 +256,7 @@ function ProductMini({
           type="button"
           onClick={handleClick}
           className="absolute bottom-3 right-3 w-8 h-8 bg-blue text-white text-sm flex items-center justify-center rounded-lg hover:bg-blue-dark active:scale-95 transition-all duration-200"
-          aria-label="Add to cart"
+          aria-label="Add to van"
         >
           {added ? <Check size={14} /> : <Plus size={14} />}
         </button>
@@ -333,7 +333,7 @@ const ORDERING_STEPS = [
     n: "2",
     title: "Order by the case",
     body:
-      "Browse the catalogue, compare wholesale prices, and add cartons to your cart with MOQ.",
+      "Browse the catalogue, compare wholesale prices, and add cartons to your distro van with MOQ.",
   },
   {
     n: "3",
@@ -372,7 +372,7 @@ export default function HomeClient({
       image: product.imageUrl ?? product.image,
       brand: product.brand,
     }, product.moq);
-    toast.success(`${product.name} added to cart`);
+    toast.success(`${product.name} added to your van`);
   }
 
   return (
@@ -573,7 +573,7 @@ export default function HomeClient({
                   {[
                     "One-tap reordering for your regular stock.",
                     "Live delivery tracking across the Kathmandu Valley.",
-                    "Offline cart — add items even with patchy signal.",
+                    "Offline van — add items even with patchy signal.",
                   ].map((item) => (
                     <motion.li
                       key={item}
@@ -858,7 +858,7 @@ export default function HomeClient({
                             ),
                           },
                           {
-                            label: "Cart",
+                            label: "Van",
                             badge: 3,
                             icon: (
                               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
