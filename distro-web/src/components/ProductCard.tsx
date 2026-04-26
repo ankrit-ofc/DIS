@@ -15,7 +15,7 @@ export interface Product {
   mrp: number;
   unit: string;
   moq: number;
-  stock: number;
+  stock?: number;
   stockQty?: number;
   image?: string;
   imageUrl?: string;
@@ -25,11 +25,14 @@ export interface Product {
 export default function ProductCard({ product }: { product: Product }) {
   const { addItem } = useCartStore();
   const productImage = product.imageUrl ?? product.image;
-  const stockInfo = getStockLabel(product.stock, product.moq);
+  const stock = product.stockQty ?? product.stock ?? 0;
+  const isOutOfStock = stock <= 0;
+  const stockInfo = getStockLabel(stock, product.moq);
   const discount = Math.round(((product.mrp - product.price) / product.mrp) * 100);
 
   function handleAddToCart(e: React.MouseEvent) {
     e.preventDefault();
+    if (isOutOfStock) return;
     addItem({
       id: product.id,
       name: product.name,
@@ -57,13 +60,12 @@ export default function ProductCard({ product }: { product: Product }) {
           className="object-cover group-hover:scale-105 transition-transform duration-300"
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
         />
-        {discount > 0 && (
-          <span className="absolute top-2 left-2 rounded-full text-xs font-bold px-2.5 py-1 bg-green-500 text-white">
-            -{discount}%
-          </span>
-        )}
         <span
-          className="absolute top-2 right-2 rounded-full text-xs font-medium px-2.5 py-1 bg-green-50 text-green-700 border border-green-200"
+          className={`absolute top-2 right-2 rounded-full text-xs font-medium px-2.5 py-1 border ${
+            isOutOfStock
+              ? "bg-gray-100 text-gray-500 border-gray-200"
+              : "bg-green-50 text-green-700 border-green-200"
+          }`}
         >
           {stockInfo.label}
         </span>
@@ -83,7 +85,7 @@ export default function ProductCard({ product }: { product: Product }) {
 
         <div className="mt-1">
           <div className="flex items-center gap-2">
-            <span className="font-grotesk font-bold text-[#2563EB] text-base">
+            <span className="font-grotesk font-bold text-blue text-base">
               {formatUnitPrice(product.price, product.unit)}
             </span>
             {product.mrp > product.price && (
@@ -97,11 +99,11 @@ export default function ProductCard({ product }: { product: Product }) {
 
         <button
           onClick={handleAddToCart}
-          disabled={product.stock <= 0}
+          disabled={isOutOfStock}
           className="mt-2 flex items-center justify-center gap-2 disabled:bg-gray-200 disabled:cursor-not-allowed w-full rounded-xl py-2.5 text-sm font-semibold bg-blue text-white hover:bg-blue/90 transition-colors"
         >
           <ShoppingCart size={15} />
-          {product.stock <= 0 ? "Out of Stock" : "Add to Cart"}
+          {isOutOfStock ? "Out of Stock" : "Add to Cart"}
         </button>
       </div>
     </Link>
