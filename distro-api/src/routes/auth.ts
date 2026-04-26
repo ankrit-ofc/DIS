@@ -72,10 +72,8 @@ router.post('/request-otp', otpLimiter, async (req: Request, res: Response): Pro
     await prisma.profile.update({ where: { phone: phone! }, data: { otpCode: otp, otpExpiry } });
   }
 
-  try {
-    await sendSMS(phone!, otpMessage(otp));
-  } catch (e) {
-    console.error('[OTP][SMS] Sparrow send failed:', e);
+  const smsResult = await sendSMS(phone!, otpMessage(otp));
+  if (!smsResult.ok && process.env.SMS_ENABLED !== 'false') {
     res.status(502).json({ error: 'Could not send OTP. Please try again.' });
     return;
   }
