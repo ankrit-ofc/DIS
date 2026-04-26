@@ -13,14 +13,14 @@ export default function CartDrawer() {
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Backdrop — z above navbar (200/400) and ChatWidget (400) */}
       <div
-        className="fixed inset-0 bg-ink/40 z-50 backdrop-blur-sm"
+        className="fixed inset-0 bg-ink/40 z-[500] backdrop-blur-sm"
         onClick={closeCart}
       />
 
       {/* Drawer */}
-      <aside className="fixed right-0 top-0 h-full w-full max-w-sm bg-white z-50 flex flex-col shadow-2xl">
+      <aside className="fixed right-0 top-0 h-full w-full max-w-sm bg-white z-[510] flex flex-col shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
           <h2 className="font-grotesk font-semibold text-lg text-ink">
