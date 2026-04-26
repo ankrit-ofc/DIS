@@ -3,17 +3,34 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ShoppingCart, UserCircle, Package, LogOut, Menu, X, Search } from "lucide-react";
+import {
+  ShoppingCart,
+  UserCircle,
+  Package,
+  LogOut,
+  Menu,
+  X,
+  Search,
+  MapPin,
+} from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
 import { useAuthStore } from "@/store/authStore";
 import { getSessionDisplayName, getSessionInitial } from "@/lib/utils";
 import CartDrawer from "./CartDrawer";
+import { PillNav } from "@/components/ui/pill-nav";
+import { NavbarSearch } from "@/components/NavbarSearch";
 
 const LINKS = [
-  { href: "/", label: "Home" },
   { href: "/catalogue", label: "Catalogue" },
   { href: "/track", label: "Track Order" },
   { href: "/coverage", label: "Coverage" },
+  { href: "/faq", label: "FAQ" },
+];
+
+const PROMO_ITEMS = [
+  "Free delivery on orders above Rs 5,000",
+  "New products added weekly",
+  "Khalti and eSewa accepted",
 ];
 
 export default function Navbar() {
@@ -21,22 +38,14 @@ export default function Navbar() {
   const router = useRouter();
   const { totalItems, openCart } = useCartStore();
   const { token, user, clearAuth } = useAuthStore();
-  const [scrolled, setScrolled] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [pillStyle, setPillStyle] = useState<{ left: number; width: number }>({ left: 0, width: 0 });
-  const [searchTerm, setSearchTerm] = useState("");
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const navRefs = useRef<(HTMLAnchorElement | null)[]>([]);
   const count = totalItems();
 
   useEffect(() => {
     setMounted(true);
-    const onScroll = () => setScrolled(window.scrollY > 10);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   useEffect(() => {
@@ -47,21 +56,6 @@ export default function Navbar() {
     if (menuOpen) document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [menuOpen]);
-
-  useEffect(() => {
-    const activeIndex = LINKS.findIndex(
-      (l) => pathname === l.href || (l.href !== "/" && pathname?.startsWith(l.href + "/"))
-    );
-    if (activeIndex !== -1 && navRefs.current[activeIndex]) {
-      const el = navRefs.current[activeIndex];
-      if (el) {
-        setPillStyle({
-          left: el.offsetLeft,
-          width: el.offsetWidth,
-        });
-      }
-    }
-  }, [pathname, mounted]);
 
   const showBadge = mounted && count > 0;
   const loggedIn = mounted && !!token && !!user;
@@ -77,151 +71,155 @@ export default function Navbar() {
 
   return (
     <>
-      <nav
-        className={`distro-navbar${scrolled ? " scrolled" : ""}`}
-        aria-label="Primary"
-      >
-        {/* MOBILE HAMBURGER */}
-        <button
-          type="button"
-          className="nav-hamburger"
-          onClick={() => setMobileOpen((v) => !v)}
-          aria-label={mobileOpen ? "Close menu" : "Open menu"}
-        >
-          {mobileOpen ? <X size={22} /> : <Menu size={22} />}
-        </button>
-
-        {/* LEFT — Logo */}
-        <div className="nav-left">
-          <Link href="/" className="nav-logo" aria-label="DISTRO home">
-            <img src="/logo.png" alt="DISTRO" className="nav-logo-img" />
-          </Link>
-        </div>
-
-        {/* CENTER — Nav links with sliding pill */}
-        <div className="nav-center">
-          <div className="nav-links-wrapper">
-            <div className="nav-pill" style={{ left: `${pillStyle.left}px`, width: `${pillStyle.width}px` }} />
-            {LINKS.map((l, idx) => {
-              const active =
-                pathname === l.href || (l.href !== "/" && pathname?.startsWith(l.href + "/"));
-              return (
-                <Link
-                  key={l.href}
-                  href={l.href}
-                  ref={(el) => { navRefs.current[idx] = el; }}
-                  className={`nav-link${active ? " is-active" : ""}`}
-                >
-                  {l.label}
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* RIGHT — Search + Cart + User */}
-        <div className="nav-right">
-          <div className="nav-search">
-            <Search size={16} className="nav-search-icon" />
-            <input
-              type="text"
-              placeholder="Search products..."
-              className="nav-search-input"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && searchTerm.trim()) {
-                  router.push(`/catalogue?q=${encodeURIComponent(searchTerm.trim())}`);
-                }
-              }}
-            />
-          </div>
-
+      <header className="distro-header" aria-label="Primary">
+        {/* ── TOP BLUE BAR ─────────────────────────────── */}
+        <div className="nav-top">
           <button
-            id="cartBtn"
             type="button"
-            onClick={openCart}
-            className="nav-cart-btn"
-            aria-label="Open cart"
+            className="nav-hamburger"
+            onClick={() => setMobileOpen((v) => !v)}
+            aria-label={mobileOpen ? "Close menu" : "Open menu"}
           >
-            <ShoppingCart size={20} strokeWidth={2} />
-            <span
-              id="cartCount"
-              className={`nav-cart-badge${showBadge ? " is-visible" : ""}`}
-              aria-hidden={!showBadge}
-            >
-              {count > 99 ? "99+" : count}
-            </span>
+            {mobileOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
 
-          {!loggedIn && (
-            <Link href="/login" className="nav-login-btn">
-              Login
-            </Link>
-          )}
+          <Link href="/" className="nav-logo-wrap" aria-label="DISTRO home">
+            <span className="nav-logo-mask">
+              <img src="/logo.png" alt="DISTRO" className="nav-logo-img" />
+            </span>
+            <span className="nav-wholesale-badge">WHOLESALE</span>
+          </Link>
 
-          {loggedIn && user && (
-            <div ref={menuRef} className="nav-session">
-              <button
-                type="button"
-                onClick={() => setMenuOpen((v) => !v)}
-                className="nav-session-btn"
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                title={sessionLabel}
+          <div className="nav-delivery-info">
+            <MapPin size={14} />
+            <span className="nav-delivery-strong">
+              Next-day wholesale delivery
+            </span>
+            <span className="nav-delivery-muted">across the Kathmandu Valley</span>
+          </div>
+
+          <NavbarSearch variant="desktop" />
+
+          <div className="nav-top-actions">
+            <button
+              type="button"
+              className="nav-circle-btn"
+              onClick={openCart}
+              aria-label="Open cart"
+            >
+              <ShoppingCart size={16} />
+              <span
+                className={`nav-cart-badge${showBadge ? " is-visible" : ""}`}
+                aria-hidden={!showBadge}
               >
-                <span className="nav-session-avatar" aria-hidden>
-                  {sessionInitial}
-                </span>
-              </button>
+                {count > 99 ? "99+" : count}
+              </span>
+            </button>
 
-              {menuOpen && (
-                <div role="menu" className="nav-session-menu">
-                  <div className="nav-session-menu-head">
-                    <p className="nav-session-menu-name">{sessionLabel}</p>
-                    <p className="nav-session-menu-phone">{user.phone}</p>
-                    <p className="nav-session-menu-role">{user.role}</p>
-                  </div>
-                  <Link
-                    href={sessionHref}
-                    onClick={() => setMenuOpen(false)}
-                    className="nav-session-menu-item"
-                  >
-                    <UserCircle size={16} />
-                    {user.role === "ADMIN" ? "Admin Dashboard" : "My Account"}
-                  </Link>
-                  {user.role === "BUYER" && (
+            {!loggedIn && (
+              <Link href="/login" className="nav-login-btn">
+                Login
+              </Link>
+            )}
+
+            {loggedIn && user && (
+              <div ref={menuRef} className="nav-session">
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen((v) => !v)}
+                  className="nav-session-btn"
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  title={sessionLabel}
+                >
+                  <span className="nav-session-avatar" aria-hidden>
+                    {sessionInitial}
+                  </span>
+                </button>
+
+                {menuOpen && (
+                  <div role="menu" className="nav-session-menu">
+                    <div className="nav-session-menu-head">
+                      <p className="nav-session-menu-name">{sessionLabel}</p>
+                      <p className="nav-session-menu-phone">{user.phone}</p>
+                      <p className="nav-session-menu-role">{user.role}</p>
+                    </div>
                     <Link
-                      href="/orders"
+                      href={sessionHref}
                       onClick={() => setMenuOpen(false)}
                       className="nav-session-menu-item"
                     >
-                      <Package size={16} />
-                      My Orders
+                      <UserCircle size={16} />
+                      {user.role === "ADMIN"
+                        ? "Admin Dashboard"
+                        : "My Account"}
                     </Link>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="nav-session-menu-item nav-session-menu-logout"
-                  >
-                    <LogOut size={16} />
-                    Logout
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+                    {user.role === "BUYER" && (
+                      <Link
+                        href="/orders"
+                        onClick={() => setMenuOpen(false)}
+                        className="nav-session-menu-item"
+                      >
+                        <Package size={16} />
+                        My Orders
+                      </Link>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="nav-session-menu-item nav-session-menu-logout"
+                    >
+                      <LogOut size={16} />
+                      Logout
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
-      </nav>
 
-      {/* MOBILE DRAWER */}
+        {/* ── PILL NAV ROW ─────────────────────────────── */}
+        <div className="nav-middle">
+          <div className="nav-middle-inner">
+            <PillNav items={LINKS.map((l) => ({ name: l.label, href: l.href }))} pathname={pathname} />
+          </div>
+        </div>
+
+        {/* ── PROMO MARQUEE (3rd row) ─────────────────── */}
+        <div className="nav-marquee" aria-hidden="true">
+          <div className="nav-marquee-track">
+            {[0, 1].map((group) => (
+              <div key={group} className="nav-marquee-group">
+                {PROMO_ITEMS.concat(PROMO_ITEMS).map((item, i) => (
+                  <span key={`${group}-${i}`} className="nav-marquee-item">
+                    {item}
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      </header>
+
+      {/* ── MOBILE DRAWER ─────────────────────────────── */}
       {mobileOpen && (
-        <div className="nav-mobile-overlay" onClick={() => setMobileOpen(false)}>
-          <div className="nav-mobile-drawer" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="nav-mobile-overlay"
+          onClick={() => setMobileOpen(false)}
+        >
+          <div
+            className="nav-mobile-drawer"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <NavbarSearch
+              variant="mobile"
+              onMobileClose={() => setMobileOpen(false)}
+            />
             <div className="nav-mobile-links">
               {LINKS.map((l) => {
-                const active = pathname === l.href || pathname?.startsWith(l.href + "/");
+                const active =
+                  pathname === l.href || pathname?.startsWith(l.href + "/");
                 return (
                   <Link
                     key={l.href}
@@ -237,27 +235,45 @@ export default function Navbar() {
             {loggedIn && user && (
               <div className="nav-mobile-user">
                 <div className="nav-mobile-user-info">
-                  <span className="nav-session-avatar" aria-hidden>{sessionInitial}</span>
+                  <span className="nav-session-avatar" aria-hidden>
+                    {sessionInitial}
+                  </span>
                   <div>
                     <p className="nav-session-menu-name">{sessionLabel}</p>
                     <p className="nav-session-menu-phone">{user.phone}</p>
                   </div>
                 </div>
-                <Link href={sessionHref} className="nav-mobile-link" onClick={() => setMobileOpen(false)}>
+                <Link
+                  href={sessionHref}
+                  className="nav-mobile-link"
+                  onClick={() => setMobileOpen(false)}
+                >
                   {user.role === "ADMIN" ? "Admin Dashboard" : "My Account"}
                 </Link>
                 {user.role === "BUYER" && (
-                  <Link href="/orders" className="nav-mobile-link" onClick={() => setMobileOpen(false)}>
+                  <Link
+                    href="/orders"
+                    className="nav-mobile-link"
+                    onClick={() => setMobileOpen(false)}
+                  >
                     My Orders
                   </Link>
                 )}
-                <button type="button" onClick={handleLogout} className="nav-mobile-link nav-mobile-logout">
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="nav-mobile-link nav-mobile-logout"
+                >
                   Logout
                 </button>
               </div>
             )}
             {!loggedIn && (
-              <Link href="/login" className="nav-login-btn nav-mobile-login" onClick={() => setMobileOpen(false)}>
+              <Link
+                href="/login"
+                className="nav-login-btn nav-mobile-login"
+                onClick={() => setMobileOpen(false)}
+              >
                 Login
               </Link>
             )}
@@ -268,164 +284,266 @@ export default function Navbar() {
       <CartDrawer />
 
       <style jsx global>{`
-        .distro-navbar {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          height: 70px;
-          padding: 0 32px;
-          background: transparent;
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
-          border-bottom: 1px solid rgba(226, 232, 240, 0.5);
-          position: sticky;
-          top: 0;
+        /* Slightly darker brand blue for the navbar.
+           All full-bleed bars (top, middle, marquee) span the full viewport
+           width. Inner content is constrained via .nav-*-inner wrappers so
+           layouts stay centered and scale at any browser zoom. */
+        .distro-header {
+          --nav-blue: #1a4bdb;
+          --nav-blue-deep: #1239b0;
+          --nav-max: 90rem; /* ~1440px, scales with root font-size / zoom */
+          position: relative;
           z-index: 200;
-          transition: box-shadow 0.3s ease, background 0.3s ease;
-        }
-        .distro-navbar.scrolled {
-          box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08);
-          background: rgba(255, 255, 255, 0.95);
+          width: 100%;
+          max-width: 100%;
         }
 
-        /* LEFT — Logo */
-        .nav-left {
+        /* ── TOP BLUE BAR (full-bleed) ───────────────── */
+        .nav-top {
           display: flex;
           align-items: center;
-          justify-content: flex-start;
+          gap: 1rem;
+          min-height: 3.5rem;
+          width: 100%;
+          padding: 0.5rem clamp(1rem, 3vw, 2.5rem);
+          background: var(--nav-blue);
+          color: #ffffff;
+        }
+
+        .nav-logo-wrap {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.75rem;
+          text-decoration: none;
           flex-shrink: 0;
         }
-        .nav-logo {
-          display: flex;
+        /* The logo PNG has large built-in whitespace — mask crops it so the
+           actual wordmark appears at a readable size. Sized in rem so it
+           scales with browser zoom. */
+        .nav-logo-mask {
+          display: inline-flex;
           align-items: center;
-          text-decoration: none;
+          justify-content: center;
+          width: 9rem;
+          height: 2.75rem;
+          background: #ffffff;
+          border-radius: 0.625rem;
+          overflow: hidden;
+          padding: 0 0.625rem;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+          flex-shrink: 0;
         }
         .nav-logo-img {
-          height: 150px;
-          width: auto;
+          width: 14rem;
+          height: auto;
           object-fit: contain;
+          display: block;
         }
-
-        /* CENTER — Nav links with sliding pill */
-        .nav-center {
-          display: flex;
-          justify-content: center;
+        .nav-wholesale-badge {
+          display: inline-flex;
           align-items: center;
-          flex: 1;
-        }
-        .nav-links-wrapper {
-          position: relative;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 4px;
-          border-radius: 12px;
-        }
-        .nav-pill {
-          position: absolute;
-          height: calc(100% - 8px);
-          background: rgba(37, 99, 235, 0.12);
-          border: 1px solid rgba(37, 99, 235, 0.25);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
-          box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.6);
-          border-radius: 8px;
-          transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-          z-index: 0;
-          pointer-events: none;
-        }
-        .nav-link {
-          position: relative;
-          z-index: 1;
-          padding: 8px 18px;
-          font-size: 14px;
-          font-weight: 500;
-          color: #475569;
-          text-decoration: none;
-          transition: color 0.2s ease;
-          white-space: nowrap;
-        }
-        .nav-link:hover {
-          color: #334155;
-        }
-        .nav-link.is-active {
-          color: #2563eb;
-          font-weight: 600;
-        }
-
-        /* RIGHT — Search + Cart + User */
-        .nav-right {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          justify-content: flex-end;
+          height: 1.25rem;
+          padding: 0 0.5rem;
+          background: rgba(255, 255, 255, 0.16);
+          border: 1px solid rgba(255, 255, 255, 0.35);
+          border-radius: 0.25rem;
+          color: #ffffff;
+          font-size: 0.625rem;
+          font-weight: 700;
+          letter-spacing: 0.08em;
           flex-shrink: 0;
         }
 
-        .nav-search {
+        .nav-delivery-info {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.375rem;
+          color: #ffffff;
+          font-size: 0.8125rem;
+          flex-shrink: 0;
+          min-width: 0;
+        }
+        .nav-delivery-info svg {
+          opacity: 0.9;
+        }
+        .nav-delivery-strong {
+          font-weight: 600;
+        }
+        .nav-delivery-muted {
+          color: rgba(255, 255, 255, 0.78);
+        }
+
+        .nav-search-outer {
           position: relative;
+          flex: 1 1 20rem;
+          min-width: 0;
+          max-width: 36rem;
+        }
+        .nav-search-wrap {
+          position: relative;
+          width: 100%;
           display: flex;
           align-items: center;
+          background: #ffffff;
+          border-radius: 0.625rem;
+          height: 2.5rem;
+          padding: 0 0.25rem 0 0.875rem;
+          box-shadow: 0 2px 8px rgba(13, 17, 32, 0.08);
+        }
+        .nav-search-dropdown {
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: calc(100% + 0.35rem);
+          z-index: 400;
+          max-height: min(70vh, 22rem);
+          overflow-y: auto;
+          overflow-x: hidden;
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 0.625rem;
+          box-shadow: 0 12px 32px rgba(13, 17, 32, 0.14);
+        }
+        .nav-search-dropdown-status {
+          padding: 0.75rem 1rem;
+          font-size: 0.8125rem;
+          color: #64748b;
+        }
+        .nav-search-dropdown-item {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 0.5rem 0.75rem;
+          text-decoration: none;
+          color: #0d1120;
+          border-bottom: 1px solid #f1f5f9;
+          transition: background 0.15s ease;
+        }
+        .nav-search-dropdown-item:hover {
+          background: #f8fafc;
+        }
+        .nav-search-dropdown-thumb {
+          flex-shrink: 0;
+        }
+        .nav-search-dropdown-text {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.125rem;
+        }
+        .nav-search-dropdown-name {
+          font-size: 0.8125rem;
+          font-weight: 600;
+          line-height: 1.25;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .nav-search-dropdown-meta {
+          font-size: 0.6875rem;
+          color: #64748b;
+        }
+        .nav-search-dropdown-price {
+          flex-shrink: 0;
+          font-size: 0.75rem;
+          font-weight: 700;
+          color: var(--nav-blue-deep);
+        }
+        .nav-search-dropdown-footer {
+          display: block;
+          padding: 0.65rem 0.75rem;
+          text-align: center;
+          font-size: 0.8125rem;
+          font-weight: 600;
+          color: var(--nav-blue-deep);
+          background: #f8fafc;
+          border-top: 1px solid #e2e8f0;
+          text-decoration: none;
+        }
+        .nav-search-dropdown-footer:hover {
+          background: #eff6ff;
+        }
+        .nav-mobile-search-outer {
+          position: relative;
+          width: 100%;
         }
         .nav-search-icon {
-          position: absolute;
-          left: 12px;
-          color: #94a3b8;
-          pointer-events: none;
+          color: #64748b;
+          flex-shrink: 0;
         }
         .nav-search-input {
-          width: 200px;
-          height: 38px;
-          padding: 0 12px 0 36px;
-          background: rgba(248, 250, 252, 0.8);
-          border: 1px solid rgba(226, 232, 240, 0.6);
-          border-radius: 20px;
-          font-size: 13px;
+          flex: 1;
+          min-width: 0;
+          height: 100%;
+          padding: 0 0.5rem;
+          background: transparent;
+          border: none;
+          font-size: 0.875rem;
           color: #0d1120;
           outline: none;
-          transition: all 0.2s ease;
         }
         .nav-search-input::placeholder {
           color: #94a3b8;
         }
-        .nav-search-input:focus {
-          width: 240px;
-          background: rgba(255, 255, 255, 0.95);
-          border-color: #2563eb;
-          box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-        }
-
-        .nav-cart-btn {
-          position: relative;
-          width: 38px;
-          height: 38px;
+        .nav-search-submit {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          background: transparent;
+          width: 2.125rem;
+          height: 34px;
+          background: #eff3fa;
+          color: var(--nav-blue-deep);
           border: none;
-          border-radius: 10px;
-          color: #475569;
+          border-radius: 8px;
           cursor: pointer;
-          transition: background-color 0.2s ease, color 0.2s ease;
+          transition: background 0.2s ease;
         }
-        .nav-cart-btn:hover {
-          background: rgba(239, 246, 255, 0.8);
-          color: #2563eb;
+        .nav-search-submit:hover {
+          background: #e0e8f7;
         }
+
+        .nav-top-actions {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.625rem;
+          margin-left: auto;
+          flex-shrink: 0;
+        }
+
+        .nav-circle-btn {
+          position: relative;
+          width: 2.25rem;
+          height: 2.25rem;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(255, 255, 255, 0.14);
+          border: 1px solid rgba(255, 255, 255, 0.22);
+          border-radius: 999px;
+          color: #ffffff;
+          cursor: pointer;
+          transition: background 0.2s ease, transform 0.2s ease;
+          flex-shrink: 0;
+        }
+        .nav-circle-btn:hover {
+          background: rgba(255, 255, 255, 0.22);
+          transform: translateY(-1px);
+        }
+
         .nav-cart-badge {
           position: absolute;
-          top: -4px;
-          right: -4px;
-          min-width: 18px;
-          height: 18px;
-          padding: 0 5px;
+          top: -0.25rem;
+          right: -0.25rem;
+          min-width: 1.125rem;
+          height: 1.125rem;
+          padding: 0 0.3125rem;
           border-radius: 999px;
-          background: #2563eb;
+          background: #ef4444;
           color: #ffffff;
-          font-size: 10px;
+          font-size: 0.625rem;
           font-weight: 700;
-          line-height: 18px;
+          line-height: 1.125rem;
           text-align: center;
           opacity: 0;
           transform: scale(0);
@@ -438,19 +556,23 @@ export default function Navbar() {
         }
 
         .nav-login-btn {
-          background: #2563eb;
-          color: #ffffff;
-          border-radius: 20px;
-          padding: 9px 20px;
-          font-size: 13px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          height: 2.25rem;
+          padding: 0 1.25rem;
+          background: #ffffff;
+          color: var(--nav-blue-deep);
+          border-radius: 999px;
+          font-size: 0.8125rem;
           font-weight: 600;
           text-decoration: none;
-          transition: all 0.2s ease;
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
+          flex-shrink: 0;
         }
         .nav-login-btn:hover {
-          background: #1d4ed8;
           transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
         }
 
         .nav-session {
@@ -470,40 +592,40 @@ export default function Navbar() {
           transform: scale(1.05);
         }
         .nav-session-avatar {
-          width: 38px;
-          height: 38px;
+          width: 2.25rem;
+          height: 2.25rem;
           border-radius: 999px;
-          background: #2563eb;
-          color: #ffffff;
+          background: #ffffff;
+          color: var(--nav-blue-deep);
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          font-family: var(--font-grotesk), "Space Grotesk", system-ui, sans-serif;
-          font-size: 14px;
+          font-family: var(--font-grotesk), "Space Grotesk", system-ui,
+            sans-serif;
+          font-size: 0.75rem;
           font-weight: 700;
           flex-shrink: 0;
-          box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
         }
         .nav-session-menu {
           position: absolute;
           right: 0;
-          top: calc(100% + 12px);
-          width: 240px;
-          background: rgba(255, 255, 255, 0.95);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
-          border: 1px solid rgba(226, 232, 240, 0.6);
-          border-radius: 12px;
-          box-shadow: 0 8px 32px rgba(13, 17, 32, 0.12);
+          top: calc(100% + 0.75rem);
+          width: 15rem;
+          max-width: calc(100vw - 1.5rem);
+          background: #ffffff;
+          border: 1px solid rgba(226, 232, 240, 0.8);
+          border-radius: 0.75rem;
+          box-shadow: 0 12px 32px rgba(13, 17, 32, 0.18);
           overflow: hidden;
           z-index: 210;
         }
         .nav-session-menu-head {
-          padding: 14px 16px;
-          border-bottom: 1px solid rgba(241, 245, 249, 0.8);
+          padding: 0.875rem 1rem;
+          border-bottom: 1px solid rgba(241, 245, 249, 0.9);
         }
         .nav-session-menu-name {
-          font-size: 13px;
+          font-size: 0.8125rem;
           font-weight: 700;
           color: #0d1120;
           margin: 0;
@@ -512,25 +634,25 @@ export default function Navbar() {
           white-space: nowrap;
         }
         .nav-session-menu-phone {
-          font-size: 11px;
+          font-size: 0.6875rem;
           color: #64748b;
-          margin: 2px 0 0 0;
+          margin: 0.125rem 0 0 0;
         }
         .nav-session-menu-role {
-          font-size: 10px;
+          font-size: 0.625rem;
           font-weight: 700;
-          color: #2563eb;
+          color: var(--nav-blue-deep);
           text-transform: uppercase;
           letter-spacing: 0.05em;
-          margin: 4px 0 0 0;
+          margin: 0.25rem 0 0 0;
         }
         .nav-session-menu-item {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 0.5rem;
           width: 100%;
-          padding: 10px 16px;
-          font-size: 13px;
+          padding: 0.625rem 1rem;
+          font-size: 0.8125rem;
           color: #0d1120;
           background: transparent;
           border: none;
@@ -540,81 +662,175 @@ export default function Navbar() {
           transition: background-color 0.2s ease;
         }
         .nav-session-menu-item:hover {
-          background: rgba(239, 246, 255, 0.8);
+          background: #eff6ff;
         }
         .nav-session-menu-logout {
           color: #ef4444;
-          border-top: 1px solid rgba(241, 245, 249, 0.8);
+          border-top: 1px solid rgba(241, 245, 249, 0.9);
         }
         .nav-session-menu-logout:hover {
-          background: rgba(254, 242, 242, 0.8);
+          background: #fef2f2;
         }
 
-        /* ── Hamburger (hidden on desktop) ── */
+        /* ── MIDDLE BAR (matches the hero gradient below so edges blend) ── */
+        .nav-middle {
+          width: 100%;
+          background: linear-gradient(
+            135deg,
+            rgba(239, 246, 255, 0.5) 0%,
+            rgba(255, 255, 255, 1) 50%,
+            rgba(250, 245, 255, 0.5) 100%
+          );
+          border-bottom: none;
+        }
+        .nav-middle-inner {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 2.75rem;
+          width: 100%;
+          max-width: var(--nav-max);
+          padding: 0.25rem clamp(1rem, 3vw, 2.5rem);
+          margin: 0 auto;
+          flex-wrap: wrap;
+        }
+
+        /* ── PROMO MARQUEE ──────────────────────────────
+           Always spans the full viewport width at every zoom level — it's a
+           direct child of the sticky full-width header, and also self-asserts
+           width: 100%; max-width: 100vw; so no ancestor padding can shrink it. */
+        .nav-marquee {
+          width: 100%;
+          max-width: calc(var(--nav-max) - 6rem);
+          margin: 0 auto;
+          overflow: hidden;
+          background: var(--nav-blue);
+          color: #ffffff;
+          padding: 0.18rem 0;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 999px;
+        }
+        .nav-marquee-track {
+          display: flex;
+          width: max-content;
+          animation: navMarquee 30s linear infinite;
+          will-change: transform;
+        }
+        .nav-marquee-group {
+          display: flex;
+          align-items: center;
+          gap: 1.25rem;
+          padding-right: 1.25rem;
+          white-space: nowrap;
+        }
+        .nav-marquee-item {
+          font-size: 0.75rem;
+          font-weight: 500;
+          letter-spacing: 0.01em;
+          position: relative;
+          padding-right: 1.25rem;
+        }
+        .nav-marquee-item::after {
+          content: "·";
+          position: absolute;
+          right: 0.45rem;
+          color: rgba(255, 255, 255, 0.75);
+        }
+        @keyframes navMarquee {
+          from {
+            transform: translateX(0);
+          }
+          to {
+            transform: translateX(-50%);
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .nav-marquee-track {
+            animation: none;
+          }
+        }
+
+        /* ── Hamburger ──────────────────────────────── */
         .nav-hamburger {
           display: none;
           align-items: center;
           justify-content: center;
-          width: 40px;
-          height: 40px;
-          background: transparent;
-          border: none;
-          border-radius: 10px;
-          color: #334155;
+          width: 2.25rem;
+          height: 2.25rem;
+          background: rgba(255, 255, 255, 0.14);
+          border: 1px solid rgba(255, 255, 255, 0.22);
+          border-radius: 0.625rem;
+          color: #ffffff;
           cursor: pointer;
           -webkit-tap-highlight-color: transparent;
+          flex-shrink: 0;
         }
         .nav-hamburger:hover {
-          background: rgba(239, 246, 255, 0.8);
-          color: #2563eb;
+          background: rgba(255, 255, 255, 0.22);
         }
 
-        /* ── Mobile overlay + drawer ── */
+        /* ── Mobile overlay + drawer ────────────────── */
         .nav-mobile-overlay {
           display: none;
         }
 
-        @media (max-width: 768px) {
-          .distro-navbar {
-            padding: 0 16px;
-            height: 60px;
+        @media (max-width: 64rem) {
+          .nav-delivery-info {
+            display: none;
+          }
+        }
+
+        @media (max-width: 48rem) {
+          .nav-top {
+            min-height: 3.25rem;
+            padding: 0.375rem 0.875rem;
+            gap: 0.5rem;
           }
           .nav-hamburger {
             display: inline-flex;
             order: -1;
           }
-          .nav-center {
-            display: none;
+          .nav-logo-mask {
+            width: 7.5rem;
+            height: 2.25rem;
+            padding: 0 0.375rem;
           }
           .nav-logo-img {
-            height: 55px;
+            width: 11rem;
           }
-          .nav-search {
+          .nav-wholesale-badge {
             display: none;
           }
-          .nav-right {
-            gap: 8px;
+          .nav-search-wrap {
+            display: none;
           }
-          .nav-cart-btn {
-            width: 36px;
-            height: 36px;
+          .nav-middle {
+            display: none;
           }
-          .nav-session-btn {
-            padding: 0;
-          }
-          .nav-session-avatar {
-            width: 36px;
-            height: 36px;
+          .nav-top-actions {
+            gap: 0.375rem;
           }
           .nav-login-btn {
-            padding: 8px 16px;
-            font-size: 12px;
+            height: 2rem;
+            padding: 0 0.875rem;
+            font-size: 0.75rem;
+          }
+          .nav-circle-btn {
+            width: 2rem;
+            height: 2rem;
+          }
+          .nav-session-avatar {
+            width: 2rem;
+            height: 2rem;
+          }
+          .nav-marquee-item {
+            font-size: 0.71875rem;
           }
 
           .nav-mobile-overlay {
             display: block;
             position: fixed;
-            inset: 60px 0 0 0;
+            inset: 4.75rem 0 0 0;
             background: rgba(13, 17, 32, 0.5);
             backdrop-filter: blur(4px);
             -webkit-backdrop-filter: blur(4px);
@@ -622,31 +838,52 @@ export default function Navbar() {
             animation: fadeIn 0.2s ease;
           }
           .nav-mobile-drawer {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
+            background: #ffffff;
             border-bottom: 1px solid rgba(226, 232, 240, 0.6);
-            padding: 16px;
+            padding: 1rem;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 0.75rem;
             box-shadow: 0 8px 24px rgba(13, 17, 32, 0.15);
+          }
+          .nav-mobile-search {
+            position: relative;
+            display: flex;
+            align-items: center;
+            background: #f1f5f9;
+            border-radius: 0.625rem;
+            padding: 0 0.75rem;
+            height: 2.625rem;
+          }
+          .nav-mobile-search .nav-search-icon {
+            color: #64748b;
+            margin-right: 0.375rem;
+          }
+          .nav-mobile-search .nav-search-input {
+            flex: 1;
+            min-width: 0;
+            height: 100%;
+            padding: 0;
+            background: transparent;
+            border: none;
+            font-size: 0.875rem;
+            outline: none;
           }
           .nav-mobile-links {
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 0.25rem;
           }
           .nav-mobile-link {
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding: 12px 16px;
-            font-size: 15px;
+            gap: 0.5rem;
+            padding: 0.75rem 1rem;
+            font-size: 0.9375rem;
             font-weight: 500;
             color: #334155;
             text-decoration: none;
-            border-radius: 10px;
+            border-radius: 0.625rem;
             background: transparent;
             border: none;
             width: 100%;
@@ -657,44 +894,57 @@ export default function Navbar() {
           }
           .nav-mobile-link:hover,
           .nav-mobile-link:active {
-            background: rgba(239, 246, 255, 0.9);
-            color: #2563eb;
+            background: #eff6ff;
+            color: var(--nav-blue-deep);
           }
           .nav-mobile-link.is-active {
             color: #ffffff;
             font-weight: 700;
-            background: #2563eb;
+            background: var(--nav-blue);
           }
           .nav-mobile-user {
-            border-top: 1px solid rgba(226, 232, 240, 0.6);
-            padding-top: 12px;
+            border-top: 1px solid rgba(226, 232, 240, 0.8);
+            padding-top: 0.75rem;
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 0.25rem;
           }
           .nav-mobile-user-info {
             display: flex;
             align-items: center;
-            gap: 12px;
-            padding: 8px 16px 12px;
+            gap: 0.75rem;
+            padding: 0.5rem 1rem 0.75rem;
+          }
+          .nav-mobile-user-info .nav-session-avatar {
+            background: var(--nav-blue);
+            color: #ffffff;
           }
           .nav-mobile-logout {
             color: #ef4444;
           }
           .nav-mobile-logout:hover,
           .nav-mobile-logout:active {
-            background: rgba(254, 242, 242, 0.9);
+            background: #fef2f2;
             color: #ef4444;
           }
           .nav-mobile-login {
             display: block;
             text-align: center;
-            margin-top: 8px;
+            margin-top: 0.5rem;
+            background: var(--nav-blue);
+            color: #ffffff;
+          }
+          .nav-mobile-login:hover {
+            box-shadow: 0 8px 20px rgba(26, 75, 219, 0.35);
           }
 
           @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
+            from {
+              opacity: 0;
+            }
+            to {
+              opacity: 1;
+            }
           }
         }
       `}</style>
