@@ -3,7 +3,7 @@
 import { Fragment, useMemo, useState, Suspense } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Search, X, MapPin, RefreshCw, CheckCircle2 } from "lucide-react";
+import { Search, X, MapPin, RefreshCw, CheckCircle2, Loader2 } from "lucide-react";
 import dynamic from "next/dynamic";
 import toast from "react-hot-toast";
 import api from "@/lib/api";
@@ -168,8 +168,26 @@ function OrdersContent() {
   const updateStatus = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) =>
       api.patch(`/orders/${id}/status`, { status }),
+    onMutate: async ({ id, status }) => {
+      await qc.cancelQueries({ queryKey: ["admin-orders"] });
+      const snapshots = qc.getQueriesData<{ orders: Order[]; total: number }>({ queryKey: ["admin-orders"] });
+      for (const [key, prev] of snapshots) {
+        if (!prev?.orders) continue;
+        qc.setQueryData(key, {
+          ...prev,
+          orders: prev.orders.map((o) => (o.id === id ? { ...o, status: status as Order["status"] } : o)),
+        });
+      }
+      return { snapshots };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (!ctx?.snapshots) return;
+      for (const [key, prev] of ctx.snapshots) {
+        qc.setQueryData(key, prev);
+      }
+      toast.error("Status update failed");
+    },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin-orders"] });
       qc.invalidateQueries({ queryKey: ["admin-stats"] });
     },
   });
@@ -476,25 +494,32 @@ function OrdersContent() {
                 Order Status
               </label>
               <div className="grid grid-cols-2 gap-1.5">
-                {STATUSES.filter((s) => s !== "ALL").map((s) => (
-                  <button
-                    key={s}
-                    disabled={updateStatus.isPending}
-                    onClick={() =>
-                      updateStatus.mutate({
-                        id: selectedOrder.id,
-                        status: s,
-                      })
-                    }
-                    className={`text-xs font-medium py-1.5 px-2 rounded-lg border transition-colors ${
-                      selectedOrder.status === s
-                        ? "border-blue bg-blue text-white"
-                        : "border-gray-200 hover:border-blue text-gray-600"
-                    }`}
-                  >
-                    {s}
-                  </button>
-                ))}
+                {STATUSES.filter((s) => s !== "ALL").map((s) => {
+                  const pendingThis =
+                    updateStatus.isPending &&
+                    updateStatus.variables?.id === selectedOrder.id &&
+                    updateStatus.variables?.status === s;
+                  return (
+                    <button
+                      key={s}
+                      disabled={updateStatus.isPending}
+                      onClick={() =>
+                        updateStatus.mutate({
+                          id: selectedOrder.id,
+                          status: s,
+                        })
+                      }
+                      className={`inline-flex items-center justify-center gap-1 text-xs font-medium py-1.5 px-2 rounded-lg border transition-colors disabled:opacity-60 ${
+                        selectedOrder.status === s
+                          ? "border-blue bg-blue text-white"
+                          : "border-gray-200 hover:border-blue text-gray-600"
+                      }`}
+                    >
+                      {pendingThis && <Loader2 size={12} className="animate-spin" />}
+                      {s}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
