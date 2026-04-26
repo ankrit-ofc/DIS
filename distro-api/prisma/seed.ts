@@ -187,15 +187,23 @@ async function main() {
     { sku: '4.11', name: 'Xtreme 330ml',     brand: 'Xtreme',    price: 106.25, mrp: 122.19, moq: 24, unit: 'can 330ml', stockQty: 500, description: 'Carton price: Rs 2,550' },
   ];
 
+  // Carton fields are derived from existing per-piece price * moq.
+  // moq IS the pieces-per-carton in the legacy data, so this is a faithful translation.
+  const withCartonFields = <T extends { price: number; moq: number }>(p: T) => ({
+    ...p,
+    piecesPerCarton: p.moq,
+    pricePerCarton: Number((p.price * p.moq).toFixed(2)),
+  });
+
   if (!skipCatalog) {
     for (const p of liquorProducts) {
-      await prisma.product.create({ data: { ...p, categoryId: catLiquor.id } });
+      await prisma.product.create({ data: { ...withCartonFields(p), categoryId: catLiquor.id } });
     }
     for (const p of beerProducts) {
-      await prisma.product.create({ data: { ...p, categoryId: catBeer.id } });
+      await prisma.product.create({ data: { ...withCartonFields(p), categoryId: catBeer.id } });
     }
     for (const p of energyProducts) {
-      await prisma.product.create({ data: { ...p, categoryId: catEnergy.id } });
+      await prisma.product.create({ data: { ...withCartonFields(p), categoryId: catEnergy.id } });
     }
     const total = liquorProducts.length + beerProducts.length + energyProducts.length;
     console.log(`  Products: ${total} (Liquor: ${liquorProducts.length}, Beer: ${beerProducts.length}, Energy: ${energyProducts.length})`);

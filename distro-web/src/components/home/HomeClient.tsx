@@ -362,17 +362,26 @@ export default function HomeClient({
   }, [products, activeBrand]);
 
   function addToCart(product: Product) {
+    const piecesPerCarton = product.piecesPerCarton ?? product.moq ?? 1;
+    const ppcRaw = product.pricePerCarton;
+    const pricePerCarton =
+      ppcRaw == null
+        ? product.price * (product.moq ?? 1)
+        : typeof ppcRaw === "string"
+          ? parseFloat(ppcRaw)
+          : ppcRaw;
     addItem({
       id: product.id,
       name: product.name,
-      price: product.price,
+      price: pricePerCarton,
       mrp: product.mrp,
       unit: product.unit,
       moq: product.moq,
+      piecesPerCarton,
       image: product.imageUrl ?? product.image,
       brand: product.brand,
-    }, product.moq);
-    toast.success(`${product.name} added to your van`);
+    });
+    toast.success(`${product.name} — 1 carton added to your van`);
   }
 
   return (

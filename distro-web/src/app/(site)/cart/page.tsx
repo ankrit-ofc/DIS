@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Minus, Plus, Trash2, ShoppingBag, ArrowRight } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
-import { formatPrice, getImageUrl } from "@/lib/utils";
+import { formatPrice, formatPerCarton, formatPiecesPerCarton, getImageUrl } from "@/lib/utils";
 
 export default function CartPage() {
   const { items, updateQty, removeItem, subtotal } = useCartStore();
@@ -33,7 +33,7 @@ export default function CartPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <h1 className="font-grotesk font-bold text-2xl text-ink mb-8">
-        Distro Van ({items.length} {items.length === 1 ? "item" : "items"})
+        Distro Van ({items.length} {items.length === 1 ? "product" : "products"})
       </h1>
 
       <div className="flex flex-col lg:flex-row gap-6">
@@ -76,31 +76,36 @@ export default function CartPage() {
                       {item.name}
                     </Link>
                     <p className="text-xs text-gray-400">
-                      {formatPrice(item.price)} / {item.unit}
+                      {formatPerCarton(item.price)} · {formatPiecesPerCarton(item.piecesPerCarton)}
                     </p>
                   </div>
                 </div>
 
-                {/* Qty controls */}
-                <div className="flex items-center gap-2 sm:justify-center">
-                  <button
-                    onClick={() => updateQty(item.id, item.qty - item.moq)}
-                    disabled={item.qty <= item.moq}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-pale disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    aria-label="Decrease"
-                  >
-                    <Minus size={13} />
-                  </button>
-                  <span className="font-grotesk font-semibold w-10 text-center text-sm">
-                    {item.qty}
+                {/* Carton controls — whole cartons only */}
+                <div className="flex flex-col items-start sm:items-center gap-1">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => updateQty(item.id, item.qty - 1)}
+                      disabled={item.qty <= 1}
+                      className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-pale disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      aria-label="Decrease cartons"
+                    >
+                      <Minus size={13} />
+                    </button>
+                    <span className="font-grotesk font-semibold w-10 text-center text-sm">
+                      {item.qty}
+                    </span>
+                    <button
+                      onClick={() => updateQty(item.id, item.qty + 1)}
+                      className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-pale transition-colors"
+                      aria-label="Increase cartons"
+                    >
+                      <Plus size={13} />
+                    </button>
+                  </div>
+                  <span className="text-[10px] text-gray-400">
+                    {item.qty === 1 ? "carton" : "cartons"} · {item.qty * item.piecesPerCarton} pcs
                   </span>
-                  <button
-                    onClick={() => updateQty(item.id, item.qty + item.moq)}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-blue-pale transition-colors"
-                    aria-label="Increase"
-                  >
-                    <Plus size={13} />
-                  </button>
                 </div>
 
                 {/* Subtotal */}

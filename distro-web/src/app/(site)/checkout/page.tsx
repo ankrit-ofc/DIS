@@ -36,9 +36,12 @@ function CheckoutForm() {
   const [error, setError] = useState<string | null>(null);
 
   const MIN_ORDER = 50000;
-  const total = subtotal();
-  const belowMin = total < MIN_ORDER;
-  const needed = Math.max(0, MIN_ORDER - total);
+  const VAT_RATE = 0.13;
+  const sub = subtotal();
+  const vat = Math.round(sub * VAT_RATE * 100) / 100;
+  const total = sub + vat;
+  const belowMin = sub < MIN_ORDER;
+  const needed = Math.max(0, MIN_ORDER - sub);
 
   const [stockIssues, setStockIssues] = useState<StockIssue[]>([]);
 
@@ -62,13 +65,16 @@ function CheckoutForm() {
         const issues: StockIssue[] = [];
         for (const c of checks) {
           if (!c) continue;
-          const available = c.product?.stockQty ?? c.product?.stock ?? 0;
-          if (available < c.item.qty) {
+          // stockQty is in pieces; cart qty is in cartons.
+          const availablePieces = c.product?.stockQty ?? c.product?.stock ?? 0;
+          const ppc = c.item.piecesPerCarton || 1;
+          const cartonsAvailable = Math.floor(availablePieces / ppc);
+          if (cartonsAvailable < c.item.qty) {
             issues.push({
               productId: c.item.id,
               name: c.item.name,
               requested: c.item.qty,
-              available,
+              available: cartonsAvailable,
             });
           }
         }
@@ -152,7 +158,7 @@ function CheckoutForm() {
           <ul className="mt-2 list-disc pl-5 space-y-0.5 text-xs">
             {stockIssues.map((s) => (
               <li key={s.productId}>
-                {s.name}: requested {s.requested}, only {s.available} available
+                {s.name}: requested {s.requested} cartons, only {s.available} available
               </li>
             ))}
           </ul>
@@ -318,7 +324,7 @@ function CheckoutForm() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-ink truncate">{item.name}</p>
                     <p className="text-xs text-gray-400">
-                      {item.qty} × {formatPrice(item.price)}
+                      {item.qty} {item.qty === 1 ? "carton" : "cartons"} × {formatPrice(item.price)}
                     </p>
                   </div>
                   <p className="text-sm font-grotesk font-medium text-ink">
@@ -332,7 +338,13 @@ function CheckoutForm() {
               <div className="flex justify-between text-gray-600">
                 <span>Subtotal</span>
                 <span className="font-grotesk font-medium">
-                  {formatPrice(subtotal())}
+                  {formatPrice(sub)}
+                </span>
+              </div>
+              <div className="flex justify-between text-gray-600">
+                <span>VAT (13%)</span>
+                <span className="font-grotesk font-medium">
+                  {formatPrice(vat)}
                 </span>
               </div>
               <div className="flex justify-between text-gray-600">

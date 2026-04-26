@@ -72,7 +72,9 @@ export default function CartDrawer() {
                     <p className="text-sm font-medium text-ink truncate">
                       {item.name}
                     </p>
-                    <p className="text-xs text-gray-600 mt-0.5">{item.unit}</p>
+                    <p className="text-xs text-gray-600 mt-0.5">
+                      {item.qty} {item.qty === 1 ? "carton" : "cartons"} · {item.piecesPerCarton} pcs/ctn
+                    </p>
                     <p className="font-grotesk font-semibold text-blue text-sm mt-1">
                       {formatPrice(item.price * item.qty)}
                     </p>
@@ -89,10 +91,10 @@ export default function CartDrawer() {
                     </button>
                     <div className="flex items-center gap-1.5">
                       <button
-                        onClick={() => updateQty(item.id, item.qty - item.moq)}
-                        disabled={item.qty <= item.moq}
+                        onClick={() => updateQty(item.id, item.qty - 1)}
+                        disabled={item.qty <= 1}
                         className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 hover:bg-blue-pale disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                        aria-label="Decrease quantity"
+                        aria-label="Decrease cartons"
                       >
                         <Minus size={12} />
                       </button>
@@ -100,9 +102,9 @@ export default function CartDrawer() {
                         {item.qty}
                       </span>
                       <button
-                        onClick={() => updateQty(item.id, item.qty + item.moq)}
+                        onClick={() => updateQty(item.id, item.qty + 1)}
                         className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 hover:bg-blue-pale transition-colors"
-                        aria-label="Increase quantity"
+                        aria-label="Increase cartons"
                       >
                         <Plus size={12} />
                       </button>

@@ -28,6 +28,19 @@ export function formatCartonPrice(price: number, moq: number): string {
   return `Rs ${val} / carton (${moq} pcs)`;
 }
 
+/** Carton price label, e.g. "Rs 1,200 / carton". `pricePerCarton` is the raw amount. */
+export function formatPerCarton(pricePerCarton: number): string {
+  const val = new Intl.NumberFormat("en-IN", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(pricePerCarton);
+  return `Rs ${val} / carton`;
+}
+
+export function formatPiecesPerCarton(n: number): string {
+  return `${n} ${n === 1 ? "piece" : "pieces"} per carton`;
+}
+
 export function formatNumber(n: number): string {
   return new Intl.NumberFormat("en-IN").format(n);
 }

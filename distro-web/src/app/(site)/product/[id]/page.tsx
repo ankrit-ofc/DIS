@@ -9,7 +9,13 @@ import { ShoppingCart, ChevronLeft, Minus, Plus, Edit2 } from "lucide-react";
 import toast from "react-hot-toast";
 import api from "@/lib/api";
 import { useCartStore } from "@/store/cartStore";
-import { formatPrice, getImageUrl, getStockLabel } from "@/lib/utils";
+import {
+  formatPrice,
+  formatPerCarton,
+  formatPiecesPerCarton,
+  getImageUrl,
+  getStockLabel,
+} from "@/lib/utils";
 import { Product } from "@/components/ProductCard";
 
 export default function ProductPage() {
@@ -25,16 +31,24 @@ export default function ProductPage() {
   const [qty, setQty] = useState<number | null>(null);
   const qtyInputRef = useRef<HTMLInputElement>(null);
 
-  const moq = product?.moq || 1;
-  const currentQty = qty ?? moq;
+  // Carton-based ordering: stepper increments by 1 carton, minimum 1.
+  const piecesPerCarton = product?.piecesPerCarton ?? product?.moq ?? 1;
+  const ppcRaw = product?.pricePerCarton;
+  const pricePerCarton = product
+    ? ppcRaw == null
+      ? product.price * (product.moq ?? 1)
+      : typeof ppcRaw === "string"
+        ? parseFloat(ppcRaw)
+        : ppcRaw
+    : 0;
+  const currentQty = qty ?? 1;
   const productImage = product?.imageUrl ?? product?.image;
 
   function decrement() {
-    const newQty = currentQty - moq;
-    if (newQty >= moq) setQty(newQty);
+    if (currentQty > 1) setQty(currentQty - 1);
   }
   function increment() {
-    setQty(currentQty + moq);
+    setQty(currentQty + 1);
   }
   function handleQtyChange(e: React.ChangeEvent<HTMLInputElement>) {
     const value = e.target.value;
@@ -48,8 +62,8 @@ export default function ProductPage() {
     }
   }
   function handleQtyBlur() {
-    if (qty === null || qty < moq) {
-      setQty(moq);
+    if (qty === null || qty < 1) {
+      setQty(1);
     }
   }
 
@@ -59,16 +73,19 @@ export default function ProductPage() {
       {
         id: product.id,
         name: product.name,
-        price: product.price,
+        price: pricePerCarton,
         mrp: product.mrp,
         unit: product.unit,
         moq: product.moq,
+        piecesPerCarton,
         image: productImage,
         brand: product.brand,
       },
       currentQty
     );
-    toast.success(`${product.name} added to your van`);
+    toast.success(
+      `${currentQty} ${currentQty === 1 ? "carton" : "cartons"} of ${product.name} added to your van`,
+    );
   }
 
   if (isLoading) {
@@ -99,11 +116,9 @@ export default function ProductPage() {
   }
 
   const stock = product.stockQty ?? product.stock ?? 0;
-  const stockInfo = getStockLabel(stock, product.moq);
-  const discount = Math.round(
-    ((product.mrp - product.price) / product.mrp) * 100
-  );
-  const isOutOfStock = stock <= 0;
+  const stockInfo = getStockLabel(stock, piecesPerCarton);
+  const cartonsAvailable = Math.floor(stock / piecesPerCarton);
+  const isOutOfStock = cartonsAvailable < 1;
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -148,41 +163,40 @@ export default function ProductPage() {
             <span className="text-xs text-gray-400">{product.unit}</span>
           </div>
 
-          {/* Price */}
+          {/* Price — per carton */}
           <div className="flex items-end gap-3">
             <span className="font-grotesk font-bold text-3xl text-blue">
-              {formatPrice(product.price)}
+              {formatPerCarton(pricePerCarton)}
             </span>
-            {product.mrp > product.price && (
-              <span className="price-mrp text-base mb-1">
-                {formatPrice(product.mrp)}
-              </span>
-            )}
           </div>
+          <p className="text-sm text-gray-500 -mt-2">
+            {formatPiecesPerCarton(piecesPerCarton)}
+          </p>
 
-          {/* MOQ */}
+          {/* Carton info */}
           <div className="bg-blue-pale rounded-xl p-4">
             <p className="text-sm text-gray-600">
               <span className="font-grotesk font-semibold text-ink">
                 Minimum order:
               </span>{" "}
-              {product.moq} {product.unit}
+              1 carton ({piecesPerCarton} {piecesPerCarton === 1 ? "piece" : "pieces"})
             </p>
-            {stock > 0 && (
+            {cartonsAvailable > 0 && (
               <p className="text-xs text-gray-400 mt-1">
-                {stock} {product.unit} available
+                {cartonsAvailable} {cartonsAvailable === 1 ? "carton" : "cartons"} available
               </p>
             )}
           </div>
 
-          {/* Qty selector */}
+          {/* Carton selector — whole cartons only */}
           {!isOutOfStock && (
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-3 border border-gray-200 rounded-xl p-1">
                 <button
                   onClick={decrement}
-                  disabled={currentQty <= moq}
+                  disabled={currentQty <= 1}
                   className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-blue-pale disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Decrease cartons"
                 >
                   <Minus size={16} />
                 </button>
@@ -192,8 +206,10 @@ export default function ProductPage() {
                   value={currentQty}
                   onChange={handleQtyChange}
                   onBlur={handleQtyBlur}
-                  min={moq}
+                  min={1}
+                  step={1}
                   className="font-grotesk font-bold text-xl w-12 text-center bg-transparent border-0 outline-none focus:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  aria-label="Number of cartons"
                 />
                 <Edit2
                   size={12}
@@ -203,13 +219,19 @@ export default function ProductPage() {
                 <button
                   onClick={increment}
                   className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-blue-pale transition-colors"
+                  aria-label="Increase cartons"
                 >
                   <Plus size={16} />
                 </button>
               </div>
-              <span className="text-sm text-gray-400">
-                = {formatPrice(product.price * currentQty)}
-              </span>
+              <div className="text-sm text-gray-500">
+                <p className="font-grotesk font-semibold text-ink">
+                  = {formatPrice(pricePerCarton * currentQty)}
+                </p>
+                <p className="text-xs text-gray-400">
+                  {currentQty * piecesPerCarton} total pieces
+                </p>
+              </div>
             </div>
           )}
 

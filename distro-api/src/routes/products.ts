@@ -99,7 +99,8 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       take: limitNum,
       select: {
         id: true, name: true, brand: true, price: true, mrp: true,
-        unit: true, moq: true, stockQty: true, imageUrl: true, active: true,
+        unit: true, moq: true, piecesPerCarton: true, pricePerCarton: true,
+        stockQty: true, imageUrl: true, active: true,
         category: { select: { id: true, name: true, emoji: true } },
       },
     }),
@@ -196,7 +197,8 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
     where: { id },
     select: {
       id: true, name: true, brand: true, price: true, mrp: true,
-      unit: true, moq: true, stockQty: true, imageUrl: true, active: true,
+      unit: true, moq: true, piecesPerCarton: true, pricePerCarton: true,
+      stockQty: true, imageUrl: true, active: true,
       description: true,
       category: { select: { id: true, name: true, emoji: true } },
     },
@@ -209,32 +211,44 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
 router.post('/', requireAuth, isAdmin, async (req: Request, res: Response): Promise<void> => {
   const {
     name, brand, description, sku, categoryId,
-    price, mrp, unit, moq, stockQty, imageUrl, active,
+    price, mrp, unit, moq, piecesPerCarton, pricePerCarton,
+    stockQty, imageUrl, active,
   } = req.body as {
     name?: string; brand?: string; description?: string; sku?: string;
     categoryId?: string; price?: number; mrp?: number; unit?: string;
-    moq?: number; stockQty?: number; imageUrl?: string; active?: boolean;
+    moq?: number; piecesPerCarton?: number; pricePerCarton?: number;
+    stockQty?: number; imageUrl?: string; active?: boolean;
   };
 
   if (!name || price == null) {
     res.status(400).json({ error: 'name and price are required' });
     return;
   }
+  if (piecesPerCarton == null || !Number.isInteger(piecesPerCarton) || piecesPerCarton < 1) {
+    res.status(400).json({ error: 'piecesPerCarton must be a positive integer' });
+    return;
+  }
+  if (pricePerCarton == null || pricePerCarton <= 0) {
+    res.status(400).json({ error: 'pricePerCarton must be a positive number' });
+    return;
+  }
 
   const product = await prisma.product.create({
     data: {
       name,
-      brand:       brand       ?? null,
-      description: description ?? null,
-      sku:         sku         ?? null,
-      categoryId:  categoryId  ?? null,
+      brand:           brand       ?? null,
+      description:     description ?? null,
+      sku:             sku         ?? null,
+      categoryId:      categoryId  ?? null,
       price,
-      mrp:      mrp      ?? null,
-      unit:     unit     ?? 'piece',
-      moq:      moq      ?? 1,
-      stockQty: stockQty ?? 0,
-      imageUrl: imageUrl ?? null,
-      active:   active   ?? true,
+      mrp:             mrp      ?? null,
+      unit:            unit     ?? 'piece',
+      moq:             moq      ?? 1,
+      piecesPerCarton,
+      pricePerCarton,
+      stockQty:        stockQty ?? 0,
+      imageUrl:        imageUrl ?? null,
+      active:          active   ?? true,
     },
   });
   res.status(201).json({ product });
@@ -243,22 +257,25 @@ router.post('/', requireAuth, isAdmin, async (req: Request, res: Response): Prom
 // ─── PUT /api/products/:id — update, ADMIN ───────────────────────────────────
 router.put('/:id', requireAuth, isAdmin, async (req: Request, res: Response): Promise<void> => {
   const id = qs(req.params.id)!;
-  const { name, price, mrp, moq, stockQty, active, description, imageUrl } = req.body as {
+  const { name, price, mrp, moq, piecesPerCarton, pricePerCarton, stockQty, active, description, imageUrl } = req.body as {
     name?: string; price?: number; mrp?: number; moq?: number;
+    piecesPerCarton?: number; pricePerCarton?: number;
     stockQty?: number; active?: boolean; description?: string; imageUrl?: string;
   };
 
   const product = await prisma.product.update({
     where: { id },
     data: {
-      ...(name        !== undefined && { name }),
-      ...(price       !== undefined && { price }),
-      ...(mrp         !== undefined && { mrp }),
-      ...(moq         !== undefined && { moq }),
-      ...(stockQty    !== undefined && { stockQty }),
-      ...(active      !== undefined && { active }),
-      ...(description !== undefined && { description }),
-      ...(imageUrl    !== undefined && { imageUrl }),
+      ...(name             !== undefined && { name }),
+      ...(price            !== undefined && { price }),
+      ...(mrp              !== undefined && { mrp }),
+      ...(moq              !== undefined && { moq }),
+      ...(piecesPerCarton  !== undefined && { piecesPerCarton }),
+      ...(pricePerCarton   !== undefined && { pricePerCarton }),
+      ...(stockQty         !== undefined && { stockQty }),
+      ...(active           !== undefined && { active }),
+      ...(description      !== undefined && { description }),
+      ...(imageUrl         !== undefined && { imageUrl }),
     },
   });
   res.json({ product });
@@ -267,8 +284,9 @@ router.put('/:id', requireAuth, isAdmin, async (req: Request, res: Response): Pr
 // ─── PATCH /api/products/:id — alias for PUT (used by web frontend) ───────────
 router.patch('/:id', requireAuth, isAdmin, async (req: Request, res: Response): Promise<void> => {
   const id = qs(req.params.id)!;
-  const { name, brand, unit, price, mrp, moq, stockQty, stock, active, description, imageUrl, image, categoryId } = req.body as {
+  const { name, brand, unit, price, mrp, moq, piecesPerCarton, pricePerCarton, stockQty, stock, active, description, imageUrl, image, categoryId } = req.body as {
     name?: string; brand?: string; unit?: string; price?: number; mrp?: number; moq?: number;
+    piecesPerCarton?: number; pricePerCarton?: number;
     stockQty?: number; stock?: number; active?: boolean; description?: string;
     imageUrl?: string; image?: string; categoryId?: string;
   };
@@ -286,6 +304,8 @@ router.patch('/:id', requireAuth, isAdmin, async (req: Request, res: Response): 
       ...(price              !== undefined && { price }),
       ...(mrp                !== undefined && { mrp }),
       ...(moq                !== undefined && { moq }),
+      ...(piecesPerCarton    !== undefined && { piecesPerCarton }),
+      ...(pricePerCarton     !== undefined && { pricePerCarton }),
       ...(resolvedStockQty   !== undefined && { stockQty: resolvedStockQty }),
       ...(active             !== undefined && { active }),
       ...(description        !== undefined && { description }),

@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+// `price` and `qty` are CARTON-based:
+//   price = price per carton (Rs)
+//   qty   = number of cartons (whole integers, ≥ 1)
+//   piecesPerCarton is informational only — used to display "Y pieces per carton"
 export interface CartItem {
   id: number;
   name: string;
@@ -8,6 +12,7 @@ export interface CartItem {
   mrp: number;
   unit: string;
   moq: number;
+  piecesPerCarton: number;
   qty: number;
   image?: string;
   brand?: string;
@@ -32,20 +37,19 @@ export const useCartStore = create<CartState>()(
       items: [],
       isOpen: false,
 
-      addItem: (item, qty = item.moq) => {
+      addItem: (item, qty = 1) => {
+        const safeQty = Math.max(1, Math.floor(qty));
         set((state) => {
           const existing = state.items.find((i) => i.id === item.id);
           if (existing) {
             return {
               items: state.items.map((i) =>
-                i.id === item.id ? { ...i, qty: i.qty + qty } : i
+                i.id === item.id ? { ...i, qty: i.qty + safeQty } : i
               ),
-
             };
           }
           return {
-            items: [...state.items, { ...item, qty }],
-
+            items: [...state.items, { ...item, qty: safeQty }],
           };
         });
       },
@@ -53,13 +57,15 @@ export const useCartStore = create<CartState>()(
       removeItem: (id) =>
         set((state) => ({ items: state.items.filter((i) => i.id !== id) })),
 
-      updateQty: (id, qty) =>
+      updateQty: (id, qty) => {
+        const safe = Math.floor(qty);
         set((state) => ({
           items:
-            qty <= 0
+            safe <= 0
               ? state.items.filter((i) => i.id !== id)
-              : state.items.map((i) => (i.id === id ? { ...i, qty } : i)),
-        })),
+              : state.items.map((i) => (i.id === id ? { ...i, qty: safe } : i)),
+        }));
+      },
 
       clearCart: () => set({ items: [] }),
 

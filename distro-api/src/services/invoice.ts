@@ -23,8 +23,11 @@ export async function generateInvoicePdf(orderId: string): Promise<InvoiceResult
   if (!order) throw new Error(`Order ${orderId} not found`);
 
   const vatRate = parseFloat(process.env.VAT_RATE ?? '0.13');
-  const vatAmount = order.subtotal * vatRate;
-  const grandTotal = order.subtotal + vatAmount + order.deliveryFee;
+  // Prefer the stored vat (computed at order time); fall back for legacy rows.
+  const vatAmount = order.vat && order.vat > 0 ? order.vat : order.subtotal * vatRate;
+  const grandTotal = order.total && order.total > 0
+    ? order.total
+    : order.subtotal + vatAmount + order.deliveryFee;
 
   const companyName = process.env.COMPANY_NAME ?? 'DISTRO Nepal Pvt Ltd';
   const companyAddress = process.env.COMPANY_ADDRESS ?? 'Kathmandu Valley, Nepal';
@@ -98,7 +101,7 @@ export async function generateInvoicePdf(orderId: string): Promise<InvoiceResult
     doc.fillColor('black');
     doc.text(item.name, colX.item + 5, rowY + 6, { width: 190, ellipsis: true });
     doc.text(String(item.qty), colX.ctn, rowY + 6);
-    doc.text('—', colX.pcs, rowY + 6);
+    doc.text(item.piecesPerCarton != null ? String(item.piecesPerCarton) : '—', colX.pcs, rowY + 6);
     doc.text(`Rs ${item.price.toFixed(2)}`, colX.price, rowY + 6);
     doc.text(`Rs ${item.total.toFixed(2)}`, colX.sub, rowY + 6);
     rowY += rowH;

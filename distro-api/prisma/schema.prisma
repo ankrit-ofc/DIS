@@ -70,19 +70,22 @@ model District {
 }
 
 model Product {
-  id             String          @id @default(cuid())
-  name           String
-  brand          String?
-  description    String?         @db.Text
-  sku            String?         @unique
-  categoryId     String?
-  price          Float
-  mrp            Float?
-  unit           String          @default("piece")
-  moq            Int             @default(1)
-  stockQty       Int             @default(0)
-  imageUrl       String?
-  active         Boolean         @default(true)
+  id              String          @id @default(cuid())
+  name            String
+  brand           String?
+  description     String?         @db.Text
+  sku             String?         @unique
+  categoryId      String?
+  // price + moq + unit retained for backward compat (mobile app); carton fields are authoritative on web.
+  price           Float
+  mrp             Float?
+  unit            String          @default("piece")
+  moq             Int             @default(1)
+  piecesPerCarton Int?
+  pricePerCarton  Decimal?        @db.Decimal(10, 2)
+  stockQty        Int             @default(0)
+  imageUrl        String?
+  active          Boolean         @default(true)
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   category       Category?       @relation(fields: [categoryId], references: [id])
@@ -109,6 +112,7 @@ model Order {
   paymentStatus    PayStatus       @default(UNPAID)
   paymentMethod    PayMethod       @default(COD)
   subtotal         Float
+  vat              Float           @default(0)
   deliveryFee      Float           @default(0)
   total            Float
   deliveryDistrict String?
@@ -127,15 +131,17 @@ model Order {
 }
 
 model OrderItem {
-  id        String  @id @default(cuid())
-  orderId   String
-  productId String
-  name      String
-  price     Float
-  qty       Int
-  total     Float
-  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product   Product @relation(fields: [productId], references: [id])
+  id              String  @id @default(cuid())
+  orderId         String
+  productId       String
+  name            String
+  // price = price per carton (snapshot); qty = number of cartons.
+  price           Float
+  qty             Int
+  piecesPerCarton Int?
+  total           Float
+  order           Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product         Product @relation(fields: [productId], references: [id])
 }
 
 model Ledger {

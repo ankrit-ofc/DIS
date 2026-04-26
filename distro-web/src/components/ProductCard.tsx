@@ -5,7 +5,13 @@ import Image from "next/image";
 import { ShoppingCart } from "lucide-react";
 import toast from "react-hot-toast";
 import { useCartStore } from "@/store/cartStore";
-import { formatPrice, formatUnitPrice, formatCartonPrice, getImageUrl, getStockLabel } from "@/lib/utils";
+import {
+  formatPrice,
+  formatPerCarton,
+  formatPiecesPerCarton,
+  getImageUrl,
+  getStockLabel,
+} from "@/lib/utils";
 
 export interface Product {
   id: number;
@@ -15,6 +21,8 @@ export interface Product {
   mrp: number;
   unit: string;
   moq: number;
+  piecesPerCarton?: number | null;
+  pricePerCarton?: number | string | null;
   stock?: number;
   stockQty?: number;
   image?: string;
@@ -22,13 +30,26 @@ export interface Product {
   categoryId?: number;
 }
 
+function resolveCartonFields(product: Product) {
+  const piecesPerCarton = product.piecesPerCarton ?? product.moq ?? 1;
+  const ppcRaw = product.pricePerCarton;
+  const pricePerCarton =
+    ppcRaw == null
+      ? product.price * (product.moq ?? 1)
+      : typeof ppcRaw === "string"
+        ? parseFloat(ppcRaw)
+        : ppcRaw;
+  return { piecesPerCarton, pricePerCarton };
+}
+
 export default function ProductCard({ product }: { product: Product }) {
   const { addItem } = useCartStore();
   const productImage = product.imageUrl ?? product.image;
   const stock = product.stockQty ?? product.stock ?? 0;
-  const isOutOfStock = stock <= 0;
-  const stockInfo = getStockLabel(stock, product.moq);
-  const discount = Math.round(((product.mrp - product.price) / product.mrp) * 100);
+  const { piecesPerCarton, pricePerCarton } = resolveCartonFields(product);
+  // Stock is in pieces; out of stock when fewer than 1 carton's worth remains.
+  const isOutOfStock = stock < piecesPerCarton;
+  const stockInfo = getStockLabel(stock, piecesPerCarton);
 
   function handleAddToCart(e: React.MouseEvent) {
     e.preventDefault();
@@ -36,14 +57,15 @@ export default function ProductCard({ product }: { product: Product }) {
     addItem({
       id: product.id,
       name: product.name,
-      price: product.price,
+      price: pricePerCarton,
       mrp: product.mrp,
       unit: product.unit,
       moq: product.moq,
+      piecesPerCarton,
       image: productImage,
       brand: product.brand,
     });
-    toast.success("Added to your van");
+    toast.success("1 carton added to your van");
   }
 
   return (
@@ -86,14 +108,14 @@ export default function ProductCard({ product }: { product: Product }) {
         <div className="mt-1">
           <div className="flex items-center gap-2">
             <span className="font-grotesk font-bold text-blue text-base">
-              {formatUnitPrice(product.price, product.unit)}
+              {formatPerCarton(pricePerCarton)}
             </span>
             {product.mrp > product.price && (
               <span className="price-mrp text-xs">{formatPrice(product.mrp)}</span>
             )}
           </div>
           <p className="text-[11px] text-[#9BA3BF] mt-0.5">
-            {formatCartonPrice(product.price, product.moq)}
+            {formatPiecesPerCarton(piecesPerCarton)}
           </p>
         </div>
 

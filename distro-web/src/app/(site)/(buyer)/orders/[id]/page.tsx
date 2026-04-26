@@ -80,7 +80,7 @@ export default function OrderDetailPage() {
     if (!order) return;
     try {
       const res = await api.post(`/orders/${order.id}/reorder`);
-      const items: Array<{ productId: string; name: string; price: number; qty: number; moq: number; unit: string; imageUrl: string | null; available: boolean }> = res.data.items ?? [];
+      const items: Array<{ productId: string; name: string; price: number; qty: number; moq: number; piecesPerCarton: number; unit: string; imageUrl: string | null; available: boolean }> = res.data.items ?? [];
       let unavailable = 0;
       for (const it of items) {
         if (!it.available) { unavailable++; continue; }
@@ -91,6 +91,7 @@ export default function OrderDetailPage() {
           mrp: it.price,
           unit: it.unit,
           moq: it.moq,
+          piecesPerCarton: it.piecesPerCarton ?? it.moq ?? 1,
           image: it.imageUrl ?? undefined,
         }, it.qty);
       }

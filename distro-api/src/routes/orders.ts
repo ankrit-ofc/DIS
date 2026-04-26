@@ -85,10 +85,17 @@ router.post(
 
     try {
       createdOrder = await withTransaction(async (tx) => {
-        // 1. Validate all items — fail fast before any writes
+        // 1. Validate all items — qty represents CARTONS (whole numbers, ≥ 1)
         for (const item of items) {
-          if (!item.productId || !item.qty || item.qty < 1) {
-            throw new OrderError(400, 'Each item requires productId and a positive qty');
+          if (!item.productId) {
+            throw new OrderError(400, 'Each item requires productId');
+          }
+          if (
+            item.qty == null ||
+            !Number.isInteger(item.qty) ||
+            item.qty < 1
+          ) {
+            throw new OrderError(400, 'Cartons must be a whole number of 1 or more');
           }
           const product = await tx.product.findUnique({ where: { id: item.productId } });
           if (!product) {
@@ -97,10 +104,14 @@ router.post(
           if (!product.active) {
             throw new OrderError(400, `Product is not available: ${product.name}`);
           }
-          if (product.stockQty < item.qty) {
+          // stockQty is in pieces; ordering N cartons consumes N * piecesPerCarton pieces.
+          const piecesPerCarton = product.piecesPerCarton ?? product.moq;
+          const piecesNeeded = item.qty * piecesPerCarton;
+          if (product.stockQty < piecesNeeded) {
+            const cartonsAvailable = Math.floor(product.stockQty / piecesPerCarton);
             throw new OrderError(
               400,
-              `Insufficient stock for "${product.name}". Available: ${product.stockQty}, requested: ${item.qty}`,
+              `Insufficient stock for "${product.name}". Available: ${cartonsAvailable} cartons, requested: ${item.qty} cartons`,
             );
           }
         }
@@ -117,7 +128,8 @@ router.post(
         let subtotal = 0;
         for (const item of items) {
           const p = productMap.get(item.productId)!;
-          subtotal += p.price * item.qty;
+          const ppc = p.pricePerCarton != null ? Number(p.pricePerCarton) : p.price * p.moq;
+          subtotal += ppc * item.qty;
         }
 
         if (subtotal < MIN_ORDER_VALUE) {
@@ -127,7 +139,9 @@ router.post(
           );
         }
 
-        const total = subtotal + deliveryFee;
+        const vatRate = parseFloat(process.env.VAT_RATE ?? '0.13');
+        const vat = Number((subtotal * vatRate).toFixed(2));
+        const total = Number((subtotal + vat + deliveryFee).toFixed(2));
 
         // 4. Create Order
         const orderNumber = `ORD-${Date.now()}`;
@@ -137,6 +151,7 @@ router.post(
             buyerId: buyer.id,
             paymentMethod: paymentMethod as any,
             subtotal,
+            vat,
             deliveryFee,
             total,
             deliveryDistrict,
@@ -147,26 +162,31 @@ router.post(
           },
         });
 
-        // 5. Create OrderItem rows (price snapshot at time of order)
+        // 5. Create OrderItem rows — price = price per carton, qty = cartons
         for (const item of items) {
           const p = productMap.get(item.productId)!;
+          const ppc = p.pricePerCarton != null ? Number(p.pricePerCarton) : p.price * p.moq;
+          const piecesPerCarton = p.piecesPerCarton ?? p.moq;
           await tx.orderItem.create({
             data: {
-              orderId:   order.id,
-              productId: item.productId,
-              name:      p.name,
-              price:     p.price,
-              qty:       item.qty,
-              total:     p.price * item.qty,
+              orderId:         order.id,
+              productId:       item.productId,
+              name:            p.name,
+              price:           ppc,
+              qty:             item.qty,
+              piecesPerCarton,
+              total:           Number((ppc * item.qty).toFixed(2)),
             },
           });
         }
 
-        // 6. Decrement stockQty for each product
+        // 6. Decrement stockQty (in pieces) for each product
         for (const item of items) {
+          const p = productMap.get(item.productId)!;
+          const piecesPerCarton = p.piecesPerCarton ?? p.moq;
           await tx.product.update({
             where: { id: item.productId },
-            data:  { stockQty: { decrement: item.qty } },
+            data:  { stockQty: { decrement: item.qty * piecesPerCarton } },
           });
         }
 
@@ -801,11 +821,14 @@ router.patch(
           data: { status: 'CANCELLED' },
         });
 
-        // b. Restore stockQty for each item
+        // b. Restore stockQty (in pieces) for each item; item.qty is cartons
         for (const item of order.items) {
+          const product = await tx.product.findUnique({ where: { id: item.productId } });
+          const piecesPerCarton =
+            item.piecesPerCarton ?? product?.piecesPerCarton ?? product?.moq ?? 1;
           await tx.product.update({
             where: { id: item.productId },
-            data: { stockQty: { increment: item.qty } },
+            data: { stockQty: { increment: item.qty * piecesPerCarton } },
           });
         }
 
@@ -895,12 +918,19 @@ router.post(
 
     const items = order.items.map((row) => {
       const p = productMap.get(row.productId);
-      const available = !!p && p.active && p.stockQty >= row.qty;
+      const piecesPerCarton =
+        p?.piecesPerCarton ?? row.piecesPerCarton ?? p?.moq ?? 1;
+      const pricePerCarton = p?.pricePerCarton != null
+        ? Number(p.pricePerCarton)
+        : (p ? p.price * (p.moq ?? 1) : row.price);
+      const piecesNeeded = row.qty * piecesPerCarton;
+      const available = !!p && p.active && p.stockQty >= piecesNeeded;
       return {
         productId: row.productId,
         name: p?.name ?? row.name,
-        price: p?.price ?? row.price,
+        price: pricePerCarton,
         qty: row.qty,
+        piecesPerCarton,
         stockQty: p?.stockQty ?? 0,
         imageUrl: p?.imageUrl ?? null,
         unit: p?.unit ?? 'piece',
