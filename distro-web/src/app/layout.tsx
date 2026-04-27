@@ -31,6 +31,10 @@ export const metadata: Metadata = {
   description: "The Kathmandu Valley's easiest B2B ordering platform for shopkeepers. Order in bulk. Delivered to your door across the Kathmandu Valley.",
   keywords: "wholesale, B2B, Kathmandu Valley, Nepal, bulk order, shopkeeper, DISTRO",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/icons/icon-192.png",
+    apple: "/apple-touch-icon.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",

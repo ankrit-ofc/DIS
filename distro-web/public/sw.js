@@ -1,4 +1,4 @@
-const CACHE_NAME = "distro-v1";
+const CACHE_NAME = "distro-v2";
 const PRECACHE = ["/catalogue", "/logo.png"];
 
 self.addEventListener("install", (e) => {
