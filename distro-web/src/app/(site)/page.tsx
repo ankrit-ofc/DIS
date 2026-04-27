@@ -1,4 +1,4 @@
-import HomeClient from "@/components/home/HomeClient";
+import HomeSwitch from "@/components/home/HomeSwitch";
 import type { Product } from "@/components/ProductCard";
 
 export const dynamic = "force-dynamic";
@@ -62,7 +62,7 @@ export default async function HomePage() {
 
   return (
     <>
-      <HomeClient
+      <HomeSwitch
         categories={categories}
         products={products}
         totalProducts={totalProducts}
