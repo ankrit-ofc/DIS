@@ -74,9 +74,10 @@ app.use((err: any, _req: any, res: any, _next: any) => {
   res.status(status).json({ error: message });
 });
 
-const PORT = parseInt(process.env.API_PORT || '3001');
-app.listen(PORT, '127.0.0.1', () => {
-  console.log(`DISTRO API running on 127.0.0.1:${PORT}`);
+const PORT = parseInt(process.env.PORT || process.env.API_PORT || '3001');
+const HOST = process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1';
+app.listen(PORT, HOST, () => {
+  console.log(`DISTRO API running on ${HOST}:${PORT}`);
   startCleanupCron();
 });
 
