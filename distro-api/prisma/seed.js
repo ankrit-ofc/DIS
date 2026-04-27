@@ -136,7 +136,7 @@ async function main() {
     await prisma.setting.upsert({
         where: { key: 'minOrderAmount' },
         update: {},
-        create: { key: 'minOrderAmount', value: '1000' },
+        create: { key: 'minOrderAmount', value: '10000' },
     });
     console.log('Seeding complete.');
 }

@@ -47,7 +47,7 @@ const FAQS: FAQ[] = [
   },
   {
     q: "Is there a minimum order value?",
-    a: "There's no minimum order value, but delivery fees may apply for smaller orders. We recommend combining products to maximize value per delivery.",
+    a: "Yes — the minimum order value is Rs 10,000. We recommend combining products across categories to comfortably cross the threshold and maximize value per delivery.",
   },
   {
     q: "How do I get invoices or VAT bills?",

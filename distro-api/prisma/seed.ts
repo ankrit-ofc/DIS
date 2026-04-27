@@ -232,7 +232,7 @@ async function main() {
     // ── 7. Settings ─────────────────────────────────────────────────────────
     await prisma.setting.createMany({
       data: [
-        { key: 'minOrderAmount', value: '1000' },
+        { key: 'minOrderAmount', value: '10000' },
         { key: 'companyName',    value: 'DISTRO Nepal Pvt Ltd' },
         { key: 'vatRate',        value: '0.13' },
       ],

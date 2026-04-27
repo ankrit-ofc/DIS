@@ -23,7 +23,7 @@ const ORDER_STATUSES = [
   'PENDING', 'CONFIRMED', 'PROCESSING', 'DISPATCHED', 'DELIVERED', 'CANCELLED',
 ] as const;
 
-const MIN_ORDER_VALUE = 50000;
+const MIN_ORDER_VALUE = 10000;
 
 class OrderError extends Error {
   constructor(public statusCode: number, message: string) {
