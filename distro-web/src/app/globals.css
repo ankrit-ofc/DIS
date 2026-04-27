@@ -148,6 +148,7 @@ h1, h2, h3, h4, h5, h6, .font-display {
   html {
     overscroll-behavior: none;
   }
+  .nav-marquee { display: none !important; }
 }
 
 /* Custom scrollbar */
