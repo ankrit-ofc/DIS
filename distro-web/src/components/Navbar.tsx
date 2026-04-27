@@ -71,7 +71,7 @@ export default function Navbar() {
 
   return (
     <>
-      <header className="distro-header" aria-label="Primary">
+      <header className="distro-header safe-top" aria-label="Primary">
         {/* ── TOP BLUE BAR ─────────────────────────────── */}
         <div className="nav-top">
           <button
