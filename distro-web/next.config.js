@@ -13,6 +13,10 @@ const nextConfig = {
       },
       {
         protocol: "https",
+        hostname: "dis-production-00b5.up.railway.app",
+      },
+      {
+        protocol: "https",
         hostname: "images.unsplash.com",
       },
       {
