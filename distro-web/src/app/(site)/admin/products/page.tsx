@@ -25,6 +25,8 @@ interface Product {
   mrp: number;
   unit: string;
   moq: number;
+  piecesPerCarton?: number;
+  pricePerCarton?: number;
   stockQty: number;
   active: boolean;
   imageUrl?: string;
@@ -62,6 +64,7 @@ function ProductsContent() {
   const [isEdit, setIsEdit] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
+  const [pricePerCartonTouched, setPricePerCartonTouched] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const { data: products = [], isLoading } = useQuery<Product[]>({
@@ -127,6 +130,30 @@ function ProductsContent() {
   });
 
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  function validate(p: Partial<Product>): Record<string, string> {
+    const errs: Record<string, string> = {};
+    if (!p.name?.trim()) errs.name = "Required";
+    if (p.price == null || isNaN(Number(p.price)) || Number(p.price) <= 0) errs.price = "Must be greater than 0";
+    if (p.mrp == null || isNaN(Number(p.mrp)) || Number(p.mrp) <= 0) errs.mrp = "Must be greater than 0";
+    if (!p.unit?.trim()) errs.unit = "Required";
+    if (p.moq == null || !Number.isInteger(Number(p.moq)) || Number(p.moq) < 1) errs.moq = "Whole number ≥ 1";
+    if (
+      p.piecesPerCarton == null ||
+      !Number.isInteger(Number(p.piecesPerCarton)) ||
+      Number(p.piecesPerCarton) < 1
+    ) {
+      errs.piecesPerCarton = "Whole number ≥ 1";
+    }
+    if (p.pricePerCarton == null || isNaN(Number(p.pricePerCarton)) || Number(p.pricePerCarton) <= 0) {
+      errs.pricePerCarton = "Must be greater than 0";
+    }
+    return errs;
+  }
+
+  const currentErrors = validate(editProduct);
+  const isFormValid = Object.keys(currentErrors).length === 0;
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -151,12 +178,18 @@ function ProductsContent() {
   function openAdd() {
     setIsEdit(false);
     setEditProduct(EMPTY);
+    setPricePerCartonTouched(false);
+    setFieldErrors({});
+    setSaveError(null);
     setShowModal(true);
   }
 
   function openEdit(product: Product) {
     setIsEdit(true);
     setEditProduct(product);
+    setPricePerCartonTouched(true); // existing record — treat as user-set
+    setFieldErrors({});
+    setSaveError(null);
     setShowModal(true);
   }
 
@@ -169,6 +202,9 @@ function ProductsContent() {
   function handleFormSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaveError(null);
+    const errs = validate(editProduct);
+    setFieldErrors(errs);
+    if (Object.keys(errs).length > 0) return;
     saveProduct.mutate(editProduct);
   }
 
@@ -411,7 +447,7 @@ function ProductsContent() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2">
                   <label className="text-xs font-medium text-gray-600 block mb-1">
-                    Product Name *
+                    Product Name <span className="text-red-500">*</span>
                   </label>
                   <input
                     required
@@ -419,8 +455,13 @@ function ProductsContent() {
                     onChange={(e) =>
                       setEditProduct((p) => ({ ...p, name: e.target.value }))
                     }
-                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
+                    className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue ${
+                      fieldErrors.name ? "border-red-300" : "border-gray-200"
+                    }`}
                   />
+                  {fieldErrors.name && (
+                    <p className="text-xs text-red-500 mt-1">{fieldErrors.name}</p>
+                  )}
                 </div>
 
                 <div>
@@ -461,31 +502,42 @@ function ProductsContent() {
 
                 <div>
                   <label className="text-xs font-medium text-gray-600 block mb-1">
-                    Price (Rs) *
+                    Price (Rs) <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
                     required
                     min={0}
+                    step="0.01"
                     value={editProduct.price || ""}
-                    onChange={(e) =>
-                      setEditProduct((p) => ({
-                        ...p,
-                        price: Number(e.target.value),
-                      }))
-                    }
-                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
+                    onChange={(e) => {
+                      const price = Number(e.target.value);
+                      setEditProduct((p) => {
+                        const next = { ...p, price };
+                        if (!pricePerCartonTouched && p.piecesPerCarton) {
+                          next.pricePerCarton = Number((price * Number(p.piecesPerCarton)).toFixed(2));
+                        }
+                        return next;
+                      });
+                    }}
+                    className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue ${
+                      fieldErrors.price ? "border-red-300" : "border-gray-200"
+                    }`}
                   />
+                  {fieldErrors.price && (
+                    <p className="text-xs text-red-500 mt-1">{fieldErrors.price}</p>
+                  )}
                 </div>
 
                 <div>
                   <label className="text-xs font-medium text-gray-600 block mb-1">
-                    MRP (Rs) *
+                    MRP (Rs) <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
                     required
                     min={0}
+                    step="0.01"
                     value={editProduct.mrp || ""}
                     onChange={(e) =>
                       setEditProduct((p) => ({
@@ -493,13 +545,18 @@ function ProductsContent() {
                         mrp: Number(e.target.value),
                       }))
                     }
-                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
+                    className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue ${
+                      fieldErrors.mrp ? "border-red-300" : "border-gray-200"
+                    }`}
                   />
+                  {fieldErrors.mrp && (
+                    <p className="text-xs text-red-500 mt-1">{fieldErrors.mrp}</p>
+                  )}
                 </div>
 
                 <div>
                   <label className="text-xs font-medium text-gray-600 block mb-1">
-                    Unit *
+                    Unit <span className="text-red-500">*</span>
                   </label>
                   <input
                     required
@@ -508,18 +565,24 @@ function ProductsContent() {
                       setEditProduct((p) => ({ ...p, unit: e.target.value }))
                     }
                     placeholder="pcs, box, kg…"
-                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
+                    className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue ${
+                      fieldErrors.unit ? "border-red-300" : "border-gray-200"
+                    }`}
                   />
+                  {fieldErrors.unit && (
+                    <p className="text-xs text-red-500 mt-1">{fieldErrors.unit}</p>
+                  )}
                 </div>
 
                 <div>
                   <label className="text-xs font-medium text-gray-600 block mb-1">
-                    MOQ *
+                    MOQ <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
                     required
                     min={1}
+                    step={1}
                     value={editProduct.moq || ""}
                     onChange={(e) =>
                       setEditProduct((p) => ({
@@ -527,11 +590,77 @@ function ProductsContent() {
                         moq: Number(e.target.value),
                       }))
                     }
-                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
+                    className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue ${
+                      fieldErrors.moq ? "border-red-300" : "border-gray-200"
+                    }`}
                   />
+                  {fieldErrors.moq && (
+                    <p className="text-xs text-red-500 mt-1">{fieldErrors.moq}</p>
+                  )}
                 </div>
 
                 <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">
+                    Pieces per carton <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    step={1}
+                    value={editProduct.piecesPerCarton ?? ""}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      const ppc = raw === "" ? undefined : Number(raw);
+                      setEditProduct((p) => {
+                        const next: Partial<Product> = { ...p, piecesPerCarton: ppc };
+                        if (!pricePerCartonTouched && ppc && p.price) {
+                          next.pricePerCarton = Number((Number(p.price) * ppc).toFixed(2));
+                        }
+                        return next;
+                      });
+                    }}
+                    placeholder="e.g. 24"
+                    className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue ${
+                      fieldErrors.piecesPerCarton ? "border-red-300" : "border-gray-200"
+                    }`}
+                  />
+                  {fieldErrors.piecesPerCarton && (
+                    <p className="text-xs text-red-500 mt-1">{fieldErrors.piecesPerCarton}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">
+                    Price per carton (Rs) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    step="0.01"
+                    value={editProduct.pricePerCarton ?? ""}
+                    onChange={(e) => {
+                      setPricePerCartonTouched(true);
+                      setEditProduct((p) => ({
+                        ...p,
+                        pricePerCarton: e.target.value === "" ? undefined : Number(e.target.value),
+                      }));
+                    }}
+                    className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue ${
+                      fieldErrors.pricePerCarton ? "border-red-300" : "border-gray-200"
+                    }`}
+                  />
+                  {fieldErrors.pricePerCarton ? (
+                    <p className="text-xs text-red-500 mt-1">{fieldErrors.pricePerCarton}</p>
+                  ) : (
+                    !pricePerCartonTouched && (
+                      <p className="text-xs text-gray-400 mt-1">Auto-filled from price × pieces; edit if discounted.</p>
+                    )
+                  )}
+                </div>
+
+                <div className="col-span-2">
                   <label className="text-xs font-medium text-gray-600 block mb-1">
                     Stock Qty
                   </label>
@@ -588,14 +717,17 @@ function ProductsContent() {
 
               {saveError && (
                 <p className="text-sm text-red-500 bg-red-50 border border-red-200 rounded-xl px-4 py-2">
-                  ⚠️ {saveError}
+                  {saveError}
                 </p>
               )}
               <button
                 type="submit"
-                disabled={saveProduct.isPending}
-                className="w-full bg-blue hover:bg-blue-dark disabled:bg-gray-200 text-white font-medium py-3 rounded-xl transition-colors"
+                disabled={saveProduct.isPending || !isFormValid}
+                className="w-full bg-blue hover:bg-blue-dark disabled:bg-gray-200 disabled:cursor-not-allowed text-white font-medium py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
               >
+                {saveProduct.isPending && (
+                  <span className="inline-block w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                )}
                 {saveProduct.isPending
                   ? "Saving…"
                   : isEdit

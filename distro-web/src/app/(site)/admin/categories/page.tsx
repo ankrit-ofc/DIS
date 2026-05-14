@@ -18,8 +18,6 @@ interface Category {
   childCount: number;
 }
 
-const EMOJI_SUGGESTIONS = ["🍚", "🥤", "🧴", "🍪", "🧺", "🧻", "🍜", "🥛", "🧂", "🍬", "🌶️", "🛒"];
-
 export default function AdminCategoriesPage() {
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -27,11 +25,12 @@ export default function AdminCategoriesPage() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing]     = useState<Category | null>(null);
   const [name, setName]           = useState("");
-  const [emoji, setEmoji]         = useState("");
   const [imageUrl, setImageUrl]     = useState("");
   const [description, setDescription] = useState("");
   const [parentId, setParentId]     = useState<string | null>(null);
   const [uploading, setUploading]   = useState(false);
+  const [nameError, setNameError]   = useState<string | null>(null);
+  const [aspectWarning, setAspectWarning] = useState<string | null>(null);
 
   const { data: categories = [], isLoading } = useQuery<Category[]>({
     queryKey: ["admin-categories"],
@@ -39,7 +38,7 @@ export default function AdminCategoriesPage() {
   });
 
   const save = useMutation({
-    mutationFn: (data: { name: string; emoji: string | null; imageUrl: string | null; description: string | null; parentId: string | null }) =>
+    mutationFn: (data: { name: string; imageUrl: string | null; description: string | null; parentId: string | null }) =>
       editing
         ? api.patch(`/admin/categories/${editing.id}`, data)
         : api.post("/admin/categories", data),
@@ -62,25 +61,42 @@ export default function AdminCategoriesPage() {
 
   function openAdd() {
     setEditing(null);
-    setName(""); setEmoji(""); setImageUrl(""); setDescription(""); setParentId(null);
+    setName(""); setImageUrl(""); setDescription(""); setParentId(null);
+    setNameError(null); setAspectWarning(null);
     setShowModal(true);
   }
 
   function openEdit(c: Category) {
     setEditing(c);
     setName(c.name);
-    setEmoji(c.emoji ?? "");
     setImageUrl(c.imageUrl ?? "");
     setDescription(c.description ?? "");
     setParentId(c.parentId ?? null);
+    setNameError(null); setAspectWarning(null);
     setShowModal(true);
   }
 
-  function closeModal() { setShowModal(false); setEditing(null); }
+  function closeModal() { setShowModal(false); setEditing(null); setNameError(null); setAspectWarning(null); }
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setAspectWarning(null);
+    // Soft aspect-ratio check (non-blocking)
+    try {
+      const dims = await new Promise<{ w: number; h: number }>((resolve, reject) => {
+        const img = new window.Image();
+        img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+        img.onerror = reject;
+        img.src = URL.createObjectURL(file);
+      });
+      const ratio = dims.w / dims.h;
+      if (ratio < 0.8 || ratio > 1.2) {
+        setAspectWarning("Image is not square; it will be cropped on display.");
+      }
+    } catch {
+      /* ignore — proceed with upload */
+    }
     setUploading(true);
     try {
       const form = new FormData();
@@ -98,10 +114,13 @@ export default function AdminCategoriesPage() {
   }
 
   function handleSave() {
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      setNameError("Required");
+      return;
+    }
+    setNameError(null);
     save.mutate({
       name: name.trim(),
-      emoji: emoji.trim() || null,
       imageUrl: imageUrl || null,
       description: description.trim() || null,
       parentId: parentId || null,
@@ -172,7 +191,7 @@ export default function AdminCategoriesPage() {
             return (
               <div key={c.id} className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
                 <div className="flex items-center gap-4 p-4">
-                  <div className="w-12 h-12 rounded-xl bg-blue-pale flex items-center justify-center text-2xl flex-shrink-0 overflow-hidden">
+                  <div className="w-12 h-12 aspect-square rounded-xl bg-blue-pale flex items-center justify-center text-2xl flex-shrink-0 overflow-hidden">
                     {c.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={getImageUrl(c.imageUrl)} alt={c.name} className="w-full h-full object-cover" />
@@ -211,12 +230,14 @@ export default function AdminCategoriesPage() {
                         key={ch.id}
                         className="flex items-center gap-3 px-6 py-2.5 border-b border-gray-100 last:border-b-0"
                       >
-                        {ch.imageUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={getImageUrl(ch.imageUrl)} alt={ch.name} className="w-6 h-6 rounded object-cover flex-shrink-0" />
-                        ) : (
-                          <span className="w-6 text-center text-base">{ch.emoji ?? "↳"}</span>
-                        )}
+                        <div className="w-6 h-6 aspect-square rounded bg-blue-pale flex items-center justify-center text-base flex-shrink-0 overflow-hidden">
+                          {ch.imageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={getImageUrl(ch.imageUrl)} alt={ch.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <span>{ch.emoji ?? "↳"}</span>
+                          )}
+                        </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-ink">{ch.name}</p>
                           <p className="text-xs text-gray-400">
@@ -264,12 +285,12 @@ export default function AdminCategoriesPage() {
             <div className="space-y-4">
               {/* Live preview */}
               <div className="flex items-center gap-3 bg-blue-pale border border-blue/20 rounded-xl p-4">
-                <div className="w-14 h-14 rounded-xl overflow-hidden bg-white flex items-center justify-center text-3xl flex-shrink-0">
+                <div className="w-14 h-14 aspect-square rounded-xl overflow-hidden bg-white flex items-center justify-center text-3xl flex-shrink-0">
                   {imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={getImageUrl(imageUrl)} alt="Preview" className="w-full h-full object-cover" />
                   ) : (
-                    <span>{emoji || "📦"}</span>
+                    <span>📦</span>
                   )}
                 </div>
                 <p className="font-grotesk font-semibold text-base text-blue truncate">
@@ -278,13 +299,18 @@ export default function AdminCategoriesPage() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-gray-600 block mb-1.5">Name *</label>
+                <label className="text-xs font-medium text-gray-600 block mb-1.5">
+                  Name <span className="text-red-500">*</span>
+                </label>
                 <input
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => { setName(e.target.value); if (nameError) setNameError(null); }}
                   placeholder="e.g. Snacks"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
+                  className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue ${
+                    nameError ? "border-red-300" : "border-gray-200"
+                  }`}
                 />
+                {nameError && <p className="text-xs text-red-500 mt-1">{nameError}</p>}
               </div>
 
               <div>
@@ -316,36 +342,10 @@ export default function AdminCategoriesPage() {
                     </button>
                   )}
                 </div>
-                <p className="text-xs text-gray-400 mt-1.5">Square image works best · jpg/png/webp · max 5 MB</p>
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-gray-600 block mb-1.5">
-                  {imageUrl ? "Emoji (fallback)" : "Emoji"}
-                </label>
-                <input
-                  value={emoji}
-                  onChange={(e) => setEmoji(e.target.value)}
-                  placeholder="Paste one emoji"
-                  maxLength={4}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue mb-2"
-                />
-                <div className="flex flex-wrap gap-2">
-                  {EMOJI_SUGGESTIONS.map((e) => (
-                    <button
-                      key={e}
-                      type="button"
-                      onClick={() => setEmoji(e)}
-                      className={`w-10 h-10 rounded-lg border text-xl transition-colors ${
-                        emoji === e
-                          ? "border-blue bg-blue-pale"
-                          : "border-gray-200 bg-white hover:border-blue"
-                      }`}
-                    >
-                      {e}
-                    </button>
-                  ))}
-                </div>
+                <p className="text-xs text-gray-400 mt-1.5">Square image recommended (1:1). JPG, PNG, or WebP. Max 5 MB.</p>
+                {aspectWarning && (
+                  <p className="text-xs text-amber-600 mt-1">{aspectWarning}</p>
+                )}
               </div>
 
               <div>
