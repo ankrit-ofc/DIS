@@ -7,6 +7,7 @@ import * as Font from "expo-font";
 import { setupNotifications } from "./src/lib/notifications";
 import { ThemeProvider } from "./src/lib/ThemeContext";
 import { RootNavigator } from "./src/navigation/RootNavigator";
+import { clearLegacyCart } from "./src/store/cartStore";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -34,6 +35,7 @@ export default function App() {
   useEffect(() => {
     setupNotifications().catch(() => { });
     loadFonts();
+    clearLegacyCart();
   }, []);
 
   return (

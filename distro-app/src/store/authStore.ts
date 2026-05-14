@@ -38,6 +38,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         const res = await api.get("/auth/me", {
           headers: { Authorization: `Bearer ${token}` },
         });
+        // Mobile is buyer-only — purge any non-buyer session that survived from a
+        // prior install or admin login attempt.
+        if (res.data?.role !== "BUYER") {
+          await SecureStore.deleteItemAsync(TOKEN_KEY);
+          useCartStore.getState().clearCart();
+          set({ token: null, profile: null, isLoading: false });
+          return;
+        }
         set({ token, profile: res.data, isLoading: false });
         return;
       }

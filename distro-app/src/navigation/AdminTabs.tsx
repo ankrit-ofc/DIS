@@ -1,7 +1,6 @@
 import { View, Text, StyleSheet } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { createStackNavigator } from "@react-navigation/stack";
-import { getFocusedRouteNameFromRoute } from "@react-navigation/native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -10,8 +9,6 @@ import Animated, {
 } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { DashboardScreen } from "../screens/admin/DashboardScreen";
-import { BannersScreen } from "../screens/admin/BannersScreen";
-import { CategoriesScreen } from "../screens/admin/CategoriesScreen";
 import { AdminOrdersScreen } from "../screens/admin/OrdersScreen";
 import { InventoryScreen } from "../screens/admin/InventoryScreen";
 import { LedgerScreen } from "../screens/admin/LedgerScreen";
@@ -19,17 +16,6 @@ import { CustomersScreen } from "../screens/admin/CustomersScreen";
 import { colors, radius, typography } from "../lib/theme";
 
 const Tab = createBottomTabNavigator();
-const DashboardStack = createStackNavigator();
-
-function DashboardNavigator() {
-  return (
-    <DashboardStack.Navigator screenOptions={{ headerShown: false }}>
-      <DashboardStack.Screen name="DashboardMain" component={DashboardScreen} />
-      <DashboardStack.Screen name="Banners" component={BannersScreen} />
-      <DashboardStack.Screen name="Categories" component={CategoriesScreen} />
-    </DashboardStack.Navigator>
-  );
-}
 
 function AdminTabIcon({
   name,
@@ -71,26 +57,22 @@ function AdminTabIcon({
 }
 
 export function AdminTabs() {
+  const insets = useSafeAreaInsets();
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: [styles.tabBar, { height: 60 + (insets.bottom || 0), paddingBottom: 8 + (insets.bottom || 0) }],
         tabBarShowLabel: false,
       }}
     >
       <Tab.Screen
         name="Dashboard"
-        component={DashboardNavigator}
-        options={({ route }) => {
-          const focused = getFocusedRouteNameFromRoute(route) ?? "DashboardMain";
-          const hideOn = ["Banners", "Categories"];
-          return {
-            tabBarIcon: ({ focused: tabFocused }) => (
-              <AdminTabIcon name="Dashboard" icon="stats-chart-outline" iconFocused="stats-chart" focused={tabFocused} />
-            ),
-            tabBarStyle: hideOn.includes(focused) ? { display: "none" } : styles.tabBar,
-          };
+        component={DashboardScreen}
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <AdminTabIcon name="Dashboard" icon="stats-chart-outline" iconFocused="stats-chart" focused={focused} />
+          ),
         }}
       />
       <Tab.Screen
@@ -138,8 +120,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderTopColor: colors.gray100,
     borderTopWidth: 1,
-    height: 72,
-    paddingBottom: 12,
+    height: 60,
+    paddingBottom: 8,
     paddingTop: 8,
   },
   tabIconWrap: {

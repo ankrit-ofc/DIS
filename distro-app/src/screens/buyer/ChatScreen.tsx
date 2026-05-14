@@ -4,6 +4,7 @@ import {
 } from "react-native";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../lib/api";
 import { useAuthStore } from "../../store/authStore";
@@ -49,14 +50,19 @@ export function ChatScreen() {
     }
   }, []);
 
-  // Initial load + poll every 5s
-  useEffect(() => {
-    loadHistory();
-    pollRef.current = setInterval(loadHistory, 5000);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [loadHistory]);
+  // Poll only while the Chat screen is focused — stops when navigating away or backgrounding.
+  useFocusEffect(
+    useCallback(() => {
+      loadHistory();
+      pollRef.current = setInterval(loadHistory, 5000);
+      if (__DEV__) console.log("[chat] poll started");
+      return () => {
+        if (pollRef.current) clearInterval(pollRef.current);
+        pollRef.current = null;
+        if (__DEV__) console.log("[chat] poll stopped");
+      };
+    }, [loadHistory])
+  );
 
   async function handleSend() {
     const text = input.trim();

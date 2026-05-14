@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TextInput as TI } from "react-native";
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, withSequence } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RouteProp } from "@react-navigation/native";
 import { api } from "../../lib/api";
@@ -17,21 +17,7 @@ type Props = {
   route: RouteProp<AuthStackParamList, "RegisterStep2">;
 };
 
-const NEPAL_DISTRICTS = [
-  "Achham", "Arghakhanchi", "Baglung", "Baitadi", "Bajhang", "Bajura",
-  "Banke", "Bara", "Bardiya", "Bhaktapur", "Bhojpur", "Chitwan",
-  "Dadeldhura", "Dailekh", "Dang", "Darchula", "Dhading", "Dhankuta",
-  "Dhanusa", "Dolakha", "Dolpa", "Doti", "Gorkha", "Gulmi", "Humla",
-  "Ilam", "Jajarkot", "Jhapa", "Jumla", "Kailali", "Kalikot", "Kanchanpur",
-  "Kapilvastu", "Kaski", "Kathmandu", "Kavrepalanchok", "Khotang",
-  "Lalitpur", "Lamjung", "Mahottari", "Makwanpur", "Manang", "Morang",
-  "Mugu", "Mustang", "Myagdi", "Nawalparasi", "Nuwakot", "Okhaldhunga",
-  "Palpa", "Panchthar", "Parbat", "Parsa", "Pyuthan", "Ramechhap",
-  "Rasuwa", "Rautahat", "Rolpa", "Rupandehi", "Salyan", "Sankhuwasabha",
-  "Saptari", "Sarlahi", "Sindhuli", "Sindhupalchok", "Siraha", "Solukhumbu",
-  "Sunsari", "Surkhet", "Syangja", "Tanahun", "Taplejung", "Terhathum",
-  "Udayapur",
-];
+const NEPAL_DISTRICTS = ["Bhaktapur", "Kathmandu", "Lalitpur"];
 
 function DistrictPicker({ value, onSelect }: { value: string; onSelect: (d: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -80,7 +66,6 @@ const p = StyleSheet.create({
 });
 
 export function RegisterStep2Screen({ navigation, route }: Props) {
-  const insets = useSafeAreaInsets();
   const { email, otpToken } = route.params;
   const [storeName, setStoreName] = useState("");
   const [ownerName, setOwnerName] = useState("");
@@ -159,9 +144,10 @@ export function RegisterStep2Screen({ navigation, route }: Props) {
   };
 
   return (
-    <KeyboardAvoidingView style={s.root} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <SafeAreaView style={s.root} edges={['top', 'left', 'right']}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <ScrollView
-        contentContainerStyle={[s.scroll, { paddingTop: insets.top + spacing.lg }]}
+        contentContainerStyle={[s.scroll, { paddingTop: spacing.lg }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -249,6 +235,7 @@ export function RegisterStep2Screen({ navigation, route }: Props) {
         <Text style={ls.privacyNote}>By creating an account you agree to our terms of service.</Text>
       </ScrollView>
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 

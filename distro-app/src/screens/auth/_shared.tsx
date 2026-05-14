@@ -90,12 +90,12 @@ export const s = StyleSheet.create({
   // Layout
   root:   { flex: 1, backgroundColor: '#155ac1' },
   scroll: { flexGrow: 1, paddingHorizontal: spacing.lg, paddingBottom: spacing.xxxl, gap: spacing.xl },
-  card:   { backgroundColor: colors.white, borderRadius: radius.xl, paddingVertical: spacing.lg, paddingHorizontal: spacing.lg, gap: spacing.md, borderWidth: 1, borderColor: colors.gray100, ...shadow.card },
+  card:   { backgroundColor: '#FFFFFF', borderRadius: radius.xl, paddingVertical: spacing.lg, paddingHorizontal: spacing.lg, gap: spacing.md, ...shadow.card },
   fields: { gap: spacing.md },
 
   // Brand
   brand:        { alignItems: "center", gap: 8, marginBottom: spacing.xs },
-  brandLogo:    { width: 180, height: 65 },
+  brandLogo:    { width: 230, height: 84 },
   brandSubtitle:{ fontSize: 14, fontFamily: typography.body, color: 'rgba(255,255,255,0.8)' },
 
   // Step indicator

@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   FlatList,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -270,7 +270,6 @@ export function OnboardingScreen({
   onCreateAccount,
 }: OnboardingScreenProps) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const insets = useSafeAreaInsets();
   const flatListRef = useRef<FlatList>(null);
 
   const goNext = () => {
@@ -391,7 +390,7 @@ export function OnboardingScreen({
   );
 
   return (
-    <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+    <SafeAreaView style={s.container} edges={['top', 'left', 'right', 'bottom']}>
       <FlatList
         ref={flatListRef}
         data={SLIDES as unknown as typeof SLIDES[number][]}
@@ -402,7 +401,7 @@ export function OnboardingScreen({
         showsHorizontalScrollIndicator={false}
         renderItem={renderSlide as any}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import axios from 'axios';
+import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma';
 import {
   hashPassword,
@@ -12,8 +13,9 @@ import { sendSMS, otpMessage } from '../lib/sms';
 import { sendEmail, render } from '../lib/email';
 import { WelcomeEmail } from '../emails/WelcomeEmail';
 import { OtpEmail } from '../emails/OtpEmail';
+import { PasswordResetEmail } from '../emails/PasswordResetEmail';
 import { requireAuth } from '../middleware/auth';
-import { authLimiter, otpLimiter } from '../middleware/rateLimiter';
+import { authLimiter, otpLimiter, forgotLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
@@ -508,6 +510,126 @@ router.post('/complete-onboarding', requireAuth, async (req: Request, res: Respo
 
   const { passwordHash, otpCode, otpExpiry, ...safeProfile } = updated;
   res.json({ profile: safeProfile });
+});
+
+// ─── POST /api/auth/forgot-password ──────────────────────────────────────────
+router.post('/forgot-password', forgotLimiter, async (req: Request, res: Response): Promise<void> => {
+  const { email } = req.body as { email?: string };
+  const generic = { success: true, message: 'If that email exists, we sent a code' };
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    res.json(generic);
+    return;
+  }
+
+  const profile = await prisma.profile.findUnique({ where: { email } });
+  if (!profile || profile.status !== 'ACTIVE') {
+    res.json(generic);
+    return;
+  }
+
+  const code = generateOTP();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+  await prisma.passwordResetCode.create({
+    data: { profileId: profile.id, code, expiresAt },
+  });
+
+  void (async () => {
+    try {
+      const html = await render(PasswordResetEmail({ otp: code, email }));
+      await sendEmail(email, 'DISTRO — Reset your password', html, 'password-reset');
+    } catch (e) {
+      console.error('[EMAIL] Password reset pipeline failed:', e);
+    }
+  })();
+
+  res.json(generic);
+});
+
+// ─── POST /api/auth/verify-reset-code ────────────────────────────────────────
+router.post('/verify-reset-code', authLimiter, async (req: Request, res: Response): Promise<void> => {
+  const { email, code } = req.body as { email?: string; code?: string };
+  if (!email || !code) {
+    res.status(400).json({ error: 'email and code are required' });
+    return;
+  }
+
+  const profile = await prisma.profile.findUnique({ where: { email } });
+  if (!profile) {
+    res.status(400).json({ error: 'Invalid or expired code' });
+    return;
+  }
+
+  const record = await prisma.passwordResetCode.findFirst({
+    where: {
+      profileId: profile.id,
+      code,
+      usedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (!record) {
+    res.status(400).json({ error: 'Invalid or expired code' });
+    return;
+  }
+
+  await prisma.passwordResetCode.update({
+    where: { id: record.id },
+    data: { usedAt: new Date() },
+  });
+
+  const resetToken = jwt.sign(
+    { profileId: profile.id, isPasswordResetToken: true },
+    process.env.JWT_SECRET!,
+    { expiresIn: '10m' },
+  );
+
+  res.json({ success: true, resetToken });
+});
+
+// ─── POST /api/auth/reset-password ───────────────────────────────────────────
+router.post('/reset-password', authLimiter, async (req: Request, res: Response): Promise<void> => {
+  const { resetToken, newPassword } = req.body as { resetToken?: string; newPassword?: string };
+  if (!resetToken || !newPassword) {
+    res.status(400).json({ error: 'resetToken and newPassword are required' });
+    return;
+  }
+  if (newPassword.length < 8) {
+    res.status(400).json({ error: 'Password must be at least 8 characters' });
+    return;
+  }
+
+  let payload: { profileId?: string; isPasswordResetToken?: boolean };
+  try {
+    payload = jwt.verify(resetToken, process.env.JWT_SECRET!) as any;
+  } catch {
+    res.status(400).json({ error: 'Invalid or expired reset token' });
+    return;
+  }
+
+  if (!payload.isPasswordResetToken || !payload.profileId) {
+    res.status(400).json({ error: 'Invalid reset token' });
+    return;
+  }
+
+  const profile = await prisma.profile.findUnique({ where: { id: payload.profileId } });
+  if (!profile) {
+    res.status(400).json({ error: 'Invalid reset token' });
+    return;
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  await prisma.profile.update({
+    where: { id: profile.id },
+    data: { passwordHash, loginAttempts: 0, lockedUntil: null },
+  });
+
+  // Invalidate all existing sessions — force fresh sign-in
+  await prisma.session.deleteMany({ where: { profileId: profile.id } });
+
+  res.json({ success: true });
 });
 
 export default router;

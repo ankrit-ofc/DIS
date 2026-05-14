@@ -1,6 +1,7 @@
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Image,
 } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import { useState, useEffect } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
@@ -11,19 +12,18 @@ import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../lib/api";
 import { useCartStore } from "../../store/cartStore";
 import { colors, spacing, radius, shadow, typography } from "../../lib/theme";
-import { fmtRs, fmtUnitPrice, fmtCartonPrice } from "../../lib/format";
-import { imgUri } from "../../lib/image";
+import { fmtRs, fmtCarton } from "../../lib/format";
+import { resolveImageUrl } from "../../lib/imageUrl";
 
 let Haptics: any = null;
 try { Haptics = require("expo-haptics"); } catch {}
 
-const { width: W } = Dimensions.get("window");
-const HERO_H = 100;
 
 interface Product {
   id: string; name: string; price: number; mrp?: number;
   unit: string; stockQty: number; moq?: number; imageUrl?: string;
   brand?: string; description?: string; categoryName?: string;
+  piecesPerCarton?: number; pricePerCarton?: number;
 }
 
 // ─── Stock badge ──────────────────────────────────────────────────────────────
@@ -86,7 +86,7 @@ export function ProductScreen({ navigation, route }: any) {
       .then(res => {
         const p = res.data.product ?? res.data;
         setProduct(p);
-        setQty(p.moq ?? 1);
+        setQty(1);
         barY.value = withSpring(0, { damping: 18, stiffness: 200 });
         barOpacity.value = withTiming(1, { duration: 300 });
       })
@@ -102,7 +102,9 @@ export function ProductScreen({ navigation, route }: any) {
     );
   }
 
-  const moq        = product.moq ?? 1;
+  const moq             = product.moq ?? 1;
+  const piecesPerCarton = product.piecesPerCarton ?? moq;
+  const pricePerCarton  = product.pricePerCarton ?? product.price * piecesPerCarton;
   const outOfStock = (product.stockQty ?? 0) <= 0;
   const cartItem   = items.find(i => i.productId === productId);
   const discount   = product.mrp && product.mrp > product.price
@@ -111,8 +113,18 @@ export function ProductScreen({ navigation, route }: any) {
   const handleAdd = () => {
     if (!product || outOfStock) return;
     btnScale.value = withSequence(withSpring(0.94), withSpring(1.03), withSpring(1));
-    cartItem ? updateQty(product.id, cartItem.qty + qty)
-      : Array.from({ length: qty }).forEach(() => addItem({ productId: product.id, name: product.name, price: product.price, unit: product.unit }));
+    if (cartItem) {
+      updateQty(product.id, cartItem.qty + qty);
+    } else {
+      addItem({
+        productId: product.id,
+        name: product.name,
+        price: product.price,
+        unit: product.unit,
+        piecesPerCarton,
+        pricePerCarton,
+      }, qty);
+    }
     fbOpacity.value = withSequence(withTiming(1, { duration: 200 }), withTiming(1, { duration: 800 }), withTiming(0, { duration: 300 }));
     setAddedFeedback(true);
     setTimeout(() => setAddedFeedback(false), 1400);
@@ -123,12 +135,18 @@ export function ProductScreen({ navigation, route }: any) {
     <View style={s.flex}>
       <ScrollView style={s.bg} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 + insets.bottom }}>
 
-        {/* Hero image */}
+        {/* Status-bar safe spacer */}
+        <View style={{ height: insets.top, backgroundColor: colors.white }} />
+
+        {/* Hero image — fixed square aspect, contained, never overflows */}
         <View style={s.hero}>
-          {imgUri(product.imageUrl)
-            ? <Image source={{ uri: imgUri(product.imageUrl) }} style={s.heroImg} resizeMode="cover" />
+          {product.imageUrl
+            ? <ExpoImage source={{ uri: resolveImageUrl(product.imageUrl) ?? "" }} style={s.heroImg} contentFit="contain" cachePolicy="memory-disk" transition={200} placeholder={colors.blueLight} />
             : <View style={s.heroPlaceholder}><Ionicons name="cube-outline" size={36} color={colors.blue} style={{ opacity: 0.35 }} /></View>}
-          <TouchableOpacity style={[s.backBtn, { top: insets.top + 8 }]} onPress={() => navigation.goBack()} activeOpacity={0.8}>
+          {discount > 0 && (
+            <View style={s.discountBadge}><Text style={s.discountText}>−{discount}%</Text></View>
+          )}
+          <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
             <Ionicons name="chevron-back" size={20} color={colors.ink} />
           </TouchableOpacity>
         </View>
@@ -145,17 +163,17 @@ export function ProductScreen({ navigation, route }: any) {
           {/* Name */}
           <Animated.Text entering={FadeInDown.delay(100).springify()} style={s.name}>{product.name}</Animated.Text>
 
-          {/* Price row — dual pricing (unit + carton) */}
+          {/* Price row — carton primary */}
           <Animated.View entering={FadeInDown.delay(140).springify()} style={s.priceBlock}>
             <View style={s.priceRow}>
-              <Text style={s.price}>{fmtUnitPrice(product.price, product.unit)}</Text>
+              <Text style={s.price}>{fmtCarton(pricePerCarton, piecesPerCarton, product.unit)}</Text>
               {product.mrp && product.mrp > product.price && (
-                <Text style={s.mrp}>{fmtRs(product.mrp)}</Text>
+                <Text style={s.mrp}>{fmtRs(product.mrp * piecesPerCarton)}</Text>
+              )}
+              {discount > 0 && (
+                <View style={s.discountPill}><Text style={s.discountPillText}>{discount}% off</Text></View>
               )}
             </View>
-            {moq > 1 && (
-              <Text style={s.cartonPrice}>{fmtCartonPrice(product.price, moq, product.unit)}</Text>
-            )}
           </Animated.View>
 
           {/* Stock */}
@@ -164,12 +182,10 @@ export function ProductScreen({ navigation, route }: any) {
           </Animated.View>
 
           {/* MOQ */}
-          {moq > 1 && (
-            <Animated.View entering={FadeInDown.delay(210).springify()} style={s.moqBox}>
-              <Ionicons name="information-circle-outline" size={16} color={colors.amberDark} />
-              <Text style={s.moqText}>Minimum order: <Text style={s.moqBold}>{moq} {product.unit}s</Text></Text>
-            </Animated.View>
-          )}
+          <Animated.View entering={FadeInDown.delay(210).springify()} style={s.moqBox}>
+            <Ionicons name="information-circle-outline" size={16} color={colors.amberDark} />
+            <Text style={s.moqText}>Minimum order: <Text style={s.moqBold}>1 carton ({piecesPerCarton} {product.unit}{piecesPerCarton > 1 ? "s" : ""})</Text></Text>
+          </Animated.View>
 
           {/* Meta row — 3 cards */}
           <Animated.View entering={FadeInDown.delay(230).springify()} style={s.metaCards}>
@@ -187,20 +203,21 @@ export function ProductScreen({ navigation, route }: any) {
             </View>
           </Animated.View>
 
-          {/* Quantity stepper */}
+          {/* Quantity stepper — cartons */}
           <Animated.View entering={FadeInDown.delay(260).springify()} style={s.qtySection}>
             <Text style={s.qtyLabel}>Quantity</Text>
             <View style={s.qtyRow}>
-              <QtyBtn icon="−" disabled={qty <= moq} onPress={() => setQty(q => Math.max(moq, q - 1))} />
+              <QtyBtn icon="−" disabled={qty <= 1} onPress={() => setQty(q => Math.max(1, q - 1))} />
               <View style={s.qtyDisplay}>
                 <Text style={s.qtyVal}>{qty}</Text>
-                <Text style={s.qtyUnit}>{product.unit}{qty > 1 ? "s" : ""}</Text>
+                <Text style={s.qtyUnit}>carton{qty > 1 ? "s" : ""}</Text>
               </View>
-              <QtyBtn icon="+" disabled={qty >= (product.stockQty ?? 0)} onPress={() => setQty(q => q + 1)} />
+              <QtyBtn icon="+" disabled={qty * piecesPerCarton >= (product.stockQty ?? 0)} onPress={() => setQty(q => q + 1)} />
               <View style={s.qtyTotal}>
-                <Text style={s.qtyTotalText}>Total: {fmtRs(product.price * qty)}</Text>
+                <Text style={s.qtyTotalText}>Total: {fmtRs(pricePerCarton * qty)}</Text>
               </View>
             </View>
+            <Text style={s.qtyDerived}>{qty} carton{qty > 1 ? "s" : ""} ({qty * piecesPerCarton} {product.unit}{qty * piecesPerCarton > 1 ? "s" : ""})</Text>
           </Animated.View>
 
           {/* Description */}
@@ -215,7 +232,7 @@ export function ProductScreen({ navigation, route }: any) {
           {cartItem && (
             <Animated.View entering={FadeIn} style={s.cartNote}>
               <Ionicons name="bag-outline" size={14} color={colors.blue} />
-              <Text style={s.cartNoteText}>{cartItem.qty} already in cart — adding {qty} more = {cartItem.qty + qty} total</Text>
+              <Text style={s.cartNoteText}>{cartItem.qty} carton{cartItem.qty > 1 ? "s" : ""} already in cart — adding {qty} more = {cartItem.qty + qty} total</Text>
             </Animated.View>
           )}
         </View>
@@ -224,8 +241,8 @@ export function ProductScreen({ navigation, route }: any) {
       {/* Sticky bottom bar */}
       <Animated.View style={[s.bar, shadow.lg, barStyle, { paddingBottom: insets.bottom + spacing.md }]}>
         <View style={s.barTotal}>
-          <Text style={s.barAmount}>{fmtRs(product.price * qty)}</Text>
-          <Text style={s.barNote}>{qty} {product.unit}{qty > 1 ? "s" : ""}</Text>
+          <Text style={s.barAmount}>{fmtRs(pricePerCarton * qty)}</Text>
+          <Text style={s.barNote}>{qty} carton{qty > 1 ? "s" : ""}</Text>
         </View>
         <Animated.View style={[{ flex: 1 }, btnStyle]}>
           <TouchableOpacity
@@ -261,13 +278,13 @@ const s = StyleSheet.create({
   center:  { flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.offWhite },
   errText: { color: colors.gray400, fontFamily: typography.body, fontSize: 14 },
 
-  // Hero
-  hero:            { width: W, height: HERO_H, position: "relative" },
+  // Hero — fixed-aspect square, never overflows
+  hero:            { width: "100%", aspectRatio: 1, position: "relative", backgroundColor: colors.gray100, overflow: "hidden" },
   heroImg:         { width: "100%", height: "100%" },
   heroPlaceholder: { width: "100%", height: "100%", backgroundColor: colors.blueLight, alignItems: "center", justifyContent: "center" },
   discountBadge:   { position: "absolute", top: spacing.md, right: spacing.md, backgroundColor: colors.green, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.full },
   discountText:    { color: colors.white, fontFamily: typography.bodySemiBold, fontSize: 12 },
-  backBtn:         { position: "absolute", left: spacing.md, width: 38, height: 38, borderRadius: 19, backgroundColor: colors.white, alignItems: "center", justifyContent: "center", ...shadow.sm },
+  backBtn:         { position: "absolute", top: spacing.sm, left: spacing.md, width: 38, height: 38, borderRadius: 19, backgroundColor: colors.white, alignItems: "center", justifyContent: "center", ...shadow.sm },
 
   // Card
   card:      { backgroundColor: colors.white, borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl, marginTop: -28, paddingHorizontal: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.md },
@@ -280,7 +297,7 @@ const s = StyleSheet.create({
   // Price
   priceBlock:       { gap: 2 },
   priceRow:         { flexDirection: "row", alignItems: "center", gap: spacing.xs, flexWrap: "wrap" },
-  price:            { fontSize: 24, fontFamily: typography.heading, color: colors.blue, fontWeight: "700" },
+  price:            { fontSize: 24, fontFamily: typography.heading, color: "#2563EB", fontWeight: "700" },
   cartonPrice:      { fontSize: 13, color: "#9BA3BF", fontFamily: typography.body },
   priceUnit:        { fontSize: 14, color: colors.gray400, fontFamily: typography.body },
   mrp:              { fontSize: 16, color: colors.gray300, textDecorationLine: "line-through", fontFamily: typography.body },
@@ -320,6 +337,7 @@ const s = StyleSheet.create({
   qtyDisplay: { flexDirection: "row", alignItems: "baseline", gap: 4, minWidth: 64, justifyContent: "center" },
   qtyVal:     { fontSize: 26, fontFamily: typography.heading, color: colors.ink },
   qtyUnit:    { fontSize: 13, color: colors.gray400, fontFamily: typography.body },
+  qtyDerived: { fontSize: 12, color: colors.gray400, fontFamily: typography.body, marginTop: spacing.xs },
 
   // Description
   descBox:  { backgroundColor: colors.offWhite, borderRadius: radius.lg, padding: spacing.lg, gap: spacing.xs },

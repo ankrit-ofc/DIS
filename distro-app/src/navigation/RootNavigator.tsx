@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { NavigationContainer } from "@react-navigation/native";
+import * as ExpoSplashScreen from "expo-splash-screen";
 import * as SecureStore from "expo-secure-store";
 import { useAuthStore } from "../store/authStore";
 import { AuthStack } from "./AuthStack";
@@ -23,7 +24,7 @@ export function RootNavigator() {
       await loadToken();
       const done = await SecureStore.getItemAsync(ONBOARDING_KEY).catch(() => null);
       setOnboardingDone(done === "true");
-      // Show JS splash first; SplashScreen hides the native splash after paint (avoids flash / wrong frame).
+      await ExpoSplashScreen.hideAsync().catch(() => { });
       setPhase("splash");
     })();
   }, []);
@@ -37,7 +38,7 @@ export function RootNavigator() {
   }, [onboardingDone]);
 
   const markOnboardingDone = useCallback(async () => {
-    await SecureStore.setItemAsync(ONBOARDING_KEY, "true").catch(() => {});
+    await SecureStore.setItemAsync(ONBOARDING_KEY, "true").catch(() => { });
   }, []);
 
   const handleOnboardingDone = useCallback(async () => {

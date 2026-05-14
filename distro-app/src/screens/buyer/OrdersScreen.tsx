@@ -8,13 +8,15 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useState, useEffect, useCallback } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../lib/api";
+import { useAuthStore } from "../../store/authStore";
 import { StatusBadge } from "../../components/StatusBadge";
 import { colors, spacing, radius, shadow } from "../../lib/theme";
 import { fmtRs } from "../../lib/format";
 
 interface Order {
-  id: number;
+  id: string | number;
   orderNumber: string;
   status: string;
   total?: number;
@@ -25,6 +27,7 @@ interface Order {
 }
 
 export function OrdersScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -32,9 +35,15 @@ export function OrdersScreen({ navigation }: any) {
   const load = useCallback(async () => {
     try {
       const res = await api.get("/orders");
-      setOrders(res.data.orders ?? res.data ?? []);
-    } catch {
-      // ignore
+      // API shape: { orders, total, page, pages }. Accept array fallback for safety.
+      const list: Order[] = Array.isArray(res.data)
+        ? res.data
+        : Array.isArray(res.data?.orders)
+          ? res.data.orders
+          : [];
+      setOrders(list);
+    } catch (e) {
+      console.error("[OrdersScreen] load failed:", e);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -44,7 +53,7 @@ export function OrdersScreen({ navigation }: any) {
   useEffect(() => { load(); }, []);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <Text style={styles.heading}>My orders</Text>
 
       {loading ? (
@@ -108,7 +117,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: colors.ink,
     padding: spacing.lg,
-    paddingTop: spacing.lg + spacing.md,
+    paddingTop: spacing.md,
   },
   loader: { marginTop: spacing.xxl },
   list: { paddingHorizontal: spacing.lg, gap: spacing.sm, paddingBottom: spacing.xxl },

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { View, Text, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, withSequence } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { api } from "../../lib/api";
 import { spacing } from "../../lib/theme";
@@ -11,7 +11,6 @@ import { AuthBrand, StepIndicator, InputField, AuthError, s } from "./_shared";
 type Props = { navigation: StackNavigationProp<AuthStackParamList, "Register"> };
 
 export function RegisterScreen({ navigation }: Props) {
-  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -52,9 +51,10 @@ export function RegisterScreen({ navigation }: Props) {
   };
 
   return (
-    <KeyboardAvoidingView style={s.root} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <SafeAreaView style={s.root} edges={['top', 'left', 'right']}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <ScrollView
-        contentContainerStyle={[s.scroll, { paddingTop: insets.top + spacing.xxl }]}
+        contentContainerStyle={[s.scroll, { paddingTop: spacing.xxl }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -92,5 +92,6 @@ export function RegisterScreen({ navigation }: Props) {
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }

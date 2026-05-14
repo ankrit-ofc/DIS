@@ -1,174 +1,139 @@
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  RefreshControl, Dimensions, FlatList, NativeScrollEvent,
-  NativeSyntheticEvent, Image,
+  RefreshControl, Dimensions, FlatList, Image, Animated,
 } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSafeAreaInsets, SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../store/authStore";
 import { useCartStore } from "../../store/cartStore";
 import { api } from "../../lib/api";
 import { colors, spacing, radius, shadow, typography } from "../../lib/theme";
-import { fmtRs, fmtUnitPrice, sessionInitial } from "../../lib/format";
+import { fmtCarton, sessionInitial } from "../../lib/format";
+import { resolveImageUrl } from "../../lib/imageUrl";
 import { SkeletonLoader, SkeletonProductCard, SkeletonCategoryChip } from "../../components/SkeletonLoader";
-import { imgUri } from "../../lib/image";
 
 const { width: W } = Dimensions.get("window");
 const CARD_W = (W - spacing.lg * 2 - spacing.sm) / 2;
-const IMG_H  = 160;
-const IMG_BG = "#F4F6F8";
-const PRIMARY = "#2563EB";
-const BANNER_W = W;
+const BANNER_W = W - spacing.lg * 2;
+// Branded blue palette for category fallback circles (deterministic by name hash)
+const CAT_COLORS = [
+  "#DBEAFE", // bluePale
+  "#BFDBFE", // blueMid
+  "#EFF6FF", // blueLight
+  "#E0E7FF", // indigo-100
+  "#CFFAFE", // cyan-100
+  "#DBEAFE",
+];
 
-interface Announcement { id: string; text: string; }
-interface Banner {
-  id: string; title: string; subtitle?: string;
-  imageUrl?: string; bgColor: string; textColor: string;
-}
-interface Category { id: string; name: string; emoji?: string; imageUrl?: string; }
-interface Product {
-  id: string; name: string; price: number; mrp?: number;
-  unit: string; stockQty: number; moq?: number; imageUrl?: string; brand?: string;
+function hashName(name: string): number {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+  return Math.abs(h);
 }
 
-// ─── Banner carousel ─────────────────────────────────────────────────────────
-function BannerCarousel({ banners }: { banners: Banner[] }) {
-  const [activeIdx, setActiveIdx] = useState(0);
-  const listRef = useRef<FlatList>(null);
+// ─── Banner Carousel ──────────────────────────────────────────────────────────
+const BANNERS = [
+  require("../../../assets/banner1.png"),
+  require("../../../assets/banner2.png"),
+];
+
+function BannerCarousel() {
+  const [active, setActive] = useState(0);
+  const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
-    if (banners.length <= 1) return;
-    const t = setInterval(() => {
-      setActiveIdx(i => {
-        const next = (i + 1) % banners.length;
-        listRef.current?.scrollToIndex({ index: next, animated: true });
-        return next;
-      });
-    }, 4000);
-    return () => clearInterval(t);
-  }, [banners.length]);
-
-  if (!banners.length) return null;
-
-  function onScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
-    const idx = Math.round(e.nativeEvent.contentOffset.x / BANNER_W);
-    setActiveIdx(idx);
-  }
+    let mounted = true;
+    const timer = setInterval(() => {
+      if (!mounted) return;
+      let next = (active + 1) % BANNERS.length;
+      flatListRef.current?.scrollToIndex({ index: next, animated: true });
+      setActive(next);
+    }, 3000);
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
+  }, [active]);
 
   return (
     <View style={bc.wrap}>
       <FlatList
-        ref={listRef}
-        data={banners}
+        ref={flatListRef}
+        data={BANNERS}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        decelerationRate="fast"
-        keyExtractor={item => item.id}
-        onMomentumScrollEnd={onScroll}
-        contentContainerStyle={{}}
-        renderItem={({ item }) => {
-          const uri = imgUri(item.imageUrl);
-          return (
-            <View style={[bc.card, { backgroundColor: item.bgColor, width: BANNER_W }]}>
-              {uri ? (
-                <Image source={{ uri }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-              ) : (
-                <>
-                  <View style={[bc.circle, { backgroundColor: item.textColor }]} />
-                  <View style={[bc.circleSm, { backgroundColor: item.textColor }]} />
-                </>
-              )}
-              <Text style={[bc.title, { color: uri ? "#fff" : item.textColor }]} numberOfLines={2}>
-                {item.title}
-              </Text>
-              {item.subtitle ? (
-                <Text style={[bc.subtitle, { color: uri ? "rgba(255,255,255,0.88)" : item.textColor }]} numberOfLines={1}>
-                  {item.subtitle}
-                </Text>
-              ) : null}
-            </View>
-          );
-        }}
+        onMomentumScrollEnd={(e) => setActive(Math.round(e.nativeEvent.contentOffset.x / BANNER_W))}
+        keyExtractor={(_, i) => String(i)}
+        renderItem={({ item }) => (
+          <Image source={item} style={bc.img} resizeMode="cover" />
+        )}
       />
-      {banners.length > 1 && (
-        <View style={bc.dots}>
-          {banners.map((_, i) => (
-            <View key={i} style={[bc.dot, i === activeIdx && bc.dotActive]} />
-          ))}
-        </View>
-      )}
+      <View style={bc.dots}>
+        {BANNERS.map((_, i) => (
+          <View key={i} style={[bc.dot, active === i && bc.dotActive]} />
+        ))}
+      </View>
     </View>
   );
 }
 
 const bc = StyleSheet.create({
-  wrap: { marginTop: spacing.md },
-  card: {
-    width: W,
-    height: 160,
+  wrap: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    borderRadius: radius.lg,
     overflow: "hidden",
-    justifyContent: "flex-end",
-    padding: spacing.md,
+    height: BANNER_W / 2,
+    backgroundColor: colors.gray100,
   },
-  circle: {
-    position: "absolute",
-    width: 130,
-    height: 130,
-    borderRadius: 65,
-    opacity: 0.08,
-    right: -30,
-    top: -30,
-  },
-  circleSm: {
-    position: "absolute",
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    opacity: 0.06,
-    right: 60,
-    bottom: -20,
-  },
-  title: {
-    fontSize: 18,
-    fontFamily: typography.heading,
-    letterSpacing: -0.4,
-    lineHeight: 22,
-  },
-  subtitle: {
-    fontSize: 13,
-    fontFamily: typography.bodyMedium,
-    marginTop: 3,
-    opacity: 0.85,
-  },
+  img: { width: BANNER_W, height: BANNER_W / 2 },
   dots: {
+    position: "absolute",
+    bottom: 10,
+    width: "100%",
     flexDirection: "row",
     justifyContent: "center",
-    gap: 5,
-    marginTop: 8,
+    gap: 6,
   },
-  dot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: colors.gray300,
-  },
-  dotActive: {
-    backgroundColor: colors.blue,
-    width: 14,
-  },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.4)" },
+  dotActive: { backgroundColor: colors.white, width: 14 },
 });
+
+interface Announcement { id: string; text: string; }
+interface Category { id: string; name: string; emoji?: string; imageUrl?: string; image?: string; }
+interface Product {
+  id: string; name: string; price: number; mrp?: number;
+  unit: string; stockQty: number; moq?: number; imageUrl?: string; brand?: string;
+  piecesPerCarton?: number; pricePerCarton?: number;
+}
 
 // ─── Announcement ticker ──────────────────────────────────────────────────────
 function AnnouncementTicker({ items, loading }: { items: Announcement[]; loading: boolean }) {
   const [idx, setIdx] = useState(0);
+  const scrollAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (items.length <= 1) return;
-    const t = setInterval(() => setIdx(i => (i + 1) % items.length), 3500);
-    return () => clearInterval(t);
-  }, [items.length]);
+    if (!items.length || loading) return;
+    const run = () => {
+      scrollAnim.setValue(W);
+      Animated.timing(scrollAnim, {
+        toValue: -W,
+        duration: 10000,
+        useNativeDriver: true,
+        easing: (t) => t,
+      }).start(({ finished }) => {
+        if (finished) {
+          setIdx((i) => (i + 1) % items.length);
+          run();
+        }
+      });
+    };
+    run();
+    return () => scrollAnim.stopAnimation();
+  }, [items.length, loading]);
 
   if (loading) {
     return (
@@ -184,7 +149,14 @@ function AnnouncementTicker({ items, loading }: { items: Announcement[]; loading
     <View style={tk.wrap}>
       <View style={tk.ticker}>
         <View style={tk.dot} />
-        <Text style={tk.text} numberOfLines={1}>{items[idx].text}</Text>
+        <View style={{ flex: 1, overflow: "hidden" }}>
+          <Animated.Text
+            style={[tk.text, { transform: [{ translateX: scrollAnim }] }]}
+            numberOfLines={1}
+          >
+            {items[idx].text}
+          </Animated.Text>
+        </View>
       </View>
     </View>
   );
@@ -209,10 +181,10 @@ const tk = StyleSheet.create({
     flexShrink: 0,
   },
   text: {
-    flex: 1,
     fontSize: 13,
     fontFamily: typography.bodyMedium,
     color: colors.ink,
+    width: W, // Ensure wide enough for animation range
   },
 });
 
@@ -226,10 +198,25 @@ function ProductCard({ item, onPress, onAdd }: { item: Product; onPress: () => v
     <TouchableOpacity style={[pc.card, shadow.card]} onPress={onPress} activeOpacity={0.88}>
       {/* Image area */}
       <View style={pc.imgWrap}>
-        {imgUri(item.imageUrl)
-          ? <Image source={{ uri: imgUri(item.imageUrl) }} style={pc.img} resizeMode="contain" />
-          : <View style={pc.imgPlaceholder}><Ionicons name="cube-outline" size={32} color={colors.blue} style={{ opacity: 0.35 }} /></View>
-        }
+        {item.imageUrl ? (
+          <ExpoImage
+            source={{ uri: resolveImageUrl(item.imageUrl) ?? "" }}
+            style={pc.img}
+            contentFit="contain"
+            cachePolicy="memory-disk"
+            transition={200}
+            placeholder={colors.blueLight}
+          />
+        ) : (
+          <View style={pc.imgPlaceholder}>
+            <Ionicons name="cube-outline" size={28} color={colors.blue} style={{ opacity: 0.4 }} />
+          </View>
+        )}
+        {discount > 0 && !outOfStock && (
+          <View style={pc.badge}>
+            <Text style={pc.badgeText}>{discount}%</Text>
+          </View>
+        )}
         {outOfStock && (
           <View style={pc.oosBanner}>
             <Text style={pc.oosText}>Out of stock</Text>
@@ -241,22 +228,19 @@ function ProductCard({ item, onPress, onAdd }: { item: Product; onPress: () => v
       <View style={pc.body}>
         {item.brand && <Text style={pc.brand} numberOfLines={1}>{item.brand}</Text>}
         <Text style={pc.name} numberOfLines={2}>{item.name}</Text>
-        <View style={pc.priceRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={pc.price}>{fmtUnitPrice(item.price, item.unit)}</Text>
-            {item.mrp && item.mrp > item.price ? (
-              <Text style={pc.mrp}>{fmtRs(item.mrp)}</Text>
-            ) : item.moq && item.moq > 1 ? (
-              <Text style={pc.moq}>{fmtRs(item.price * item.moq)} / carton ({item.moq} pcs)</Text>
-            ) : null}
-          </View>
-          {!outOfStock && (
-            <TouchableOpacity style={pc.addBtn} onPress={onAdd} activeOpacity={0.8} hitSlop={8}>
-              <Ionicons name="add" size={18} color={colors.white} />
-            </TouchableOpacity>
-          )}
-        </View>
+        {(() => {
+          const pieces = item.piecesPerCarton ?? item.moq ?? 1;
+          const cartonPrice = item.pricePerCarton ?? item.price * pieces;
+          return <Text style={pc.price}>{fmtCarton(cartonPrice, pieces, item.unit)}</Text>;
+        })()}
       </View>
+
+      {/* Add button */}
+      {!outOfStock && (
+        <TouchableOpacity style={pc.addBtn} onPress={onAdd} activeOpacity={0.8} hitSlop={8}>
+          <Text style={pc.addBtnText}>Add</Text>
+        </TouchableOpacity>
+      )}
     </TouchableOpacity>
   );
 }
@@ -267,17 +251,12 @@ const pc = StyleSheet.create({
     backgroundColor: colors.white,
     borderRadius: radius.lg,
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: colors.gray100,
   },
   imgWrap: {
-    width: "100%",
-    height: IMG_H,
+    width: CARD_W,
+    height: 140,
+    backgroundColor: colors.blueLight,
     position: "relative",
-    backgroundColor: IMG_BG,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 10,
   },
   img: {
     width: "100%",
@@ -321,17 +300,19 @@ const pc = StyleSheet.create({
     lineHeight: 16,
     minHeight: 32,
   },
-  priceRow: { flexDirection: "row", alignItems: "center", marginTop: 4, gap: 8 },
-  price: { fontSize: 14, fontFamily: typography.heading, color: PRIMARY, fontWeight: "700" },
-  mrp: { fontSize: 11, fontFamily: typography.body, color: colors.gray400, textDecorationLine: "line-through" },
+  price: { fontSize: 14, fontFamily: typography.heading, color: colors.blue, marginTop: 2 },
   moq: { fontSize: 10, fontFamily: typography.body, color: colors.gray400 },
   addBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: PRIMARY,
+    backgroundColor: colors.blue,
+    paddingVertical: 8,
     alignItems: "center",
-    justifyContent: "center",
+    borderBottomLeftRadius: radius.lg,
+    borderBottomRightRadius: radius.lg,
+  },
+  addBtnText: {
+    color: colors.white,
+    fontSize: 12,
+    fontFamily: typography.bodySemiBold,
   },
 });
 
@@ -341,7 +322,6 @@ export function HomeScreen({ navigation }: any) {
   const { addItem } = useCartStore();
   const insets = useSafeAreaInsets();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-  const [banners, setBanners] = useState<Banner[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [featured, setFeatured] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -349,16 +329,13 @@ export function HomeScreen({ navigation }: any) {
 
   const load = useCallback(async () => {
     try {
-      const [annRes, bannerRes, catRes, prodRes] = await Promise.allSettled([
+      const [annRes, catRes, prodRes] = await Promise.allSettled([
         api.get("/announcements"),
-        api.get("/banners"),
         api.get("/categories"),
         api.get("/products", { params: { sort: "newest", limit: 12 } }),
       ]);
       if (annRes.status === "fulfilled")
         setAnnouncements(annRes.value.data.announcements ?? annRes.value.data ?? []);
-      if (bannerRes.status === "fulfilled")
-        setBanners(bannerRes.value.data.banners ?? []);
       if (catRes.status === "fulfilled")
         setCategories(catRes.value.data.categories ?? catRes.value.data ?? []);
       if (prodRes.status === "fulfilled")
@@ -380,20 +357,9 @@ export function HomeScreen({ navigation }: any) {
     navigation.navigate("Catalogue", { screen: "CatalogueList", params });
 
   return (
-    <ScrollView
-      style={s.bg}
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={() => { setRefreshing(true); load(); }}
-          tintColor={colors.white}
-          colors={[colors.white]}
-        />
-      }
-    >
-      {/* Blue header */}
-      <View style={[s.header, { paddingTop: insets.top + spacing.md }]}>
+    <SafeAreaView style={s.safe} edges={["top", "left", "right"]}>
+      {/* Blue header — stays fixed, does not move with pull-to-refresh */}
+      <View style={[s.header, { paddingTop: spacing.md }]}>
         {/* Top row */}
         <View style={s.headerRow}>
           <View>
@@ -426,11 +392,25 @@ export function HomeScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
 
+      <ScrollView
+        style={s.bg}
+        contentContainerStyle={s.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => { setRefreshing(true); load(); }}
+            tintColor={colors.blue}
+            colors={[colors.blue]}
+            progressBackgroundColor={colors.white}
+          />
+        }
+      >
       {/* Announcement ticker */}
       <AnnouncementTicker items={announcements} loading={loading} />
 
-      {/* Banner carousel — just above categories */}
-      {banners.length > 0 && <BannerCarousel banners={banners} />}
+      {/* Banner Carousel */}
+      <BannerCarousel />
 
       {/* Categories */}
       <View style={s.sectionHeaderRow}>
@@ -442,22 +422,34 @@ export function HomeScreen({ navigation }: any) {
         contentContainerStyle={s.hListContent}
         data={loading ? ([1, 2, 3, 4] as any[]) : categories}
         keyExtractor={(item, i) => loading ? String(i) : item.id}
-        renderItem={({ item }) =>
+        renderItem={({ item, index }) =>
           loading ? (
             <SkeletonCategoryChip />
           ) : (
-            <TouchableOpacity
-              style={s.categoryChip}
-              activeOpacity={0.8}
-              onPress={() => goCatalogue({ categoryId: item.id, categoryName: item.name })}
-            >
-              <View style={s.categoryIconWrap}>
-                {imgUri(item.imageUrl)
-                  ? <Image source={{ uri: imgUri(item.imageUrl)! }} style={s.categoryImg} resizeMode="cover" />
-                  : <Text style={s.categoryEmoji}>{item.emoji ?? "📦"}</Text>}
-              </View>
-              <Text style={s.categoryName}>{item.name}</Text>
-            </TouchableOpacity>
+            (() => {
+              const rawImg = item.imageUrl ?? item.image;
+              const resolvedImg = rawImg ? resolveImageUrl(rawImg) : null;
+              const bg = CAT_COLORS[hashName(item.name) % CAT_COLORS.length];
+              if (__DEV__ && resolvedImg) console.log("[category image]", item.name, resolvedImg);
+              return (
+                <TouchableOpacity
+                  style={s.categoryChip}
+                  activeOpacity={0.8}
+                  onPress={() => goCatalogue({ categoryId: item.id, categoryName: item.name })}
+                >
+                  <View style={[s.categoryIcon, { backgroundColor: bg, overflow: 'hidden' }]}>
+                    {resolvedImg ? (
+                      <ExpoImage source={{ uri: resolvedImg }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="memory-disk" transition={200} placeholder={bg} />
+                    ) : item.emoji ? (
+                      <Text style={s.categoryEmoji}>{item.emoji}</Text>
+                    ) : (
+                      <Text style={s.categoryInitial}>{item.name.charAt(0).toUpperCase()}</Text>
+                    )}
+                  </View>
+                  <Text style={s.categoryName} numberOfLines={1}>{item.name}</Text>
+                </TouchableOpacity>
+              );
+            })()
           )
         }
       />
@@ -483,25 +475,32 @@ export function HomeScreen({ navigation }: any) {
                   params: { productId: item.id },
                 })
               }
-              onAdd={() =>
+              onAdd={() => {
+                const pieces = item.piecesPerCarton ?? item.moq ?? 1;
+                const cartonPrice = item.pricePerCarton ?? item.price * pieces;
                 addItem({
                   productId: item.id,
                   name: item.name,
                   price: item.price,
                   unit: item.unit,
-                })
-              }
+                  piecesPerCarton: pieces,
+                  pricePerCarton: cartonPrice,
+                });
+              }}
             />
           ))}
       </View>
 
       <View style={{ height: spacing.xxl + (insets.bottom || 0) }} />
     </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: colors.offWhite },
+  safe: { flex: 1, backgroundColor: colors.blue },
+  bg: { flex: 1, backgroundColor: colors.white },
+  scrollContent: { backgroundColor: colors.white, paddingTop: spacing.sm },
 
   // Header
   header: {
@@ -580,10 +579,11 @@ const s = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 12,
     fontFamily: typography.heading,
     color: colors.ink,
-    letterSpacing: -0.2,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   seeAll: {
     fontSize: 12,
@@ -597,33 +597,24 @@ const s = StyleSheet.create({
     gap: spacing.sm,
   },
   categoryChip: {
-    backgroundColor: colors.white,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.gray200,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    alignItems: "center",
+    gap: 8,
+    width: 72,
+  },
+  categoryIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     alignItems: "center",
     justifyContent: "center",
-    minWidth: 80,
-    gap: 6,
   },
-  categoryIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.sm,
-    backgroundColor: colors.blueLight,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  categoryImg: { width: "100%", height: "100%" },
-  categoryEmoji: { fontSize: 22 },
+  categoryEmoji: { fontSize: 26 },
+  categoryInitial: { fontSize: 22, fontFamily: typography.heading, color: colors.blueDark },
   categoryName: {
-    fontSize: 13,
-    fontFamily: typography.heading,
+    fontSize: 10,
+    fontFamily: typography.bodyMedium,
     color: colors.ink,
-    letterSpacing: -0.2,
+    textAlign: "center",
   },
 
   // Grid

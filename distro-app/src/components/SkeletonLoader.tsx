@@ -59,9 +59,7 @@ export function SkeletonLoader({
 export function SkeletonProductCard() {
   return (
     <View style={sk.card}>
-      <View style={sk.imgWrap}>
-        <SkeletonLoader height={160} borderRadius={0} />
-      </View>
+      <SkeletonLoader height={CARD_W * 0.6} borderRadius={radius.md} />
       <View style={sk.cardBody}>
         <SkeletonLoader height={8} width="50%" borderRadius={4} />
         <SkeletonLoader height={12} width="90%" borderRadius={4} />
@@ -73,7 +71,12 @@ export function SkeletonProductCard() {
 }
 
 export function SkeletonCategoryChip() {
-  return <SkeletonLoader width={80} height={36} borderRadius={radius.full} />;
+  return (
+    <View style={{ alignItems: "center", gap: 8, width: 72 }}>
+      <SkeletonLoader width={60} height={60} borderRadius={30} />
+      <SkeletonLoader width={40} height={10} borderRadius={4} />
+    </View>
+  );
 }
 
 const sk = StyleSheet.create({
@@ -82,13 +85,6 @@ const sk = StyleSheet.create({
     backgroundColor: colors.white,
     borderRadius: radius.lg,
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: colors.gray100,
-  },
-  imgWrap: {
-    width: "100%",
-    height: 160,
-    backgroundColor: "#F4F6F8",
   },
   cardBody: {
     padding: 10,

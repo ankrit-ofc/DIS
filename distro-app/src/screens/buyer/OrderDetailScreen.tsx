@@ -9,6 +9,7 @@ import {
   Alert,
 } from "react-native";
 import { useState, useEffect } from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../lib/api";
 import { StatusBadge } from "../../components/StatusBadge";
 import { colors, spacing, radius, shadow } from "../../lib/theme";
@@ -191,7 +192,7 @@ export function OrderDetailScreen({ navigation, route }: any) {
     setActionLoading(true);
     try {
       const res = await api.post(`/orders/${orderId}/reorder`);
-      const items: Array<{ productId: string; name: string; price: number; qty: number; unit: string; imageUrl: string | null; available: boolean }> = res.data.items ?? [];
+      const items: Array<{ productId: string; name: string; price: number; qty: number; piecesPerCarton: number; unit: string; imageUrl: string | null; available: boolean }> = res.data.items ?? [];
       let unavailable = 0;
       for (const it of items) {
         if (!it.available) { unavailable++; continue; }
@@ -199,6 +200,8 @@ export function OrderDetailScreen({ navigation, route }: any) {
           productId: it.productId,
           name: it.name,
           price: it.price,
+          piecesPerCarton: it.piecesPerCarton,
+          pricePerCarton: it.price,
           unit: it.unit,
           image: it.imageUrl ?? undefined,
         });
@@ -219,6 +222,7 @@ export function OrderDetailScreen({ navigation, route }: any) {
   };
 
   return (
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
     <ScrollView style={styles.bg} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
         <Text style={styles.backText}>← Back</Text>
@@ -343,12 +347,14 @@ export function OrderDetailScreen({ navigation, route }: any) {
 
       <View style={{ height: spacing.xxl }} />
     </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.offWhite },
   bg: { flex: 1, backgroundColor: colors.offWhite },
-  content: { padding: spacing.lg, paddingTop: 60, gap: spacing.md },
+  content: { padding: spacing.lg, gap: spacing.md },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   backBtn: { marginBottom: spacing.xs },
   backText: { color: colors.blue, fontSize: 15, fontWeight: "600" },

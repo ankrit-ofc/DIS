@@ -15,6 +15,7 @@ import { api } from "../../lib/api";
 import { colors, spacing, radius, shadow } from "../../lib/theme";
 import { sessionInitial } from "../../lib/format";
 import Constants from "expo-constants";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 function CreditBar({ used, limit }: { used: number; limit: number }) {
   const pct = limit > 0 ? Math.min(used / limit, 1) : 0;
@@ -46,6 +47,7 @@ const cb = StyleSheet.create({
 });
 
 export function AccountScreen() {
+  const insets = useSafeAreaInsets();
   const { profile, logout, setAuth, token } = useAuthStore();
   const [showEditModal, setShowEditModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -107,7 +109,7 @@ export function AccountScreen() {
   const creditLimit = (profile as any)?.creditLimit ?? 50000;
 
   return (
-    <ScrollView style={styles.bg} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <ScrollView style={styles.bg} contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]} showsVerticalScrollIndicator={false}>
       {/* Profile card */}
       <View style={[styles.profileCard, shadow.sm]}>
         <View style={styles.avatar}>

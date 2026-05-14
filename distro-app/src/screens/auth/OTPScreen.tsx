@@ -5,6 +5,7 @@ import {
 } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RouteProp } from "@react-navigation/native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../lib/api";
 import { colors, spacing, radius, typography } from "../../lib/theme";
 import { AuthStackParamList } from "../../navigation/AuthStack";
@@ -74,8 +75,9 @@ export function OTPScreen({ navigation, route }: Props) {
   };
 
   return (
-    <KeyboardAvoidingView style={st.root} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <View style={st.container}>
+    <SafeAreaView style={st.root} edges={['top', 'left', 'right']}>
+      <KeyboardAvoidingView style={st.root} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <View style={st.container}>
         <TouchableOpacity style={st.backBtn} onPress={() => navigation.goBack()}>
           <Text style={st.backText}>← Back</Text>
         </TouchableOpacity>
@@ -133,17 +135,18 @@ export function OTPScreen({ navigation, route }: Props) {
             </TouchableOpacity>
           )}
         </View>
-      </View>
-    </KeyboardAvoidingView>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const st = StyleSheet.create({
   root:      { flex: 1, backgroundColor: '#155ac1' },
-  container: { flex: 1, padding: spacing.lg, paddingTop: 56 },
+  container: { flex: 1, padding: spacing.lg },
   backBtn:   { marginBottom: spacing.xl },
   backText:  { color: 'rgba(255,255,255,0.85)', fontSize: 15, fontFamily: typography.bodySemiBold },
-  logo:      { width: '70%', height: 72, alignSelf: 'center', marginBottom: spacing.xl },
+  logo:      { width: '70%', height: 92, alignSelf: 'center', marginBottom: spacing.xl },
   title:     { fontSize: 26, fontFamily: typography.heading, color: colors.white, marginBottom: spacing.xs },
   subtitle:  { fontSize: 15, fontFamily: typography.body, color: 'rgba(255,255,255,0.75)', marginBottom: spacing.xl, lineHeight: 22 },
   phone:     { color: colors.white, fontFamily: typography.bodySemiBold },

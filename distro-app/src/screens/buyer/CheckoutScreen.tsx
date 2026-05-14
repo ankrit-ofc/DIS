@@ -8,6 +8,7 @@ import {
   TextInput,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useCartStore } from "../../store/cartStore";
 import { api } from "../../lib/api";
 import { colors, spacing, radius, shadow } from "../../lib/theme";
@@ -38,13 +39,13 @@ export function CheckoutScreen({ navigation }: any) {
     if (v.address && !address.trim()) setAddress(v.address);
   };
 
-  const MIN_ORDER = 50000;
+  const MIN_ORDER = 10000;
   const total = totalAmount();
   const belowMin = total < MIN_ORDER;
   const needed = Math.max(0, MIN_ORDER - total);
 
   const handlePlaceOrder = async () => {
-    if (belowMin) { setError(`Minimum order Rs ${MIN_ORDER.toLocaleString("en-IN")} — add Rs ${needed.toLocaleString("en-IN")} more`); return; }
+    if (belowMin) { setError(`Minimum order is Rs ${MIN_ORDER.toLocaleString("en-IN")}`); return; }
     if (!deliveryArea.trim()) { setError("Please enter your delivery area."); return; }
     if (!address.trim()) { setError("Please enter your delivery address."); return; }
     if (!location) { setError("Please pin your delivery location on the map."); return; }
@@ -71,6 +72,7 @@ export function CheckoutScreen({ navigation }: any) {
   };
 
   return (
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
     <ScrollView style={styles.bg} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
         <Text style={styles.backText}>← Back</Text>
@@ -140,9 +142,9 @@ export function CheckoutScreen({ navigation }: any) {
         {items.map((item) => (
           <View key={item.productId} style={styles.summaryRow}>
             <Text style={styles.summaryName} numberOfLines={1}>
-              {item.name} × {item.qty}
+              {item.name} × {item.qty} carton{item.qty > 1 ? "s" : ""}
             </Text>
-            <Text style={styles.summaryAmt}>{fmtRs(item.price * item.qty)}</Text>
+            <Text style={styles.summaryAmt}>{fmtRs(item.pricePerCarton * item.qty)}</Text>
           </View>
         ))}
         <View style={styles.divider} />
@@ -186,12 +188,14 @@ export function CheckoutScreen({ navigation }: any) {
 
       <View style={{ height: spacing.xxl }} />
     </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.offWhite },
   bg: { flex: 1, backgroundColor: colors.offWhite },
-  content: { padding: spacing.lg, paddingTop: 60, gap: spacing.md },
+  content: { padding: spacing.lg, gap: spacing.md },
   backBtn: { marginBottom: spacing.xs },
   backText: { color: colors.blue, fontSize: 15, fontWeight: "600" },
   heading: { fontSize: 26, fontWeight: "700", color: colors.ink, marginBottom: spacing.xs },

@@ -2,26 +2,26 @@ import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
   ScrollView, RefreshControl, Image, Dimensions,
 } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../lib/api";
 import { useCartStore } from "../../store/cartStore";
 import { colors, spacing, radius, shadow, typography } from "../../lib/theme";
-import { fmtRs, fmtUnitPrice } from "../../lib/format";
-import { imgUri } from "../../lib/image";
+import { fmtCarton } from "../../lib/format";
+import { resolveImageUrl } from "../../lib/imageUrl";
 
 const { width: W } = Dimensions.get("window");
 const CARD_W = (W - spacing.lg * 2 - spacing.sm) / 2;
-const IMG_H  = 160;
-const IMG_BG = "#F4F6F8";
-const PRIMARY = "#2563EB";
+const IMG_H  = Math.round(CARD_W * 0.9);
 
 interface Product {
   id: string; name: string; price: number; mrp?: number;
   unit: string; stockQty: number; moq?: number; imageUrl?: string; brand?: string;
+  piecesPerCarton?: number; pricePerCarton?: number;
 }
-interface Category { id: string; name: string; emoji?: string; imageUrl?: string; }
+interface Category { id: string; name: string; }
 
 // ─── Product card (identical to HomeScreen) ───────────────────────────────────
 function ProductCard({ item, onPress, onAdd }: { item: Product; onPress: () => void; onAdd: () => void }) {
@@ -31,59 +31,51 @@ function ProductCard({ item, onPress, onAdd }: { item: Product; onPress: () => v
   return (
     <TouchableOpacity style={[pc.card, shadow.card]} onPress={onPress} activeOpacity={0.88}>
       <View style={pc.imgWrap}>
-        {imgUri(item.imageUrl)
-          ? <Image source={{ uri: imgUri(item.imageUrl) }} style={pc.img} resizeMode="contain" />
-          : <View style={pc.imgPlaceholder}><Ionicons name="cube-outline" size={32} color={colors.blue} style={{ opacity: 0.35 }} /></View>}
+        {item.imageUrl
+          ? <ExpoImage source={{ uri: resolveImageUrl(item.imageUrl) ?? "" }} style={pc.img} contentFit="cover" cachePolicy="memory-disk" transition={200} placeholder={colors.gray100} />
+          : <View style={pc.imgPlaceholder} />}
+        {discount > 0 && !outOfStock && <View style={pc.badge}><Text style={pc.badgeText}>{discount}%</Text></View>}
         {outOfStock && <View style={pc.oos}><Text style={pc.oosText}>Out of stock</Text></View>}
       </View>
       <View style={pc.body}>
         {item.brand && <Text style={pc.brand} numberOfLines={1}>{item.brand}</Text>}
         <Text style={pc.name} numberOfLines={2}>{item.name}</Text>
-        <View style={pc.priceRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={pc.price}>{fmtUnitPrice(item.price, item.unit)}</Text>
-            {item.mrp && item.mrp > item.price ? (
-              <Text style={pc.mrp}>{fmtRs(item.mrp)}</Text>
-            ) : item.moq && item.moq > 1 ? (
-              <Text style={pc.cartonMeta}>{fmtRs(item.price * item.moq)} / carton ({item.moq} pcs)</Text>
-            ) : (
-              <Text style={pc.meta}>per {item.unit}</Text>
-            )}
-          </View>
-          {!outOfStock && (
-            <TouchableOpacity style={pc.addBtn} onPress={onAdd} activeOpacity={0.8} hitSlop={8}>
-              <Ionicons name="add" size={18} color={colors.white} />
-            </TouchableOpacity>
-          )}
-        </View>
+        {(() => {
+          const pieces = item.piecesPerCarton ?? item.moq ?? 1;
+          const cartonPrice = item.pricePerCarton ?? item.price * pieces;
+          return <Text style={pc.price}>{fmtCarton(cartonPrice, pieces, item.unit)}</Text>;
+        })()}
+        {!outOfStock && (
+          <TouchableOpacity style={pc.addBtn} onPress={onAdd} activeOpacity={0.8} hitSlop={8}>
+            <Ionicons name="add" size={18} color={colors.white} />
+          </TouchableOpacity>
+        )}
       </View>
     </TouchableOpacity>
   );
 }
 const pc = StyleSheet.create({
-  card:           { width: CARD_W, backgroundColor: colors.white, borderRadius: radius.xl, overflow: "hidden", borderWidth: 1, borderColor: colors.gray100 },
-  imgWrap:        { width: "100%", height: IMG_H, backgroundColor: IMG_BG, alignItems: "center", justifyContent: "center", padding: 10 },
+  card:           { width: CARD_W, backgroundColor: colors.white, borderRadius: radius.xl, overflow: "hidden" },
+  imgWrap:        { width: "100%", height: IMG_H },
   img:            { width: "100%", height: "100%" },
-  imgPlaceholder: { width: "100%", height: "100%", alignItems: "center", justifyContent: "center" },
+  imgPlaceholder: { width: "100%", height: "100%", backgroundColor: colors.gray100 },
   badge:          { position: "absolute", top: 8, left: 8, backgroundColor: colors.green, borderRadius: radius.full, paddingHorizontal: 7, paddingVertical: 3 },
   badgeText:      { fontSize: 10, fontFamily: typography.bodySemiBold, color: colors.white },
   oos:            { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.35)", alignItems: "center", justifyContent: "center" },
   oosText:        { fontSize: 11, fontFamily: typography.bodySemiBold, color: colors.white },
-  body:           { padding: 10, gap: 4 },
-  brand:          { fontSize: 10, fontFamily: typography.bodySemiBold, color: PRIMARY, letterSpacing: 0.3, textTransform: "uppercase" },
+  body:           { padding: 10, paddingBottom: 42, gap: 2 },
+  brand:          { fontSize: 10, fontFamily: typography.bodySemiBold, color: colors.blue, letterSpacing: 0.3, textTransform: "uppercase" },
   name:           { fontSize: 13, fontFamily: typography.bodySemiBold, color: colors.ink, lineHeight: 17, minHeight: 34 },
-  priceRow:       { flexDirection: "row", alignItems: "center", marginTop: 4, gap: 8 },
-  price:          { fontSize: 15, fontFamily: typography.heading, color: PRIMARY, fontWeight: "700" },
-  mrp:            { fontSize: 11, fontFamily: typography.body, color: colors.gray400, textDecorationLine: "line-through" },
+  price:          { fontSize: 15, fontFamily: typography.heading, color: "#2563EB", marginTop: 2, fontWeight: "700" },
   cartonMeta:     { fontSize: 10, fontFamily: typography.body, color: "#9BA3BF" },
   meta:           { fontSize: 11, fontFamily: typography.body, color: colors.gray400 },
-  addBtn:         { width: 32, height: 32, borderRadius: 16, backgroundColor: PRIMARY, alignItems: "center", justifyContent: "center" },
+  addBtn:         { position: "absolute", bottom: 10, right: 10, width: 32, height: 32, borderRadius: 16, backgroundColor: colors.blue, alignItems: "center", justifyContent: "center" },
 });
 
 function CardSkeleton() {
   return (
     <View style={[pc.card, shadow.card]}>
-      <View style={{ height: IMG_H, backgroundColor: colors.offWhite }} />
+      <View style={{ height: IMG_H, backgroundColor: colors.gray100 }} />
       <View style={{ padding: 10, gap: 6 }}>
         {[40, 90, 70, 50, 30].map((w, i) => (
           <View key={i} style={{ height: i === 2 ? 12 : 8, width: `${w}%`, backgroundColor: colors.gray100, borderRadius: 4 }} />
@@ -189,7 +181,18 @@ export function CatalogueScreen({ navigation, route }: any) {
             <ProductCard
               item={item}
               onPress={() => navigation.navigate("Product", { productId: item.id })}
-              onAdd={() => addItem({ productId: item.id, name: item.name, price: item.price, unit: item.unit })}
+              onAdd={() => {
+                const pieces = item.piecesPerCarton ?? item.moq ?? 1;
+                const cartonPrice = item.pricePerCarton ?? item.price * pieces;
+                addItem({
+                  productId: item.id,
+                  name: item.name,
+                  price: item.price,
+                  unit: item.unit,
+                  piecesPerCarton: pieces,
+                  pricePerCarton: cartonPrice,
+                });
+              }}
             />
           )}
           ListEmptyComponent={

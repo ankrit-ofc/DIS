@@ -77,22 +77,23 @@ function CartItem({
           <View style={styles.cardInfo}>
             <Text style={styles.cardName} numberOfLines={2}>{item.name}</Text>
             <Text style={styles.cardUnitPrice}>
-              Rs {item.price.toLocaleString()} / {item.unit}
+              {item.qty} carton{item.qty > 1 ? "s" : ""} ({item.qty * item.piecesPerCarton} {item.unit}{item.qty * item.piecesPerCarton > 1 ? "s" : ""})
             </Text>
             <Text style={styles.cardLineTotal}>
-              Rs {(item.price * item.qty).toLocaleString()}
+              Rs {(item.pricePerCarton * item.qty).toLocaleString()}
             </Text>
           </View>
 
-          {/* Qty stepper */}
+          {/* Qty stepper — cartons, min 1 */}
           <View style={styles.qtyCol}>
             <Animated.View style={btnStyle}>
               <TouchableOpacity
                 style={styles.qtyBtn}
-                onPress={() => pressBtn(() => onQtyChange(item.productId, item.qty - 1))}
+                onPress={() => pressBtn(() => onQtyChange(item.productId, Math.max(1, item.qty - 1)))}
                 activeOpacity={0.9}
+                disabled={item.qty <= 1}
               >
-                <Text style={styles.qtyBtnText}>−</Text>
+                <Text style={[styles.qtyBtnText, item.qty <= 1 && { opacity: 0.4 }]}>−</Text>
               </TouchableOpacity>
             </Animated.View>
 

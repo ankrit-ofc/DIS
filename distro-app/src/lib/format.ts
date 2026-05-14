@@ -15,6 +15,11 @@ export function fmtCartonPrice(price: number, moq: number, unit: string): string
   return `Rs ${carton.toLocaleString("en-IN")} / carton (${moq} ${unit}${moq > 1 ? "s" : ""})`;
 }
 
+/** "Rs 14,400 / carton (12 bottles)" — primary carton-priced display */
+export function fmtCarton(pricePerCarton: number, piecesPerCarton: number, unit: string): string {
+  return `Rs ${pricePerCarton.toLocaleString("en-IN")} / carton (${piecesPerCarton} ${unit}${piecesPerCarton > 1 ? "s" : ""})`;
+}
+
 /** One character for session avatar — owner name → store → phone digit */
 export function sessionInitial(p: {
   name?: string | null;

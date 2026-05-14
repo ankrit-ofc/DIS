@@ -33,11 +33,12 @@ model Profile {
   updatedAt     DateTime  @updatedAt
 
   sessions     Session[]
+  resetCodes   PasswordResetCode[]
   orders       Order[]
   ledger       Ledger[]
   notes        CustomerNote[]
   conversation Conversation?
-  sentMessages Message[]     @relation("MessageSender")
+  sentMessages Message[]           @relation("MessageSender")
 }
 
 model Session {
@@ -47,6 +48,18 @@ model Session {
   expiresAt DateTime
   createdAt DateTime @default(now())
   profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+}
+
+model PasswordResetCode {
+  id        String    @id @default(cuid())
+  profileId String
+  code      String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  profile   Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, code, expiresAt])
 }
 
 model Category {
@@ -86,12 +99,12 @@ model Product {
   stockQty        Int             @default(0)
   imageUrl        String?
   active          Boolean         @default(true)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  category       Category?       @relation(fields: [categoryId], references: [id])
-  orderItems     OrderItem[]
-  priceHistory   PriceHistory[]
-  stockMovements StockMovement[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  category        Category?       @relation(fields: [categoryId], references: [id])
+  orderItems      OrderItem[]
+  priceHistory    PriceHistory[]
+  stockMovements  StockMovement[]
 }
 
 model PriceHistory {

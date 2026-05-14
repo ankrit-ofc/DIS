@@ -1,0 +1,38 @@
+{
+  "cli": {
+    "version": ">= 18.8.1",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://dis-production-00b5.up.railway.app/api",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyBFQDH_KmNznrIXkBdu24-g1_iZcQ5SGAQ",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "644163988974-rokpt5nf4qgilkkhpbfvf6shlknl01nc.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "644163988974-8co4t4oaq88cqgulaiqveke63cjn6n7s.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "644163988974-dl6953dv903di5gl9qsin1v9jorj8v1k.apps.googleusercontent.com"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://dis-production-00b5.up.railway.app/api",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyBFQDH_KmNznrIXkBdu24-g1_iZcQ5SGAQ",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "644163988974-rokpt5nf4qgilkkhpbfvf6shlknl01nc.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "644163988974-8co4t4oaq88cqgulaiqveke63cjn6n7s.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "644163988974-dl6953dv903di5gl9qsin1v9jorj8v1k.apps.googleusercontent.com"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

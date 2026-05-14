@@ -2,29 +2,29 @@
   "expo": {
     "name": "DISTRO",
     "slug": "distro-app",
-    "version": "1.0.0",
+    "scheme": "com.distro.app",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/logo-icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash-native.png",
-      "resizeMode": "cover",
-      "backgroundColor": "#2554F1"
+      "image": "./assets/logo-splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#155ac1"
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.distro.app"
+      "bundleIdentifier": "com.distro.app",
+      "buildNumber": "3"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo-icon.png",
-        "backgroundColor": "#2554F1"
-      },
-      "navigationBar": {
-        "backgroundColor": "#2554F1"
+        "backgroundColor": "#155ac1"
       },
       "package": "com.distro.app",
+      "versionCode": 3,
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -36,6 +36,15 @@
       "favicon": "./assets/logo-icon.png"
     },
     "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/logo-splash.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#155ac1"
+        }
+      ],
       [
         "expo-notifications",
         {

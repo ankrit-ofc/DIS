@@ -1,13 +1,10 @@
 import { View, StyleSheet, Text } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createStackNavigator } from "@react-navigation/stack";
-import { getFocusedRouteNameFromRoute } from "@react-navigation/native";
 import Animated, {
-  useSharedValue,
   useAnimatedStyle,
   withSpring,
   withTiming,
-  interpolateColor,
 } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { HomeScreen } from "../screens/buyer/HomeScreen";
@@ -24,6 +21,7 @@ import { useCartStore } from "../store/cartStore";
 import { api } from "../lib/api";
 import { useEffect, useState } from "react";
 import { colors, radius, typography } from "../lib/theme";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const Tab = createBottomTabNavigator();
 const CatalogueStack = createStackNavigator();
@@ -66,14 +64,6 @@ type TabIconConfig = {
 };
 
 function TabIcon({ name, icon, iconFocused, focused, badge }: TabIconConfig & { focused: boolean }) {
-  const progress = useSharedValue(focused ? 1 : 0);
-
-  if (focused) {
-    progress.value = withSpring(1, { damping: 18, stiffness: 200 });
-  } else {
-    progress.value = withTiming(0, { duration: 180 });
-  }
-
   const dotStyle = useAnimatedStyle(() => ({
     opacity: withTiming(focused ? 1 : 0, { duration: 200 }),
     transform: [{ scale: withSpring(focused ? 1 : 0, { damping: 20, stiffness: 300 }) }],
@@ -108,6 +98,7 @@ function TabIcon({ name, icon, iconFocused, focused, badge }: TabIconConfig & { 
 }
 
 export function BuyerTabs() {
+  const insets = useSafeAreaInsets();
   const totalItems = useCartStore((s) => s.totalItems());
   const [chatUnread, setChatUnread] = useState(0);
 
@@ -124,7 +115,7 @@ export function BuyerTabs() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: [styles.tabBar, { height: 60 + (insets.bottom || 0), paddingBottom: 8 + (insets.bottom || 0) }],
         tabBarShowLabel: false,
       }}
     >
@@ -140,52 +131,39 @@ export function BuyerTabs() {
       <Tab.Screen
         name="Catalogue"
         component={CatalogueNavigator}
-        options={({ route }) => {
-          const focused = getFocusedRouteNameFromRoute(route) ?? "CatalogueList";
-          return {
-            tabBarIcon: ({ focused: tabFocused }) => (
-              <TabIcon name="Browse" icon="grid-outline" iconFocused="grid" focused={tabFocused} />
-            ),
-            tabBarStyle: focused === "Product" ? { display: "none" } : styles.tabBar,
-          };
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name="Browse" icon="grid-outline" iconFocused="grid" focused={focused} />
+          ),
         }}
       />
       <Tab.Screen
         name="Cart"
         component={CartNavigator}
-        options={({ route }) => {
-          const focused = getFocusedRouteNameFromRoute(route) ?? "CartMain";
-          const hideOn = ["Checkout", "OrderConfirm"];
-          return {
-            tabBarIcon: ({ focused: tabFocused }) => (
-              <TabIcon
-                name="Cart"
-                icon="bag-outline"
-                iconFocused="bag"
-                focused={tabFocused}
-                badge={totalItems}
-              />
-            ),
-            tabBarStyle: hideOn.includes(focused) ? { display: "none" } : styles.tabBar,
-          };
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon
+              name="Cart"
+              icon="bag-outline"
+              iconFocused="bag"
+              focused={focused}
+              badge={totalItems}
+            />
+          ),
         }}
       />
       <Tab.Screen
         name="Orders"
         component={OrdersNavigator}
-        options={({ route }) => {
-          const focused = getFocusedRouteNameFromRoute(route) ?? "OrdersList";
-          return {
-            tabBarIcon: ({ focused: tabFocused }) => (
-              <TabIcon
-                name="Orders"
-                icon="receipt-outline"
-                iconFocused="receipt"
-                focused={tabFocused}
-              />
-            ),
-            tabBarStyle: focused === "OrderDetail" ? { display: "none" } : styles.tabBar,
-          };
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon
+              name="Orders"
+              icon="receipt-outline"
+              iconFocused="receipt"
+              focused={focused}
+            />
+          ),
         }}
       />
       <Tab.Screen

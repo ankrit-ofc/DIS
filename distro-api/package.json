@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nodemon --exec tsx src/app.ts",
     "build": "tsc",
-    "start": "node dist/app.js",
+    "start": "prisma migrate deploy && node dist/app.js",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
