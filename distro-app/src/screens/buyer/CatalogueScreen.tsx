@@ -191,6 +191,7 @@ export function CatalogueScreen({ navigation, route }: any) {
                   unit: item.unit,
                   piecesPerCarton: pieces,
                   pricePerCarton: cartonPrice,
+                  image: item.imageUrl ?? undefined,
                 });
               }}
             />

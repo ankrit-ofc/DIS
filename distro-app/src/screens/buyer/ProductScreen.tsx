@@ -123,6 +123,7 @@ export function ProductScreen({ navigation, route }: any) {
         unit: product.unit,
         piecesPerCarton,
         pricePerCarton,
+        image: product.imageUrl ?? undefined,
       }, qty);
     }
     fbOpacity.value = withSequence(withTiming(1, { duration: 200 }), withTiming(1, { duration: 800 }), withTiming(0, { duration: 300 }));

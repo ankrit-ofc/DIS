@@ -485,6 +485,7 @@ export function HomeScreen({ navigation }: any) {
                   unit: item.unit,
                   piecesPerCarton: pieces,
                   pricePerCarton: cartonPrice,
+                  image: item.imageUrl ?? undefined,
                 });
               }}
             />

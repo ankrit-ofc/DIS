@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Dimensions,
 } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
   useSharedValue,
@@ -22,6 +23,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useCartStore } from "../../store/cartStore";
 import { colors, spacing, radius, shadow, typography } from "../../lib/theme";
 import { fmtRs } from "../../lib/format";
+import { resolveImageUrl } from "../../lib/imageUrl";
+import { SkeletonLoader } from "../../components/SkeletonLoader";
 
 const { width: W } = Dimensions.get("window");
 
@@ -71,7 +74,28 @@ function CartItem({
       >
         <View style={[styles.card, shadow.sm]}>
           {/* Image */}
-          <View style={styles.cardImg} />
+          <View style={styles.cardImg}>
+            <SkeletonLoader
+              width={64}
+              height={64}
+              borderRadius={radius.lg}
+              style={StyleSheet.absoluteFillObject as any}
+            />
+            {item.image ? (
+              <ExpoImage
+                source={{ uri: resolveImageUrl(item.image) ?? "" }}
+                style={StyleSheet.absoluteFillObject}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                transition={200}
+                placeholder={colors.gray100}
+              />
+            ) : (
+              <View style={styles.cardImgFallback}>
+                <Ionicons name="cube-outline" size={22} color={colors.blue} style={{ opacity: 0.35 }} />
+              </View>
+            )}
+          </View>
 
           {/* Info */}
           <View style={styles.cardInfo}>
@@ -283,6 +307,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gray100,
     borderRadius: radius.lg,
     flexShrink: 0,
+    overflow: "hidden",
+  },
+  cardImgFallback: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.gray100,
   },
   cardInfo: { flex: 1, gap: 3 },
   cardName: { fontSize: 14, fontFamily: typography.bodySemiBold, color: colors.ink, lineHeight: 19 },
