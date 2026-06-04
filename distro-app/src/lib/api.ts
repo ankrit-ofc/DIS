@@ -1,8 +1,7 @@
 import axios from "axios";
 import * as SecureStore from "expo-secure-store";
 import { useAuthStore } from "../store/authStore";
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://dis-production-00b5.up.railway.app/api";
+import { API_URL } from "./config";
 
 export const api = axios.create({
   baseURL: API_URL,
