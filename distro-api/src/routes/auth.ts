@@ -474,6 +474,9 @@ router.delete('/me', requireAuth, async (req: Request, res: Response): Promise<v
     }),
     // Revoke every active session for this profile.
     prisma.session.deleteMany({ where: { profileId: authProfile.id } }),
+    // Drop device push tokens — the anonymized Profile survives, so the
+    // PushToken ON DELETE CASCADE never fires; remove them explicitly.
+    prisma.pushToken.deleteMany({ where: { profileId: authProfile.id } }),
   ]);
 
   res.json({ message: 'Account deleted' });

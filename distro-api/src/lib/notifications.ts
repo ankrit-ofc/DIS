@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { prisma } from './prisma';
 import { sendSMS, type SmsResult } from './sms';
 
 /**
@@ -52,22 +53,62 @@ interface ExpoPushMessage {
   data?: Record<string, unknown>;
 }
 
+interface ExpoPushTicket {
+  status: 'ok' | 'error';
+  id?: string;
+  message?: string;
+  details?: { error?: string };
+}
+
+// Expo accepts at most 100 messages per /send request.
+const EXPO_PUSH_CHUNK = 100;
+
 /**
- * Send one or more Expo push messages. Best-effort — never throws, so callers
- * can fire-and-forget with `void sendExpoPush(...)`.
+ * Send Expo push messages to one or many devices. Best-effort — never throws,
+ * so callers can fire-and-forget with `void sendExpoPush(...)`. Chunks to
+ * Expo's 100-per-request limit and prunes tokens reported DeviceNotRegistered.
  */
 export async function sendExpoPush(messages: ExpoPushMessage[]): Promise<void> {
   if (messages.length === 0) return;
+
+  for (let i = 0; i < messages.length; i += EXPO_PUSH_CHUNK) {
+    const chunk = messages.slice(i, i + EXPO_PUSH_CHUNK);
+    try {
+      const res = await axios.post('https://exp.host/--/api/v2/push/send', chunk, {
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        timeout: 10_000,
+      });
+      // Tickets come back in the same order as the messages sent.
+      const tickets = (res.data?.data ?? []) as ExpoPushTicket[];
+      await pruneDeadTokens(chunk, tickets);
+      // OPTIONAL TODO: collect ok-ticket receipt ids (ticket.id) and add a
+      // checkPushReceipts() for the cleanup cron to query /getReceipts and prune
+      // tokens whose receipts return DeviceNotRegistered. Not wired — would need
+      // persistent storage of receipt ids (see report).
+    } catch (err: unknown) {
+      const detail =
+        (err as { response?: { data?: unknown } })?.response?.data ??
+        (err instanceof Error ? err.message : String(err));
+      console.warn('[ExpoPush] send failed:', detail);
+    }
+  }
+}
+
+/** Delete PushToken rows for any ticket reporting an unregistered device. */
+async function pruneDeadTokens(chunk: ExpoPushMessage[], tickets: ExpoPushTicket[]): Promise<void> {
+  const dead: string[] = [];
+  tickets.forEach((ticket, idx) => {
+    if (ticket?.status === 'error' && ticket.details?.error === 'DeviceNotRegistered') {
+      const msg = chunk[idx];
+      if (msg) dead.push(msg.to);
+    }
+  });
+  if (dead.length === 0) return;
   try {
-    await axios.post('https://exp.host/--/api/v2/push/send', messages, {
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      timeout: 10_000,
-    });
-  } catch (err: unknown) {
-    const detail =
-      (err as { response?: { data?: unknown } })?.response?.data ??
-      (err instanceof Error ? err.message : String(err));
-    console.warn('[ExpoPush] send failed:', detail);
+    const { count } = await prisma.pushToken.deleteMany({ where: { token: { in: dead } } });
+    if (count > 0) console.warn(`[ExpoPush] pruned ${count} unregistered token(s)`);
+  } catch (e) {
+    console.warn('[ExpoPush] token prune failed:', e instanceof Error ? e.message : String(e));
   }
 }
 
