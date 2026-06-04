@@ -9,6 +9,9 @@ web-build/
 *.p8
 *.p12
 *.key
+*.keystore
+*.pem
+keystore-credentials*.txt
 *.mobileprovision
 *.orig.*
 web-build/
