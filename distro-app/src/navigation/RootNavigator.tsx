@@ -5,7 +5,6 @@ import * as SecureStore from "expo-secure-store";
 import { useAuthStore } from "../store/authStore";
 import { AuthStack } from "./AuthStack";
 import { BuyerTabs } from "./BuyerTabs";
-import { AdminTabs } from "./AdminTabs";
 import { OnboardingScreen } from "../screens/auth/OnboardingScreen";
 import { SplashScreen } from "../screens/SplashScreen";
 
@@ -14,7 +13,7 @@ const ONBOARDING_KEY = "distro_onboarding_done";
 type Phase = "loading" | "splash" | "onboarding" | "app";
 
 export function RootNavigator() {
-  const { isLoading, token, profile, loadToken } = useAuthStore();
+  const { isLoading, token, loadToken } = useAuthStore();
   const [phase, setPhase] = useState<Phase>("loading");
   const [onboardingDone, setOnboardingDone] = useState(false);
   const [authInitial, setAuthInitial] = useState<"Login" | "Register">("Login");
@@ -74,10 +73,9 @@ export function RootNavigator() {
     );
   }
 
-  // Phase: app
+  // Phase: app — mobile is buyer-only (admin lives on the web).
   const getNavigator = () => {
     if (!token) return <AuthStack initialScreen={authInitial} />;
-    if (profile?.role === "ADMIN") return <AdminTabs />;
     return <BuyerTabs />;
   };
 
