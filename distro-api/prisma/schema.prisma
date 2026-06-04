@@ -39,6 +39,18 @@ model Profile {
   notes        CustomerNote[]
   conversation Conversation?
   sentMessages Message[]           @relation("MessageSender")
+  pushTokens   PushToken[]
+}
+
+model PushToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  profileId String
+  platform  String?
+  createdAt DateTime @default(now())
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
 }
 
 model Session {

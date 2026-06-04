@@ -419,6 +419,26 @@ router.patch('/me', requireAuth, async (req: Request, res: Response): Promise<vo
   res.json(safeProfile);
 });
 
+// ─── POST /api/auth/push-token — register/refresh this device's Expo token ───
+router.post('/push-token', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const authProfile = (req as any).profile as { id: string };
+  const { token, platform } = req.body as { token?: string; platform?: string };
+
+  if (!token || typeof token !== 'string') {
+    res.status(400).json({ error: 'token is required' });
+    return;
+  }
+
+  // Upsert by token: a device's token is unique and may move between accounts.
+  await prisma.pushToken.upsert({
+    where:  { token },
+    create: { token, profileId: authProfile.id, platform: platform ?? null },
+    update: { profileId: authProfile.id, platform: platform ?? null },
+  });
+
+  res.json({ ok: true });
+});
+
 // ─── DELETE /api/auth/me — delete own account (anonymize + deactivate) ───────
 // We do NOT hard-delete: Profile is referenced by Order/Ledger/Payment rows that
 // must survive for VAT/accounting. Instead we scrub PII, mark the account

@@ -6,7 +6,7 @@ import { prisma } from '../lib/prisma';
 import { requireAuth, isAdmin, requireRole } from '../middleware/auth';
 import { withTransaction } from '../lib/transaction';
 import { sendEmail, render } from '../lib/email';
-import { sendNotification, orderConfirmMessage, statusUpdateMessage } from '../lib/notifications';
+import { sendNotification, orderConfirmMessage, statusUpdateMessage, sendExpoPush, orderStatusPush } from '../lib/notifications';
 import { OrderConfirmEmail } from '../emails/OrderConfirmEmail';
 import { OrderStatusEmail } from '../emails/OrderStatusEmail';
 import { InvoiceEmail } from '../emails/InvoiceEmail';
@@ -420,6 +420,30 @@ router.patch(
 
       }
     }
+
+    // Non-blocking Expo push to the buyer's registered devices
+    void (async () => {
+      try {
+        const tokens = await prisma.pushToken.findMany({
+          where:  { profileId: order.buyerId },
+          select: { token: true },
+        });
+        if (tokens.length === 0) return;
+        const { title, body } = orderStatusPush(order.orderNumber, status);
+        await sendExpoPush(
+          tokens.map((t) => ({
+            to: t.token,
+            title,
+            body,
+            sound: 'default' as const,
+            channelId: 'orders',
+            data: { orderId: order.id, orderNumber: order.orderNumber },
+          })),
+        );
+      } catch (e) {
+        console.error('[ExpoPush] status-change pipeline failed:', e);
+      }
+    })();
 
     // PDF invoice generation + email on CONFIRMED — runs regardless of buyer email
     if (status === 'CONFIRMED') {
