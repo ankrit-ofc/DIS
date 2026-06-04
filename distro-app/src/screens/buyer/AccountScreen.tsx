@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,9 @@ import {
   Modal,
   TextInput,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Linking,
 } from "react-native";
 import { useAuthStore } from "../../store/authStore";
 import { api } from "../../lib/api";
@@ -16,6 +19,12 @@ import { colors, spacing, radius, shadow } from "../../lib/theme";
 import { sessionInitial } from "../../lib/format";
 import Constants from "expo-constants";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+// Public legal/support pages hosted on the DISTRO marketing site.
+// TODO(verify): confirm these production URLs are live before release.
+const HELP_URL = "https://distronepal.com/faq";
+const TERMS_URL = "https://distronepal.com/terms";
+const PRIVACY_URL = "https://distronepal.com/privacy";
 
 function CreditBar({ used, limit }: { used: number; limit: number }) {
   const pct = limit > 0 ? Math.min(used / limit, 1) : 0;
@@ -53,7 +62,7 @@ export function AccountScreen() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   // Edit profile state
-  const [editName, setEditName] = useState(profile?.ownerName ?? profile?.name ?? "");
+  const [editName, setEditName] = useState(profile?.ownerName ?? "");
   const [editStore, setEditStore] = useState(profile?.storeName ?? "");
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState("");
@@ -64,6 +73,15 @@ export function AccountScreen() {
   const [confirmPwd, setConfirmPwd] = useState("");
   const [pwdLoading, setPwdLoading] = useState(false);
   const [pwdError, setPwdError] = useState("");
+  const editStoreRef = useRef<TextInput>(null);
+  const newPwdRef = useRef<TextInput>(null);
+  const confirmPwdRef = useRef<TextInput>(null);
+
+  // Delete account state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const handleLogout = () => {
     Alert.alert("Sign out", "Are you sure you want to sign out?", [
@@ -77,8 +95,8 @@ export function AccountScreen() {
     setEditError("");
     setEditLoading(true);
     try {
-      const res = await api.put("/profile", { name: editName, storeName: editStore });
-      await setAuth(token!, { ...profile!, name: editName, storeName: editStore });
+      await api.patch("/auth/me", { ownerName: editName.trim(), storeName: editStore.trim() });
+      await setAuth(token!, { ...profile!, ownerName: editName.trim(), storeName: editStore.trim() });
       setShowEditModal(false);
     } catch (err: any) {
       setEditError(err.message ?? "Update failed.");
@@ -88,12 +106,12 @@ export function AccountScreen() {
   };
 
   const handleChangePassword = async () => {
-    if (newPwd.length < 6) { setPwdError("New password must be at least 6 characters."); return; }
+    if (newPwd.length < 8) { setPwdError("New password must be at least 8 characters."); return; }
     if (newPwd !== confirmPwd) { setPwdError("Passwords do not match."); return; }
     setPwdError("");
     setPwdLoading(true);
     try {
-      await api.put("/profile/password", { currentPassword: oldPwd, newPassword: newPwd });
+      await api.post("/auth/change-password", { oldPassword: oldPwd, newPassword: newPwd });
       setShowPasswordModal(false);
       setOldPwd(""); setNewPwd(""); setConfirmPwd("");
       Alert.alert("Done", "Password updated successfully.");
@@ -104,9 +122,26 @@ export function AccountScreen() {
     }
   };
 
-  // Placeholder credit data — would come from profile
-  const creditUsed = (profile as any)?.creditUsed ?? 0;
-  const creditLimit = (profile as any)?.creditLimit ?? 50000;
+  const handleDeleteAccount = async () => {
+    if (deleteConfirm.trim().toUpperCase() !== "DELETE") {
+      setDeleteError('Type DELETE to confirm.');
+      return;
+    }
+    setDeleteError("");
+    setDeleteLoading(true);
+    try {
+      await api.delete("/auth/me");
+      // Session is revoked server-side; clear local auth → RootNavigator → AuthStack.
+      await logout();
+    } catch (err: any) {
+      setDeleteError(err.message ?? "Could not delete account. Please try again.");
+      setDeleteLoading(false);
+    }
+  };
+
+  // Credit data comes from /auth/me (Profile.creditLimit / creditUsed)
+  const creditUsed = profile?.creditUsed ?? 0;
+  const creditLimit = profile?.creditLimit ?? 0;
 
   return (
     <ScrollView style={styles.bg} contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]} showsVerticalScrollIndicator={false}>
@@ -116,14 +151,14 @@ export function AccountScreen() {
           <Text style={styles.avatarText}>{sessionInitial(profile)}</Text>
         </View>
         <View style={styles.profileInfo}>
-          <Text style={styles.name}>{profile?.ownerName ?? profile?.name ?? profile?.storeName ?? "Store"}</Text>
+          <Text style={styles.name}>{profile?.ownerName ?? profile?.storeName ?? "Store"}</Text>
           {profile?.storeName && <Text style={styles.storeName}>{profile.storeName}</Text>}
           <Text style={styles.phone}>{profile?.phone ?? "—"}</Text>
         </View>
         <TouchableOpacity
           style={styles.editBtn}
           onPress={() => {
-            setEditName(profile?.name ?? "");
+            setEditName(profile?.ownerName ?? "");
             setEditStore(profile?.storeName ?? "");
             setEditError("");
             setShowEditModal(true);
@@ -154,13 +189,18 @@ export function AccountScreen() {
           <Text style={styles.menuChevron}>›</Text>
         </TouchableOpacity>
         <View style={styles.divider} />
-        <TouchableOpacity style={styles.menuItem}>
+        <TouchableOpacity style={styles.menuItem} onPress={() => Linking.openURL(HELP_URL)}>
           <Text style={styles.menuText}>Help & support</Text>
           <Text style={styles.menuChevron}>›</Text>
         </TouchableOpacity>
         <View style={styles.divider} />
-        <TouchableOpacity style={styles.menuItem}>
+        <TouchableOpacity style={styles.menuItem} onPress={() => Linking.openURL(TERMS_URL)}>
           <Text style={styles.menuText}>Terms & conditions</Text>
+          <Text style={styles.menuChevron}>›</Text>
+        </TouchableOpacity>
+        <View style={styles.divider} />
+        <TouchableOpacity style={styles.menuItem} onPress={() => Linking.openURL(PRIVACY_URL)}>
+          <Text style={styles.menuText}>Privacy policy</Text>
           <Text style={styles.menuChevron}>›</Text>
         </TouchableOpacity>
       </View>
@@ -169,11 +209,21 @@ export function AccountScreen() {
         <Text style={styles.logoutText}>Sign out</Text>
       </TouchableOpacity>
 
+      {/* Danger zone — account deletion */}
+      <TouchableOpacity
+        style={styles.deleteBtn}
+        onPress={() => { setDeleteConfirm(""); setDeleteError(""); setShowDeleteModal(true); }}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.deleteText}>Delete account</Text>
+      </TouchableOpacity>
+
       <Text style={styles.version}>DISTRO v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
 
       {/* Edit Profile Modal */}
       <Modal visible={showEditModal} transparent animationType="slide" onRequestClose={() => setShowEditModal(false)}>
-        <TouchableOpacity style={styles.modalBackdrop} onPress={() => setShowEditModal(false)} />
+        <KeyboardAvoidingView style={styles.modalFlex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowEditModal(false)} />
         <View style={styles.modalSheet}>
           <View style={styles.modalHandle} />
           <Text style={styles.modalTitle}>Edit profile</Text>
@@ -184,14 +234,22 @@ export function AccountScreen() {
             onChangeText={setEditName}
             placeholder="Full name"
             placeholderTextColor={colors.gray400}
+            autoCapitalize="words"
+            returnKeyType="next"
+            blurOnSubmit={false}
+            onSubmitEditing={() => editStoreRef.current?.focus()}
           />
           <Text style={styles.inputLabel}>Store name</Text>
           <TextInput
+            ref={editStoreRef}
             style={styles.input}
             value={editStore}
             onChangeText={setEditStore}
             placeholder="Store name"
             placeholderTextColor={colors.gray400}
+            autoCapitalize="words"
+            returnKeyType="done"
+            onSubmitEditing={handleSaveProfile}
           />
           {!!editError && <Text style={styles.fieldError}>{editError}</Text>}
           <TouchableOpacity
@@ -202,28 +260,39 @@ export function AccountScreen() {
             {editLoading ? <ActivityIndicator color={colors.white} /> : <Text style={styles.modalBtnText}>Save changes</Text>}
           </TouchableOpacity>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Change Password Modal */}
       <Modal visible={showPasswordModal} transparent animationType="slide" onRequestClose={() => setShowPasswordModal(false)}>
-        <TouchableOpacity style={styles.modalBackdrop} onPress={() => setShowPasswordModal(false)} />
+        <KeyboardAvoidingView style={styles.modalFlex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowPasswordModal(false)} />
         <View style={styles.modalSheet}>
           <View style={styles.modalHandle} />
           <Text style={styles.modalTitle}>Change password</Text>
           {[
-            { label: "Current password", val: oldPwd, setter: setOldPwd, ph: "Current password" },
-            { label: "New password", val: newPwd, setter: setNewPwd, ph: "Min. 6 characters" },
-            { label: "Confirm new password", val: confirmPwd, setter: setConfirmPwd, ph: "Re-enter new password" },
+            { label: "Current password", val: oldPwd, setter: setOldPwd, ph: "Current password",
+              ref: undefined as any, returnKeyType: "next" as const, onSubmit: () => newPwdRef.current?.focus() },
+            { label: "New password", val: newPwd, setter: setNewPwd, ph: "Min. 8 characters",
+              ref: newPwdRef, returnKeyType: "next" as const, onSubmit: () => confirmPwdRef.current?.focus() },
+            { label: "Confirm new password", val: confirmPwd, setter: setConfirmPwd, ph: "Re-enter new password",
+              ref: confirmPwdRef, returnKeyType: "done" as const, onSubmit: handleChangePassword },
           ].map((f) => (
             <View key={f.label}>
               <Text style={styles.inputLabel}>{f.label}</Text>
               <TextInput
+                ref={f.ref}
                 style={styles.input}
                 value={f.val}
                 onChangeText={f.setter}
                 placeholder={f.ph}
                 placeholderTextColor={colors.gray400}
                 secureTextEntry
+                autoCapitalize="none"
+                autoComplete="off"
+                returnKeyType={f.returnKeyType}
+                blurOnSubmit={f.returnKeyType === "done"}
+                onSubmitEditing={f.onSubmit}
               />
             </View>
           ))}
@@ -236,6 +305,45 @@ export function AccountScreen() {
             {pwdLoading ? <ActivityIndicator color={colors.white} /> : <Text style={styles.modalBtnText}>Update password</Text>}
           </TouchableOpacity>
         </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Delete Account Modal */}
+      <Modal visible={showDeleteModal} transparent animationType="slide" onRequestClose={() => setShowDeleteModal(false)}>
+        <KeyboardAvoidingView style={styles.modalFlex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowDeleteModal(false)} />
+        <View style={styles.modalSheet}>
+          <View style={styles.modalHandle} />
+          <Text style={styles.modalTitle}>Delete account</Text>
+          <Text style={styles.deleteWarning}>
+            This permanently deactivates your account and removes your personal details.
+            Your past orders are kept for billing records. This cannot be undone.
+          </Text>
+          <Text style={styles.inputLabel}>Type DELETE to confirm</Text>
+          <TextInput
+            style={styles.input}
+            value={deleteConfirm}
+            onChangeText={setDeleteConfirm}
+            placeholder="DELETE"
+            placeholderTextColor={colors.gray400}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            returnKeyType="done"
+            onSubmitEditing={handleDeleteAccount}
+          />
+          {!!deleteError && <Text style={styles.fieldError}>{deleteError}</Text>}
+          <TouchableOpacity
+            style={[
+              styles.modalDeleteBtn,
+              (deleteLoading || deleteConfirm.trim().toUpperCase() !== "DELETE") && styles.btnDisabled,
+            ]}
+            onPress={handleDeleteAccount}
+            disabled={deleteLoading || deleteConfirm.trim().toUpperCase() !== "DELETE"}
+          >
+            {deleteLoading ? <ActivityIndicator color={colors.white} /> : <Text style={styles.modalBtnText}>Delete my account</Text>}
+          </TouchableOpacity>
+        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </ScrollView>
   );
@@ -308,9 +416,23 @@ const styles = StyleSheet.create({
     borderColor: "#FECACA",
   },
   logoutText: { color: "#DC2626", fontWeight: "700", fontSize: 15 },
+  deleteBtn: {
+    alignItems: "center",
+    paddingVertical: 12,
+  },
+  deleteText: { color: "#DC2626", fontWeight: "600", fontSize: 14, textDecorationLine: "underline" },
+  deleteWarning: { fontSize: 13, color: colors.gray600, lineHeight: 19 },
+  modalDeleteBtn: {
+    backgroundColor: "#DC2626",
+    borderRadius: radius.md,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: spacing.xs,
+  },
   version: { textAlign: "center", color: colors.gray400, fontSize: 12 },
   // Modal
-  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)" },
+  modalFlex: { flex: 1, justifyContent: "flex-end" },
+  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.4)" },
   modalSheet: {
     backgroundColor: colors.white,
     borderTopLeftRadius: radius.xl,
