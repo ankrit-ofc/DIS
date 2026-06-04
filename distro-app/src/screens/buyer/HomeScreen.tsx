@@ -348,7 +348,7 @@ export function HomeScreen({ navigation }: any) {
 
   useEffect(() => { load(); }, []);
 
-  const storeName = profile?.storeName ?? profile?.ownerName ?? profile?.name ?? "Your Store";
+  const storeName = profile?.storeName ?? profile?.ownerName ?? "Your Store";
   const initial = sessionInitial(profile);
   const h = new Date().getHours();
   const greeting = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";

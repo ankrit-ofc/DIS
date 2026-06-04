@@ -49,8 +49,7 @@ function IllustrationPay() {
       {/* Payment pills */}
       <View style={illus.payRow}>
         {[
-          { label: "eSewa", bg: "#00AA60" },
-          { label: "COD", bg: colors.ink },
+          { label: "Cash on Delivery", bg: colors.ink },
         ].map((p) => (
           <View key={p.label} style={[illus.payPill, { backgroundColor: p.bg }]}>
             <Text style={illus.payPillText}>{p.label}</Text>
@@ -224,8 +223,8 @@ const SLIDES = [
     id: "pay",
     Illustration: IllustrationPay,
     step: "Step 2 of 3",
-    title: "Pay how you want.",
-    sub: "Cash on Delivery available everywhere. eSewa & PhonePe coming soon.",
+    title: "Pay on delivery.",
+    sub: "Cash on Delivery available everywhere we deliver.",
   },
   {
     id: "track",

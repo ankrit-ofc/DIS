@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { View, Text, TouchableOpacity, Alert } from "react-native";
+import { useRef, useState } from "react";
+import { View, Text, TouchableOpacity, Alert, TextInput as TI } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RouteProp, CommonActions } from "@react-navigation/native";
@@ -22,6 +22,7 @@ export function NewPasswordScreen({ navigation, route }: Props) {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const confirmRef = useRef<TI>(null);
 
   const handleSubmit = async () => {
     if (password.length < 8) {
@@ -79,6 +80,8 @@ export function NewPasswordScreen({ navigation, route }: Props) {
           secureTextEntry
           autoCapitalize="none"
           autoFocus
+          returnKeyType="next"
+          onSubmitEditing={() => confirmRef.current?.focus()}
         />
         <InputField
           label="Confirm password"
@@ -87,6 +90,9 @@ export function NewPasswordScreen({ navigation, route }: Props) {
           placeholder="Re-enter password"
           secureTextEntry
           autoCapitalize="none"
+          inputRef={confirmRef}
+          returnKeyType="done"
+          onSubmitEditing={handleSubmit}
         />
         {!!error && (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.redLight, padding: 10, borderRadius: 8 }}>

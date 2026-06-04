@@ -54,6 +54,8 @@ export function ForgotPasswordScreen({ navigation }: Props) {
           keyboardType="email-address"
           autoCapitalize="none"
           autoFocus
+          returnKeyType="send"
+          onSubmitEditing={handleSubmit}
         />
         {!!error && (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.redLight, padding: 10, borderRadius: 8 }}>

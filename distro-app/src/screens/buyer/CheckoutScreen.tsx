@@ -7,36 +7,46 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import { useCartStore } from "../../store/cartStore";
+import { useAuthStore } from "../../store/authStore";
 import { api } from "../../lib/api";
 import { colors, spacing, radius, shadow } from "../../lib/theme";
 import { fmtRs } from "../../lib/format";
 import { LocationPicker, LocationPickerValue } from "../../components/LocationPicker";
 
-// [ESEWA - UNCOMMENT WHEN MERCHANT ACCOUNT READY]
-// { key: "ESEWA", label: "eSewa" },
-// [/ESEWA]
-// [KHALTI - UNCOMMENT WHEN MERCHANT ACCOUNT READY]
-// { key: "KHALTI", label: "Khalti" },
-// [/KHALTI]
-const PAYMENT_METHODS = [
-  { key: "COD", label: "Cash on Delivery" },
-];
+// DISTRO currently delivers only within the Kathmandu Valley.
+const VALLEY_DISTRICTS = ["Kathmandu", "Lalitpur", "Bhaktapur"] as const;
 
 export function CheckoutScreen({ navigation }: any) {
   const { items, totalAmount, clearCart } = useCartStore();
-  const [deliveryArea, setDeliveryArea] = useState("");
-  const [address, setAddress] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("COD");
+  const { profile } = useAuthStore();
+  // Prefill from the buyer's saved profile (single-address autofill — Part 3C).
+  const [district, setDistrict] = useState<string>(
+    profile?.district && (VALLEY_DISTRICTS as readonly string[]).includes(profile.district)
+      ? profile.district
+      : ""
+  );
+  const [address, setAddress] = useState(profile?.address ?? "");
+  // COD is the only supported method for now; sent verbatim to the backend.
+  const paymentMethod = "COD";
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [location, setLocation] = useState<LocationPickerValue | null>(null);
 
   const handleLocationChange = (v: LocationPickerValue) => {
     setLocation(v);
-    if (v.address && !address.trim()) setAddress(v.address);
+    if (v.address) {
+      // Reverse-geocoded address — populate the field (user can still edit).
+      setAddress(v.address);
+      const lower = v.address.toLowerCase();
+      const matched = VALLEY_DISTRICTS.find((d) => lower.includes(d.toLowerCase()));
+      if (matched) setDistrict(matched);
+    }
   };
 
   const MIN_ORDER = 10000;
@@ -46,7 +56,7 @@ export function CheckoutScreen({ navigation }: any) {
 
   const handlePlaceOrder = async () => {
     if (belowMin) { setError(`Minimum order is Rs ${MIN_ORDER.toLocaleString("en-IN")}`); return; }
-    if (!deliveryArea.trim()) { setError("Please enter your delivery area."); return; }
+    if (!district) { setError("Please select your delivery district."); return; }
     if (!address.trim()) { setError("Please enter your delivery address."); return; }
     if (!location) { setError("Please pin your delivery location on the map."); return; }
     setError("");
@@ -55,7 +65,7 @@ export function CheckoutScreen({ navigation }: any) {
       const res = await api.post("/orders", {
         items: items.map((i) => ({ productId: i.productId, qty: i.qty })),
         paymentMethod,
-        deliveryDistrict: deliveryArea.trim(),
+        deliveryDistrict: district,
         deliveryAddress: address.trim(),
         deliveryLat: location?.latitude ?? null,
         deliveryLng: location?.longitude ?? null,
@@ -73,22 +83,31 @@ export function CheckoutScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
     <ScrollView style={styles.bg} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
         <Text style={styles.backText}>← Back</Text>
       </TouchableOpacity>
       <Text style={styles.heading}>Checkout</Text>
 
-      {/* Delivery Area */}
+      {/* Delivery district */}
       <View style={[styles.section, shadow.sm]}>
-        <Text style={styles.sectionTitle}>Delivery area</Text>
-        <TextInput
-          style={styles.addressInput}
-          value={deliveryArea}
-          onChangeText={setDeliveryArea}
-          placeholder="e.g. Balaju, Kathmandu"
-          placeholderTextColor={colors.gray400}
-        />
+        <Text style={styles.sectionTitle}>Delivery district</Text>
+        <View style={styles.districtRow}>
+          {VALLEY_DISTRICTS.map((d) => {
+            const active = district === d;
+            return (
+              <TouchableOpacity
+                key={d}
+                style={[styles.districtChip, active && styles.districtChipActive]}
+                onPress={() => setDistrict(d)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.districtChipText, active && styles.districtChipTextActive]}>{d}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
         <Text style={styles.comingSoon}>We currently deliver within the Kathmandu Valley area</Text>
       </View>
 
@@ -104,6 +123,7 @@ export function CheckoutScreen({ navigation }: any) {
           multiline
           numberOfLines={2}
         />
+        <Text style={styles.comingSoon}>Pin your location below and we'll fill this in — edit as needed.</Text>
       </View>
 
       {/* Map */}
@@ -119,21 +139,10 @@ export function CheckoutScreen({ navigation }: any) {
       {/* Payment */}
       <View style={[styles.section, shadow.sm]}>
         <Text style={styles.sectionTitle}>Payment method</Text>
-        {PAYMENT_METHODS.map((m) => (
-          <TouchableOpacity
-            key={m.key}
-            style={[styles.methodRow, paymentMethod === m.key && styles.methodRowActive]}
-            onPress={() => setPaymentMethod(m.key)}
-          >
-            <View style={[styles.radio, paymentMethod === m.key && styles.radioActive]}>
-              {paymentMethod === m.key && <View style={styles.radioDot} />}
-            </View>
-            <Text style={[styles.methodLabel, paymentMethod === m.key && styles.methodLabelActive]}>
-              {m.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-        <Text style={styles.comingSoon}>Online payments coming soon — eSewa &amp; PhonePe</Text>
+        <View style={styles.codRow}>
+          <Ionicons name="cash-outline" size={20} color={colors.green} />
+          <Text style={styles.codLabel}>Cash on Delivery</Text>
+        </View>
       </View>
 
       {/* Order summary */}
@@ -188,13 +197,28 @@ export function CheckoutScreen({ navigation }: any) {
 
       <View style={{ height: spacing.xxl }} />
     </ScrollView>
+    </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.offWhite },
+  flex: { flex: 1 },
   bg: { flex: 1, backgroundColor: colors.offWhite },
+  districtRow: { flexDirection: "row", gap: spacing.sm },
+  districtChip: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 12,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.gray200,
+    backgroundColor: colors.offWhite,
+  },
+  districtChipActive: { borderColor: colors.blue, backgroundColor: colors.blueLight },
+  districtChipText: { fontSize: 14, fontWeight: "600", color: colors.gray600 },
+  districtChipTextActive: { color: colors.blue, fontWeight: "700" },
   content: { padding: spacing.lg, gap: spacing.md },
   backBtn: { marginBottom: spacing.xs },
   backText: { color: colors.blue, fontSize: 15, fontWeight: "600" },
@@ -244,28 +268,16 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   tapMapText: { color: colors.blue, fontSize: 13, fontWeight: "600" },
-  methodRow: {
+  codRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md,
+    gap: spacing.sm,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.md,
     borderRadius: radius.md,
+    backgroundColor: colors.blueLight,
   },
-  methodRowActive: { backgroundColor: colors.blueLight },
-  radio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: colors.gray400,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  radioActive: { borderColor: colors.blue },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.blue },
-  methodLabel: { fontSize: 14, color: colors.gray600 },
-  methodLabelActive: { color: colors.ink, fontWeight: "700" },
+  codLabel: { fontSize: 14, fontWeight: "700", color: colors.ink },
   comingSoon: { fontSize: 12, color: colors.gray400, marginTop: 8 },
   summaryRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   summaryName: { flex: 1, fontSize: 13, color: colors.gray600, marginRight: spacing.sm },

@@ -23,8 +23,9 @@
         "foregroundImage": "./assets/logo-icon.png",
         "backgroundColor": "#155ac1"
       },
-      "package": "com.distro.app",
+      "package": "com.distronepal.app",
       "versionCode": 3,
+      "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",

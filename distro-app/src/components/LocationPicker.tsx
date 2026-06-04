@@ -157,6 +157,36 @@ export function LocationPicker({
     mapRef.current?.animateToRegion(r, 600);
   };
 
+  // Reverse-geocode a coordinate to a human-readable address (best effort).
+  const reverseGeocode = async (
+    latitude: number,
+    longitude: number
+  ): Promise<string | undefined> => {
+    try {
+      const results = await Location.reverseGeocodeAsync({ latitude, longitude });
+      const r = results?.[0];
+      if (!r) return undefined;
+      const parts = [r.name, r.street, r.district, r.subregion, r.city, r.region].filter(
+        (x): x is string => !!x
+      );
+      const seen = new Set<string>();
+      const deduped = parts.filter((p) => (seen.has(p) ? false : (seen.add(p), true)));
+      return deduped.join(", ") || undefined;
+    } catch {
+      return undefined;
+    }
+  };
+
+  // Drop a pin from a map interaction, then fill in the reverse-geocoded address.
+  const commitPin = async (latitude: number, longitude: number) => {
+    onChange({ latitude, longitude, address: value?.address });
+    const addr = await reverseGeocode(latitude, longitude);
+    if (addr) {
+      setQuery(addr);
+      onChange({ latitude, longitude, address: addr });
+    }
+  };
+
   const handleSelectPrediction = async (p: Prediction) => {
     setShowDropdown(false);
     setQuery(p.description);
@@ -182,8 +212,8 @@ export function LocationPicker({
         accuracy: Location.Accuracy.High,
       });
       const { latitude, longitude } = loc.coords;
-      onChange({ latitude, longitude, address: value?.address });
       pan(latitude, longitude);
+      await commitPin(latitude, longitude);
     } catch {
       Alert.alert("Error", "Could not get your location. Try again.");
     } finally {
@@ -193,12 +223,12 @@ export function LocationPicker({
 
   const handleMarkerDrag = (e: any) => {
     const { latitude, longitude } = e.nativeEvent.coordinate;
-    onChange({ latitude, longitude, address: value?.address });
+    void commitPin(latitude, longitude);
   };
 
   const handleMapPress = (e: any) => {
     const { latitude, longitude } = e.nativeEvent.coordinate;
-    onChange({ latitude, longitude, address: value?.address });
+    void commitPin(latitude, longitude);
   };
 
   if (!GOOGLE_API_KEY) {
