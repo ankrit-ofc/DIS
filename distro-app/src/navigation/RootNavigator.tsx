@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { NavigationContainer } from "@react-navigation/native";
+import { navigationRef } from "./navigationRef";
 import * as ExpoSplashScreen from "expo-splash-screen";
 import * as SecureStore from "expo-secure-store";
 import { useAuthStore } from "../store/authStore";
@@ -80,6 +81,6 @@ export function RootNavigator() {
   };
 
   return (
-    <NavigationContainer>{getNavigator()}</NavigationContainer>
+    <NavigationContainer ref={navigationRef}>{getNavigator()}</NavigationContainer>
   );
 }

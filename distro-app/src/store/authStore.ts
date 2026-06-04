@@ -1,20 +1,36 @@
 import { create } from "zustand";
 import * as SecureStore from "expo-secure-store";
+import { Platform } from "react-native";
 import { api } from "../lib/api";
 import { useCartStore } from "./cartStore";
+import { registerForPushNotificationsAsync } from "../lib/notifications";
 
 // NEVER import AsyncStorage. Use SecureStore only.
 
 const TOKEN_KEY = "distro_token";
 
+/** Register this device's Expo push token with the backend. Best-effort. */
+function syncPushToken(): void {
+  registerForPushNotificationsAsync()
+    .then((token) => {
+      if (token) return api.post("/auth/push-token", { token, platform: Platform.OS });
+    })
+    .catch(() => {
+      // ignore — push is non-critical (no permission, simulator, offline, etc.)
+    });
+}
+
 interface Profile {
   id: string;
   phone: string;
   role: "ADMIN" | "BUYER";
-  /** API uses ownerName; some flows use `name` */
-  name?: string;
+  /** Canonical field returned by the API (`/auth/me`, `PATCH /auth/me`). */
   ownerName?: string | null;
   storeName?: string;
+  district?: string | null;
+  address?: string | null;
+  creditLimit?: number;
+  creditUsed?: number;
 }
 
 interface AuthState {
@@ -47,6 +63,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           return;
         }
         set({ token, profile: res.data, isLoading: false });
+        syncPushToken();
         return;
       }
     } catch {
@@ -63,6 +80,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     await SecureStore.setItemAsync(TOKEN_KEY, token);
     set({ token, profile });
+    syncPushToken();
   },
 
   logout: async () => {

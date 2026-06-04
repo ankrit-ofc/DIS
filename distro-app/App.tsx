@@ -4,7 +4,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SplashScreen from "expo-splash-screen";
 import * as Font from "expo-font";
-import { setupNotifications } from "./src/lib/notifications";
+import { setupNotifications, initNotificationRouting } from "./src/lib/notifications";
 import { ThemeProvider } from "./src/lib/ThemeContext";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 import { clearLegacyCart } from "./src/store/cartStore";
@@ -36,6 +36,8 @@ export default function App() {
     setupNotifications().catch(() => { });
     loadFonts();
     clearLegacyCart();
+    const cleanupRouting = initNotificationRouting();
+    return cleanupRouting;
   }, []);
 
   return (
