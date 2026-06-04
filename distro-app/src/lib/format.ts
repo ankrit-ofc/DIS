@@ -22,13 +22,12 @@ export function fmtCarton(pricePerCarton: number, piecesPerCarton: number, unit:
 
 /** One character for session avatar — owner name → store → phone digit */
 export function sessionInitial(p: {
-  name?: string | null;
   ownerName?: string | null;
   storeName?: string | null;
   phone?: string | null;
 } | null | undefined): string {
   if (!p) return "?";
-  const name = (p.ownerName ?? p.name)?.trim();
+  const name = p.ownerName?.trim();
   if (name) return name.charAt(0).toUpperCase();
   const store = p.storeName?.trim();
   if (store) return store.charAt(0).toUpperCase();
