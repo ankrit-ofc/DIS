@@ -5,12 +5,15 @@ import {
   ScrollView,
   ActivityIndicator,
   TouchableOpacity,
-  Linking,
   Alert,
 } from "react-native";
 import { useState, useEffect } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
+import * as SecureStore from "expo-secure-store";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 import { api } from "../../lib/api";
+import { API_URL } from "../../lib/config";
 import { StatusBadge } from "../../components/StatusBadge";
 import { colors, spacing, radius, shadow } from "../../lib/theme";
 import { fmtRs } from "../../lib/format";
@@ -127,6 +130,7 @@ export function OrderDetailScreen({ navigation, route }: any) {
   const [error, setError] = useState("");
   const [remainingMs, setRemainingMs] = useState(0);
   const [actionLoading, setActionLoading] = useState(false);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
   const { addItem, updateQty } = useCartStore();
 
   const loadOrder = () => {
@@ -157,9 +161,45 @@ export function OrderDetailScreen({ navigation, route }: any) {
   const mins = Math.floor(remainingMs / 60000);
   const secs = Math.floor((remainingMs % 60000) / 1000);
 
-  const handleDownloadInvoice = () => {
-    const url = `${process.env.EXPO_PUBLIC_API_URL}/orders/${orderId}/invoice`;
-    Linking.openURL(url).catch(() => {});
+  const handleDownloadInvoice = async () => {
+    if (invoiceLoading) return;
+    setInvoiceLoading(true);
+    try {
+      // The invoice route is auth-protected, so we download with the Bearer token
+      // (same token the api client uses) instead of opening the URL in a browser.
+      const token = await SecureStore.getItemAsync("distro_token");
+      if (!token) {
+        Alert.alert("Sign in required", "Please sign in again to download your invoice.");
+        return;
+      }
+      const filename = `invoice-${order.orderNumber || orderId}.pdf`;
+      const fileUri = FileSystem.documentDirectory + filename;
+      const { uri, status } = await FileSystem.downloadAsync(
+        `${API_URL}/orders/${orderId}/invoice`,
+        fileUri,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (status !== 200) {
+        await FileSystem.deleteAsync(uri, { idempotent: true });
+        Alert.alert("Download failed", "Could not generate the invoice. Please try again.");
+        return;
+      }
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: "application/pdf",
+          dialogTitle: `Invoice ${order.orderNumber || ""}`.trim(),
+          UTI: "com.adobe.pdf",
+        });
+      } else {
+        Alert.alert("Saved", `Invoice saved to ${uri}`);
+      }
+    } catch {
+      Alert.alert("Download failed", "Could not download the invoice. Please try again.");
+    } finally {
+      setInvoiceLoading(false);
+    }
   };
 
   const handleCancel = () => {
@@ -341,8 +381,17 @@ export function OrderDetailScreen({ navigation, route }: any) {
         </TouchableOpacity>
       )}
 
-      <TouchableOpacity style={styles.invoiceBtn} onPress={handleDownloadInvoice} activeOpacity={0.85}>
-        <Text style={styles.invoiceBtnText}>Download Invoice (PDF)</Text>
+      <TouchableOpacity
+        style={[styles.invoiceBtn, invoiceLoading && styles.btnDisabled]}
+        onPress={handleDownloadInvoice}
+        disabled={invoiceLoading}
+        activeOpacity={0.85}
+      >
+        {invoiceLoading ? (
+          <ActivityIndicator color={colors.blue} />
+        ) : (
+          <Text style={styles.invoiceBtnText}>Download Invoice (PDF)</Text>
+        )}
       </TouchableOpacity>
 
       <View style={{ height: spacing.xxl }} />
