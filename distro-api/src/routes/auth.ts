@@ -419,6 +419,46 @@ router.patch('/me', requireAuth, async (req: Request, res: Response): Promise<vo
   res.json(safeProfile);
 });
 
+// ─── DELETE /api/auth/me — delete own account (anonymize + deactivate) ───────
+// We do NOT hard-delete: Profile is referenced by Order/Ledger/Payment rows that
+// must survive for VAT/accounting. Instead we scrub PII, mark the account
+// SUSPENDED, and revoke all sessions. Order/ledger history stays intact.
+router.delete('/me', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const authProfile = (req as any).profile as { id: string };
+
+  // phone is NOT NULL + @unique, so it can't be nulled — use a unique tombstone.
+  const tombstonePhone = `DELETED_${authProfile.id}`;
+
+  await prisma.$transaction([
+    prisma.profile.update({
+      where: { id: authProfile.id },
+      data: {
+        status: 'SUSPENDED',
+        phone: tombstonePhone,
+        email: null,
+        ownerName: null,
+        storeName: null,
+        address: null,
+        district: null,
+        companyName: null,
+        panNumber: null,
+        googleId: null,
+        passwordHash: '',          // empty hash → bcrypt.compare always fails
+        emailVerified: false,
+        phoneVerified: false,
+        otpCode: null,
+        otpExpiry: null,
+        loginAttempts: 0,
+        lockedUntil: null,
+      },
+    }),
+    // Revoke every active session for this profile.
+    prisma.session.deleteMany({ where: { profileId: authProfile.id } }),
+  ]);
+
+  res.json({ message: 'Account deleted' });
+});
+
 // ─── POST /api/auth/change-password — change own password ───────────────────
 router.post('/change-password', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const authProfile = (req as any).profile as { id: string };
