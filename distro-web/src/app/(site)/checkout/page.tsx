@@ -35,7 +35,7 @@ function CheckoutForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const MIN_ORDER = 50000;
+  const MIN_ORDER = 10000;
   const VAT_RATE = 0.13;
   const sub = subtotal();
   const vat = Math.round(sub * VAT_RATE * 100) / 100;
