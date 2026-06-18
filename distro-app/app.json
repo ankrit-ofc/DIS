@@ -3,7 +3,7 @@
     "name": "DISTRO",
     "slug": "distro-app",
     "scheme": "com.distro.app",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/logo-icon.png",
     "userInterfaceStyle": "light",
@@ -24,7 +24,6 @@
         "backgroundColor": "#155ac1"
       },
       "package": "com.distronepal.app",
-      "versionCode": 3,
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "ACCESS_FINE_LOCATION",

@@ -35,7 +35,7 @@ interface Order {
   deliveryFee: number;
   total: number;
   createdAt: string;
-  items: { id: number; productName: string; qty: number; price: number; unit: string }[];
+  items: { id: number; productName?: string; name?: string; qty: number; price: number; unit?: string }[];
   invoicePdfPath?: string | null;
   invoiceEmailSent?: boolean;
 }
@@ -163,7 +163,20 @@ function OrdersContent() {
     return Array.from(byDay.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1));
   }, [orders]);
 
-  const selectedOrder = orders.find((o) => o.id === selectedId);
+  // When an order is selected, fetch its full detail so the admin always sees
+  // the complete, up-to-date list of ordered items (the list payload can be
+  // partial). Falls back to the list row while the detail request is in flight.
+  const { data: detailData, isFetching: detailFetching } = useQuery<{ order: Order }>({
+    queryKey: ["admin-order", selectedId],
+    queryFn: () => api.get(`/orders/${selectedId}`).then((r) => r.data),
+    enabled: selectedId != null,
+  });
+
+  const listOrder = orders.find((o) => o.id === selectedId);
+  const detailOrder = detailData?.order;
+  const selectedOrder = listOrder ?? detailOrder;
+  // Prefer the freshly-fetched detail items; fall back to whatever the list carried.
+  const orderItems = (detailOrder?.items?.length ? detailOrder.items : selectedOrder?.items) ?? [];
 
   const updateStatus = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) =>
@@ -189,6 +202,7 @@ function OrdersContent() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-stats"] });
+      qc.invalidateQueries({ queryKey: ["admin-order"] });
     },
   });
 
@@ -241,7 +255,7 @@ function OrdersContent() {
   };
 
   return (
-    <div className="flex gap-6 h-[calc(100vh-100px)]">
+    <div className="flex gap-6 h-[calc(100vh_-_100px)]">
       {/* Left: orders list */}
       <div className="flex-1 flex flex-col min-w-0">
         <div className="mb-5 space-y-3">
@@ -588,26 +602,39 @@ function OrdersContent() {
             {/* Items */}
             <div>
               <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">
-                Items
+                Items {orderItems.length > 0 && `(${orderItems.length})`}
               </p>
-              <ul className="divide-y divide-gray-200 border border-gray-200 rounded-xl overflow-hidden">
-                {selectedOrder.items.map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex justify-between px-3 py-2.5 text-xs"
-                  >
-                    <div>
-                      <p className="font-medium text-ink">{item.productName}</p>
-                      <p className="text-gray-400">
-                        {item.qty} × {formatPrice(item.price)}
+              {orderItems.length === 0 ? (
+                <div className="flex items-center gap-2 text-xs text-gray-400 border border-gray-200 rounded-xl px-3 py-3">
+                  {detailFetching ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin" />
+                      Loading items…
+                    </>
+                  ) : (
+                    "No items found for this order."
+                  )}
+                </div>
+              ) : (
+                <ul className="divide-y divide-gray-200 border border-gray-200 rounded-xl overflow-hidden">
+                  {orderItems.map((item) => (
+                    <li
+                      key={item.id}
+                      className="flex justify-between px-3 py-2.5 text-xs"
+                    >
+                      <div>
+                        <p className="font-medium text-ink">{item.productName ?? item.name}</p>
+                        <p className="text-gray-400">
+                          {item.qty} × {formatPrice(item.price)}
+                        </p>
+                      </div>
+                      <p className="font-grotesk font-semibold text-ink">
+                        {formatPrice(item.price * item.qty)}
                       </p>
-                    </div>
-                    <p className="font-grotesk font-semibold text-ink">
-                      {formatPrice(item.price * item.qty)}
-                    </p>
-                  </li>
-                ))}
-              </ul>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             {/* Totals */}
