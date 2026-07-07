@@ -3,7 +3,7 @@
 import { X, ShoppingBag, Plus, Minus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useCartStore } from "@/store/cartStore";
-import { formatPrice } from "@/lib/utils";
+import { formatPrice, unitShort } from "@/lib/utils";
 
 export default function CartDrawer() {
   const { items, isOpen, closeCart, updateQty, removeItem, subtotal } =
@@ -73,11 +73,19 @@ export default function CartDrawer() {
                       {item.name}
                     </p>
                     <p className="text-xs text-gray-600 mt-0.5">
-                      {item.qty} {item.qty === 1 ? "carton" : "cartons"} · {item.piecesPerCarton} pcs/ctn
+                      {item.qty} {unitShort(item.sellUnit)}
+                      {item.sellUnit === "CARTON" && item.piecesPerCarton
+                        ? ` · ${item.piecesPerCarton} pcs/ctn`
+                        : ""}
                     </p>
                     <p className="font-grotesk font-semibold text-blue text-sm mt-1">
                       {formatPrice(item.price * item.qty)}
                     </p>
+                    {item.qty >= item.maxOrderQty && (
+                      <p className="text-[10px] text-amber-600 mt-0.5">
+                        Only {item.maxOrderQty} available
+                      </p>
+                    )}
                   </div>
 
                   {/* Qty + remove */}
@@ -91,10 +99,13 @@ export default function CartDrawer() {
                     </button>
                     <div className="flex items-center gap-1.5">
                       <button
-                        onClick={() => updateQty(item.id, item.qty - 1)}
-                        disabled={item.qty <= 1}
-                        className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 hover:bg-blue-pale disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                        aria-label="Decrease cartons"
+                        onClick={() =>
+                          item.qty - 1 < item.moq
+                            ? removeItem(item.id)
+                            : updateQty(item.id, item.qty - 1)
+                        }
+                        className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 hover:bg-blue-pale transition-colors"
+                        aria-label="Decrease quantity"
                       >
                         <Minus size={12} />
                       </button>
@@ -103,8 +114,9 @@ export default function CartDrawer() {
                       </span>
                       <button
                         onClick={() => updateQty(item.id, item.qty + 1)}
-                        className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 hover:bg-blue-pale transition-colors"
-                        aria-label="Increase cartons"
+                        disabled={item.qty >= item.maxOrderQty}
+                        className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 hover:bg-blue-pale disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        aria-label="Increase quantity"
                       >
                         <Plus size={12} />
                       </button>

@@ -9,7 +9,7 @@ interface User {
   ownerName?: string | null;
   /** Some clients map display name here; API field is usually `ownerName` */
   name?: string | null;
-  role: "BUYER" | "ADMIN" | "DRIVER";
+  role: "BUYER" | "ADMIN" | "DRIVER" | "SALES";
 }
 
 interface AuthState {

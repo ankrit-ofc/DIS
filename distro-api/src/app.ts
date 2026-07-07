@@ -19,6 +19,8 @@ import publicRouter    from './routes/public';
 import adminRouter     from './routes/admin';
 import chatRouter      from './routes/chat';
 import driverRouter    from './routes/driver';
+import cartRouter      from './routes/cart';
+import salesRouter     from './routes/sales';
 import { startCleanupCron } from './lib/cleanup';
 import { apiLimiter } from './middleware/rateLimiter';
 
@@ -47,7 +49,7 @@ app.use(cors({
   },
   credentials: true,
 }));
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '1mb' }));
 app.use(morgan('dev'));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.use(apiLimiter);
@@ -64,6 +66,8 @@ app.use('/api/reports',   reportsRouter);
 app.use('/api/admin',     adminRouter);
 app.use('/api/chat',      chatRouter);
 app.use('/api/driver',    driverRouter);
+app.use('/api/cart',      cartRouter);
+app.use('/api/sales',     salesRouter);
 app.use('/api',           publicRouter);  // announcements, districts, categories
 
 // Global error handler — log full error server-side, sanitize for client on 5xx

@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import PDFDocument from 'pdfkit';
 import { prisma } from '../lib/prisma';
+import { unitLabel } from '../lib/stock';
 
 const INVOICE_DIR = path.join(__dirname, '../../uploads/invoices');
 
@@ -77,18 +78,18 @@ export async function generateInvoicePdf(orderId: string): Promise<InvoiceResult
 
   doc.moveDown(5);
 
-  // Items table
+  // Items table — qty is labelled with its sell unit ("12 ctn" / "50 pcs");
+  // carton rows carry pieces-per-carton in the description.
   const tableTop = doc.y + 10;
-  const colX = { item: 50, ctn: 250, pcs: 320, price: 380, sub: 470 };
+  const colX = { item: 50, qty: 300, price: 380, sub: 470 };
   const rowH = 22;
 
   doc.font('Helvetica-Bold').fontSize(10);
   doc.rect(leftX, tableTop, 510, rowH).fillAndStroke('#1A4BDB', '#1A4BDB');
   doc.fillColor('white');
   doc.text('Item', colX.item + 5, tableTop + 6);
-  doc.text('Cartons', colX.ctn, tableTop + 6);
-  doc.text('Pcs/Ctn', colX.pcs, tableTop + 6);
-  doc.text('Price/Ctn', colX.price, tableTop + 6);
+  doc.text('Qty', colX.qty, tableTop + 6);
+  doc.text('Unit Price', colX.price, tableTop + 6);
   doc.text('Subtotal', colX.sub, tableTop + 6);
   doc.fillColor('black');
 
@@ -99,9 +100,11 @@ export async function generateInvoicePdf(orderId: string): Promise<InvoiceResult
     const bg = i % 2 === 0 ? '#F7F9FF' : 'white';
     doc.rect(leftX, rowY, 510, rowH).fill(bg).stroke('#cccccc');
     doc.fillColor('black');
-    doc.text(item.name, colX.item + 5, rowY + 6, { width: 190, ellipsis: true });
-    doc.text(String(item.qty), colX.ctn, rowY + 6);
-    doc.text(item.piecesPerCarton != null ? String(item.piecesPerCarton) : '—', colX.pcs, rowY + 6);
+    const desc = item.unit === 'CARTON' && item.piecesPerCarton != null
+      ? `${item.name} (${item.piecesPerCarton} pcs/ctn)`
+      : item.name;
+    doc.text(desc, colX.item + 5, rowY + 6, { width: 240, ellipsis: true });
+    doc.text(`${item.qty} ${unitLabel(item.unit)}`, colX.qty, rowY + 6);
     doc.text(`Rs ${item.price.toFixed(2)}`, colX.price, rowY + 6);
     doc.text(`Rs ${item.total.toFixed(2)}`, colX.sub, rowY + 6);
     rowY += rowH;

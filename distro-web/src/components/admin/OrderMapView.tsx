@@ -13,7 +13,7 @@ export default function OrderMapView({ lat, lng }: Props) {
 
   if (isNaN(center.lat) || isNaN(center.lng)) {
     return (
-      <div className="h-48 bg-blue-pale rounded-xl flex flex-col items-center justify-center gap-2 text-xs text-gray-400">
+      <div className="h-48 bg-white border border-gray-200 rounded-[6px] flex flex-col items-center justify-center gap-2 text-xs text-gray-400">
         <p>No valid location data</p>
       </div>
     );
@@ -21,7 +21,7 @@ export default function OrderMapView({ lat, lng }: Props) {
 
   if (!apiKey || apiKey === "your_google_maps_api_key_here") {
     return (
-      <div className="h-48 bg-blue-pale rounded-xl flex flex-col items-center justify-center gap-2 text-xs text-gray-400">
+      <div className="h-48 bg-white border border-gray-200 rounded-[6px] flex flex-col items-center justify-center gap-2 text-xs text-gray-400">
         <p>Map not configured</p>
         <p className="font-grotesk text-ink">
           {lat.toFixed(4)}, {lng.toFixed(4)}
@@ -31,7 +31,7 @@ export default function OrderMapView({ lat, lng }: Props) {
   }
 
   return (
-    <div className="h-48 rounded-xl overflow-hidden border border-gray-200">
+    <div className="h-48 rounded-[6px] overflow-hidden border border-gray-200">
       <APIProvider apiKey={apiKey}>
         <Map
           defaultCenter={center}

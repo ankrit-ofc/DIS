@@ -7,11 +7,11 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useSafeAreaInsets, SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../store/authStore";
-import { useCartStore } from "../../store/cartStore";
 import { api } from "../../lib/api";
 import { colors, spacing, radius, shadow, typography } from "../../lib/theme";
-import { fmtCarton, sessionInitial } from "../../lib/format";
+import { priceLine1, priceLine2, unitPriceOf, sessionInitial } from "../../lib/format";
 import { resolveImageUrl } from "../../lib/imageUrl";
+import { CardStepper } from "../../components/CardStepper";
 import { SkeletonLoader, SkeletonProductCard, SkeletonCategoryChip } from "../../components/SkeletonLoader";
 
 const { width: W } = Dimensions.get("window");
@@ -105,9 +105,11 @@ const bc = StyleSheet.create({
 interface Announcement { id: string; text: string; }
 interface Category { id: string; name: string; emoji?: string; imageUrl?: string; image?: string; }
 interface Product {
-  id: string; name: string; price: number; mrp?: number;
-  unit: string; stockQty: number; moq?: number; imageUrl?: string; brand?: string;
-  piecesPerCarton?: number; pricePerCarton?: number;
+  id: string; name: string; sellUnit: import("../../lib/format").SellUnit;
+  price: number; mrp?: number | null;
+  unit: string; moq: number; imageUrl?: string; brand?: string;
+  piecesPerCarton?: number | null; pricePerCarton?: number | null;
+  stockStatus: import("../../lib/format").StockStatus; maxOrderQty: number;
 }
 
 // ─── Announcement ticker ──────────────────────────────────────────────────────
@@ -189,13 +191,17 @@ const tk = StyleSheet.create({
 });
 
 // ─── Product card ──────────────────────────────────────────────────────────────
-function ProductCard({ item, onPress, onAdd }: { item: Product; onPress: () => void; onAdd: () => void }) {
-  const outOfStock = item.stockQty <= 0;
-  const discount = item.mrp && item.mrp > item.price
-    ? Math.round(((item.mrp - item.price) / item.mrp) * 100) : 0;
+function ProductCard({ item, onPress }: { item: Product; onPress: () => void }) {
+  const outOfStock = item.stockStatus === "OUT_OF_STOCK";
+  const lowStock = item.stockStatus === "LOW_STOCK";
+  const sub = priceLine2(item);
 
   return (
-    <TouchableOpacity style={[pc.card, shadow.card]} onPress={onPress} activeOpacity={0.88}>
+    <TouchableOpacity
+      style={[pc.card, shadow.card, outOfStock && { opacity: 0.6 }]}
+      onPress={onPress}
+      activeOpacity={0.88}
+    >
       {/* Image area */}
       <View style={pc.imgWrap}>
         {item.imageUrl ? (
@@ -212,9 +218,9 @@ function ProductCard({ item, onPress, onAdd }: { item: Product; onPress: () => v
             <Ionicons name="cube-outline" size={28} color={colors.blue} style={{ opacity: 0.4 }} />
           </View>
         )}
-        {discount > 0 && !outOfStock && (
+        {lowStock && !outOfStock && (
           <View style={pc.badge}>
-            <Text style={pc.badgeText}>{discount}%</Text>
+            <Text style={pc.badgeText}>Low stock</Text>
           </View>
         )}
         {outOfStock && (
@@ -228,19 +234,25 @@ function ProductCard({ item, onPress, onAdd }: { item: Product; onPress: () => v
       <View style={pc.body}>
         {item.brand && <Text style={pc.brand} numberOfLines={1}>{item.brand}</Text>}
         <Text style={pc.name} numberOfLines={2}>{item.name}</Text>
-        {(() => {
-          const pieces = item.piecesPerCarton ?? item.moq ?? 1;
-          const cartonPrice = item.pricePerCarton ?? item.price * pieces;
-          return <Text style={pc.price}>{fmtCarton(cartonPrice, pieces, item.unit)}</Text>;
-        })()}
+        <Text style={pc.price}>{priceLine1(item)}</Text>
+        {sub && <Text style={pc.priceSub} numberOfLines={1}>{sub}</Text>}
+        <View style={{ marginTop: 6 }}>
+          <CardStepper
+            product={{
+              productId: item.id,
+              name: item.name,
+              sellUnit: item.sellUnit,
+              unitPrice: unitPriceOf(item),
+              mrp: item.mrp,
+              moq: item.moq,
+              maxOrderQty: item.maxOrderQty,
+              piecesPerCarton: item.piecesPerCarton,
+              stockStatus: item.stockStatus,
+              image: item.imageUrl ?? undefined,
+            }}
+          />
+        </View>
       </View>
-
-      {/* Add button */}
-      {!outOfStock && (
-        <TouchableOpacity style={pc.addBtn} onPress={onAdd} activeOpacity={0.8} hitSlop={8}>
-          <Text style={pc.addBtnText}>Add</Text>
-        </TouchableOpacity>
-      )}
     </TouchableOpacity>
   );
 }
@@ -272,12 +284,14 @@ const pc = StyleSheet.create({
     position: "absolute",
     top: 6,
     left: 6,
-    backgroundColor: colors.green,
+    backgroundColor: "#FFF7ED",
+    borderColor: "#FDBA74",
+    borderWidth: 1,
     borderRadius: radius.full,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
-  badgeText: { fontSize: 10, fontFamily: typography.bodySemiBold, color: colors.white },
+  badgeText: { fontSize: 10, fontFamily: typography.bodySemiBold, color: "#C2410C" },
   oosBanner: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.3)",
@@ -301,6 +315,7 @@ const pc = StyleSheet.create({
     minHeight: 32,
   },
   price: { fontSize: 14, fontFamily: typography.heading, color: colors.blue, marginTop: 2 },
+  priceSub: { fontSize: 10, fontFamily: typography.body, color: colors.gray400 },
   moq: { fontSize: 10, fontFamily: typography.body, color: colors.gray400 },
   addBtn: {
     backgroundColor: colors.blue,
@@ -319,7 +334,6 @@ const pc = StyleSheet.create({
 // ─── Main screen ──────────────────────────────────────────────────────────────
 export function HomeScreen({ navigation }: any) {
   const { profile } = useAuthStore();
-  const { addItem } = useCartStore();
   const insets = useSafeAreaInsets();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -475,19 +489,6 @@ export function HomeScreen({ navigation }: any) {
                   params: { productId: item.id },
                 })
               }
-              onAdd={() => {
-                const pieces = item.piecesPerCarton ?? item.moq ?? 1;
-                const cartonPrice = item.pricePerCarton ?? item.price * pieces;
-                addItem({
-                  productId: item.id,
-                  name: item.name,
-                  price: item.price,
-                  unit: item.unit,
-                  piecesPerCarton: pieces,
-                  pricePerCarton: cartonPrice,
-                  image: item.imageUrl ?? undefined,
-                });
-              }}
             />
           ))}
       </View>

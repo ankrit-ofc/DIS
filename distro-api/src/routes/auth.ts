@@ -15,13 +15,45 @@ import { WelcomeEmail } from '../emails/WelcomeEmail';
 import { OtpEmail } from '../emails/OtpEmail';
 import { PasswordResetEmail } from '../emails/PasswordResetEmail';
 import { requireAuth } from '../middleware/auth';
-import { authLimiter, otpLimiter, forgotLimiter } from '../middleware/rateLimiter';
+import {
+  authLimiter,
+  otpLimiter,
+  forgotLimiter,
+  authIpBackstopLimiter,
+} from '../middleware/rateLimiter';
 
 const router = Router();
 
+const MAX_OTP_ATTEMPTS = 5;
+const MAX_LIVE_OTP_CODES = 2;
+
+/** Create a fresh OTP code for a profile, keeping at most MAX_LIVE_OTP_CODES live. */
+async function issueOtpCode(profileId: string): Promise<string> {
+  const otp = generateOTP();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+  await prisma.otpCode.create({ data: { profileId, code: otp, expiresAt } });
+
+  // Invalidate everything older than the newest MAX_LIVE_OTP_CODES codes.
+  const live = await prisma.otpCode.findMany({
+    where: { profileId, usedAt: null, expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true },
+  });
+  const staleIds = live.slice(MAX_LIVE_OTP_CODES).map((c) => c.id);
+  if (staleIds.length > 0) {
+    await prisma.otpCode.updateMany({
+      where: { id: { in: staleIds } },
+      data: { usedAt: new Date() },
+    });
+  }
+
+  return otp;
+}
+
 // ─── POST /api/auth/request-otp ──────────────────────────────────────────────
 // Accepts { email } OR { phone }. Email → Resend. Phone → Sparrow (stubbed).
-router.post('/request-otp', otpLimiter, async (req: Request, res: Response): Promise<void> => {
+router.post('/request-otp', authIpBackstopLimiter, otpLimiter, async (req: Request, res: Response): Promise<void> => {
   const { email, phone } = req.body as { email?: string; phone?: string };
 
   if (!email && !phone) {
@@ -37,19 +69,15 @@ router.post('/request-otp', otpLimiter, async (req: Request, res: Response): Pro
     return;
   }
 
-  const otp = generateOTP();
-  const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-
   if (email) {
     let profile = await prisma.profile.findUnique({ where: { email } });
     if (!profile) {
       const tempPhone = `PENDING_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       profile = await prisma.profile.create({
-        data: { email, phone: tempPhone, passwordHash: '', otpCode: otp, otpExpiry, status: 'PENDING' },
+        data: { email, phone: tempPhone, passwordHash: '', status: 'PENDING' },
       });
-    } else {
-      await prisma.profile.update({ where: { email }, data: { otpCode: otp, otpExpiry } });
     }
+    const otp = await issueOtpCode(profile.id);
 
     void (async () => {
       try {
@@ -68,11 +96,10 @@ router.post('/request-otp', otpLimiter, async (req: Request, res: Response): Pro
   let profile = await prisma.profile.findUnique({ where: { phone: phone! } });
   if (!profile) {
     profile = await prisma.profile.create({
-      data: { phone: phone!, passwordHash: '', otpCode: otp, otpExpiry, status: 'PENDING' },
+      data: { phone: phone!, passwordHash: '', status: 'PENDING' },
     });
-  } else {
-    await prisma.profile.update({ where: { phone: phone! }, data: { otpCode: otp, otpExpiry } });
   }
+  const otp = await issueOtpCode(profile.id);
 
   const smsResult = await sendSMS(phone!, otpMessage(otp));
   if (!smsResult.ok && process.env.SMS_ENABLED !== 'false') {
@@ -85,7 +112,7 @@ router.post('/request-otp', otpLimiter, async (req: Request, res: Response): Pro
 
 // ─── POST /api/auth/verify-otp ───────────────────────────────────────────────
 // Accepts { email, otp } OR { phone, otp }.
-router.post('/verify-otp', authLimiter, async (req: Request, res: Response): Promise<void> => {
+router.post('/verify-otp', authIpBackstopLimiter, authLimiter, async (req: Request, res: Response): Promise<void> => {
   const { email, phone, otp } = req.body as { email?: string; phone?: string; otp?: string };
   if ((!email && !phone) || !otp) {
     res.status(400).json({ error: 'email or phone, and otp are required' });
@@ -96,15 +123,45 @@ router.post('/verify-otp', authLimiter, async (req: Request, res: Response): Pro
     ? await prisma.profile.findUnique({ where: { email } })
     : await prisma.profile.findUnique({ where: { phone: phone! } });
 
-  if (!profile || !profile.otpCode || !profile.otpExpiry) {
+  if (!profile) {
     res.status(400).json({ error: 'No OTP requested' });
     return;
   }
-  if (profile.otpExpiry < new Date()) {
-    res.status(400).json({ error: 'OTP has expired' });
+
+  // Any unused, unexpired, not-burned-out code counts — most recent first.
+  const liveCodes = await prisma.otpCode.findMany({
+    where: {
+      profileId: profile.id,
+      usedAt: null,
+      expiresAt: { gt: new Date() },
+      attempts: { lt: MAX_OTP_ATTEMPTS },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (liveCodes.length === 0) {
+    res.status(400).json({ error: 'No OTP requested' });
     return;
   }
-  if (profile.otpCode !== otp) {
+
+  const match = liveCodes.find((c) => c.code === otp);
+  if (!match) {
+    // Wrong guess burns one attempt on every live code; a code dies after
+    // MAX_OTP_ATTEMPTS wrong guesses (OTP verify doubles as passwordless login).
+    await prisma.otpCode.updateMany({
+      where: { id: { in: liveCodes.map((c) => c.id) } },
+      data: { attempts: { increment: 1 } },
+    });
+    res.status(400).json({ error: 'Invalid OTP' });
+    return;
+  }
+
+  // Consume the code atomically so a concurrent verify can't reuse it.
+  const consumed = await prisma.otpCode.updateMany({
+    where: { id: match.id, usedAt: null },
+    data: { usedAt: new Date() },
+  });
+  if (consumed.count === 0) {
     res.status(400).json({ error: 'Invalid OTP' });
     return;
   }
@@ -112,8 +169,8 @@ router.post('/verify-otp', authLimiter, async (req: Request, res: Response): Pro
   const updated = await prisma.profile.update({
     where: { id: profile.id },
     data: email
-      ? { emailVerified: true, phoneVerified: true, otpCode: null, otpExpiry: null, loginAttempts: 0, lockedUntil: null }
-      : { phoneVerified: true, otpCode: null, otpExpiry: null, loginAttempts: 0, lockedUntil: null },
+      ? { emailVerified: true, phoneVerified: true, loginAttempts: 0, lockedUntil: null }
+      : { phoneVerified: true, loginAttempts: 0, lockedUntil: null },
   });
 
   // If this is an already-registered user, issue a session so OTP works as a login.
@@ -148,8 +205,8 @@ router.post('/register', authLimiter, async (req: Request, res: Response): Promi
     res.status(400).json({ error: 'email and password are required' });
     return;
   }
-  if (password.length < 6) {
-    res.status(400).json({ error: 'Password must be at least 6 characters' });
+  if (password.length < 8) {
+    res.status(400).json({ error: 'Password must be at least 8 characters' });
     return;
   }
   if (!phone) {
@@ -236,7 +293,7 @@ router.post('/register', authLimiter, async (req: Request, res: Response): Promi
 // ─── POST /api/auth/login ─────────────────────────────────────────────────────
 // Accept { email, password } — email can be email address OR phone (backwards compat).
 // Finds profile where email = input OR phone = input.
-router.post('/login', authLimiter, async (req: Request, res: Response): Promise<void> => {
+router.post('/login', authIpBackstopLimiter, authLimiter, async (req: Request, res: Response): Promise<void> => {
   const { email, password } = req.body as { email?: string; password?: string };
   if (!email || !password) {
     res.status(400).json({ error: 'email and password are required' });
@@ -316,7 +373,7 @@ router.post('/google', authLimiter, async (req: Request, res: Response): Promise
     return;
   }
 
-  let payload: { email?: string; name?: string; sub?: string; email_verified?: string | boolean };
+  let payload: { email?: string; name?: string; sub?: string; email_verified?: string | boolean; aud?: string };
   try {
     const { data } = await axios.get(
       `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
@@ -324,6 +381,21 @@ router.post('/google', authLimiter, async (req: Request, res: Response): Promise
     payload = data;
   } catch (e) {
     res.status(401).json({ error: 'Invalid Google token' });
+    return;
+  }
+
+  // The token must have been issued for OUR app — tokeninfo happily validates
+  // tokens minted for any Google client.
+  const allowedAudiences = (process.env.GOOGLE_CLIENT_IDS ?? process.env.GOOGLE_CLIENT_ID ?? '')
+    .split(',')
+    .map((a) => a.trim())
+    .filter(Boolean);
+  if (!payload.aud || !allowedAudiences.includes(payload.aud)) {
+    res.status(401).json({ error: 'Invalid Google token' });
+    return;
+  }
+  if (payload.email_verified !== true && payload.email_verified !== 'true') {
+    res.status(401).json({ error: 'Google email not verified' });
     return;
   }
 
@@ -466,14 +538,14 @@ router.delete('/me', requireAuth, async (req: Request, res: Response): Promise<v
         passwordHash: '',          // empty hash → bcrypt.compare always fails
         emailVerified: false,
         phoneVerified: false,
-        otpCode: null,
-        otpExpiry: null,
         loginAttempts: 0,
         lockedUntil: null,
       },
     }),
     // Revoke every active session for this profile.
     prisma.session.deleteMany({ where: { profileId: authProfile.id } }),
+    // Kill any live OTP codes — the tombstoned account must not be enterable.
+    prisma.otpCode.deleteMany({ where: { profileId: authProfile.id } }),
     // Drop device push tokens — the anonymized Profile survives, so the
     // PushToken ON DELETE CASCADE never fires; remove them explicitly.
     prisma.pushToken.deleteMany({ where: { profileId: authProfile.id } }),
@@ -509,7 +581,14 @@ router.post('/change-password', requireAuth, async (req: Request, res: Response)
   }
 
   const passwordHash = await hashPassword(newPassword);
-  await prisma.profile.update({ where: { id: authProfile.id }, data: { passwordHash } });
+  const currentToken = (req as any).token as string;
+  await prisma.$transaction([
+    prisma.profile.update({ where: { id: authProfile.id }, data: { passwordHash } }),
+    // Revoke every other session — only the device that changed the password stays in.
+    prisma.session.deleteMany({
+      where: { profileId: authProfile.id, token: { not: currentToken } },
+    }),
+  ]);
   res.json({ message: 'Password changed' });
 });
 
@@ -576,7 +655,7 @@ router.post('/complete-onboarding', requireAuth, async (req: Request, res: Respo
 });
 
 // ─── POST /api/auth/forgot-password ──────────────────────────────────────────
-router.post('/forgot-password', forgotLimiter, async (req: Request, res: Response): Promise<void> => {
+router.post('/forgot-password', authIpBackstopLimiter, forgotLimiter, async (req: Request, res: Response): Promise<void> => {
   const { email } = req.body as { email?: string };
   const generic = { success: true, message: 'If that email exists, we sent a code' };
 

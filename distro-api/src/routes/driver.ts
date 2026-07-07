@@ -2,13 +2,14 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { verifyPassword, createSession } from '../lib/auth';
 import { requireAuth, requireRole } from '../middleware/auth';
+import { authLimiter, authIpBackstopLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
 // ─── POST /api/driver/login ──────────────────────────────────────────────────
 // Phone + password → JWT. Mirrors the auth.ts password login but is locked to
 // DRIVER profiles only, so a buyer/admin password cannot grant driver access.
-router.post('/login', async (req: Request, res: Response): Promise<void> => {
+router.post('/login', authIpBackstopLimiter, authLimiter, async (req: Request, res: Response): Promise<void> => {
   const { phone, password } = req.body as { phone?: string; password?: string };
   if (!phone || !password) {
     res.status(400).json({ error: 'phone and password are required' });
@@ -62,7 +63,7 @@ router.get(
       orderBy: { createdAt: 'asc' },
       include: {
         buyer: { select: { ownerName: true, storeName: true, phone: true } },
-        items: { select: { qty: true } },
+        items: { select: { qty: true, unit: true } },
       },
     });
 
@@ -74,7 +75,9 @@ router.get(
       customerPhone: o.buyer.phone,
       deliveryAddress: o.deliveryAddress ?? '',
       deliveryDistrict: o.deliveryDistrict ?? '',
-      totalCartons: o.items.reduce((sum, i) => sum + i.qty, 0),
+      // Piece-mode items are loose units, not cartons — count them separately.
+      totalCartons: o.items.reduce((sum, i) => sum + (i.unit === 'CARTON' ? i.qty : 0), 0),
+      totalPieces: o.items.reduce((sum, i) => sum + (i.unit === 'PIECE' ? i.qty : 0), 0),
       total: o.total,
       createdAt: o.createdAt,
     }));

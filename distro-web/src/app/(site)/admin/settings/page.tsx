@@ -114,10 +114,10 @@ export default function AdminSettingsPage() {
 
   return (
     <div className="max-w-3xl space-y-8">
-      <h1 className="font-grotesk font-bold text-2xl text-ink">Settings</h1>
+      <h1 className="font-grotesk font-bold text-xl text-ink">Settings</h1>
 
       {/* Delivery Districts */}
-      <section className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+      <section className="bg-white border border-gray-200 rounded-[8px] overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-200">
           <h2 className="font-grotesk font-semibold text-base text-ink">
             Delivery Districts
@@ -130,7 +130,7 @@ export default function AdminSettingsPage() {
         {districtsLoading ? (
           <div className="p-4 space-y-2">
             {[...Array(5)].map((_, i) => (
-              <div key={i} className="h-12 bg-blue-pale rounded-xl animate-pulse" />
+              <div key={i} className="h-12 bg-gray-50 rounded-[6px] animate-pulse" />
             ))}
           </div>
         ) : (
@@ -141,7 +141,7 @@ export default function AdminSettingsPage() {
               return (
                 <div
                   key={d.id}
-                  className="flex items-center gap-4 px-5 py-4 hover:bg-off-white transition-colors"
+                  className="flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors"
                 >
                   {/* Active toggle */}
                   <label className="flex items-center gap-2 cursor-pointer flex-shrink-0">
@@ -170,7 +170,7 @@ export default function AdminSettingsPage() {
                         onChange={(e) =>
                           updateDistrictEdit(d.id, "deliveryFee", e.target.value)
                         }
-                        className="w-20 border border-gray-200 rounded-lg px-2 py-1 text-sm font-grotesk focus:outline-none focus:border-blue"
+                        className="w-20 border border-gray-200 rounded-[6px] px-2 py-1 text-sm font-grotesk focus:outline-none focus:border-blue"
                       />
                     </div>
                   </div>
@@ -186,14 +186,14 @@ export default function AdminSettingsPage() {
                       onChange={(e) =>
                         updateDistrictEdit(d.id, "estimatedDays", e.target.value)
                       }
-                      className="w-14 border border-gray-200 rounded-lg px-2 py-1 text-sm font-grotesk focus:outline-none focus:border-blue"
+                      className="w-14 border border-gray-200 rounded-[6px] px-2 py-1 text-sm font-grotesk focus:outline-none focus:border-blue"
                     />
                   </div>
 
                   <button
                     onClick={() => saveDistrict(d.id)}
                     disabled={updateDistrict.isPending}
-                    className="flex-shrink-0 flex items-center gap-1 text-xs text-blue border border-blue rounded-lg px-3 py-1.5 hover:bg-blue-pale disabled:opacity-50 transition-colors"
+                    className="flex-shrink-0 flex items-center gap-1 text-xs text-ink border border-gray-200 rounded-[6px] px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50 transition-colors"
                   >
                     <Save size={12} />
                     Save
@@ -206,7 +206,7 @@ export default function AdminSettingsPage() {
       </section>
 
       {/* Platform config */}
-      <section className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+      <section className="bg-white border border-gray-200 rounded-[8px] overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-200">
           <h2 className="font-grotesk font-semibold text-base text-ink">
             Platform Configuration
@@ -230,7 +230,7 @@ export default function AdminSettingsPage() {
                 onChange={(e) =>
                   setConfigForm((f) => ({ ...f, companyName: e.target.value }))
                 }
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
+                className="w-full border border-gray-200 rounded-[6px] px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
               />
             </div>
 
@@ -244,7 +244,7 @@ export default function AdminSettingsPage() {
                 onChange={(e) =>
                   setConfigForm((f) => ({ ...f, supportPhone: e.target.value }))
                 }
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
+                className="w-full border border-gray-200 rounded-[6px] px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
               />
             </div>
 
@@ -258,7 +258,7 @@ export default function AdminSettingsPage() {
                 onChange={(e) =>
                   setConfigForm((f) => ({ ...f, companyAddress: e.target.value }))
                 }
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue resize-none"
+                className="w-full border border-gray-200 rounded-[6px] px-4 py-2.5 text-sm focus:outline-none focus:border-blue resize-none"
               />
             </div>
 
@@ -276,7 +276,7 @@ export default function AdminSettingsPage() {
                     minOrderAmount: Number(e.target.value),
                   }))
                 }
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
+                className="w-full border border-gray-200 rounded-[6px] px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
               />
             </div>
 
@@ -290,13 +290,13 @@ export default function AdminSettingsPage() {
                 onChange={(e) =>
                   setConfigForm((f) => ({ ...f, supportEmail: e.target.value }))
                 }
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
+                className="w-full border border-gray-200 rounded-[6px] px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
               />
             </div>
           </div>
 
           {configSaved && (
-            <div className="flex items-center gap-2 text-green bg-green-light rounded-xl px-4 py-3 text-sm">
+            <div className="flex items-center gap-2 text-green bg-green-light rounded-[6px] px-3 py-2 text-sm">
               <CheckCircle2 size={15} />
               Configuration saved successfully.
             </div>
@@ -305,7 +305,7 @@ export default function AdminSettingsPage() {
           <button
             type="submit"
             disabled={updateConfig.isPending}
-            className="flex items-center gap-2 bg-blue hover:bg-blue-dark disabled:bg-gray-200 text-white font-medium px-6 py-3 rounded-xl transition-colors text-sm"
+            className="flex items-center gap-2 bg-blue hover:bg-blue-dark disabled:bg-gray-200 text-white font-medium px-6 py-3 rounded-[6px] transition-colors text-sm"
           >
             <Save size={15} />
             {updateConfig.isPending ? "Saving…" : "Save Configuration"}

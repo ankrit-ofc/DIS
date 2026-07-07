@@ -16,7 +16,7 @@ import { useCartStore } from "../../store/cartStore";
 import { useAuthStore } from "../../store/authStore";
 import { api } from "../../lib/api";
 import { colors, spacing, radius, shadow } from "../../lib/theme";
-import { fmtRs } from "../../lib/format";
+import { fmtRs, unitShort } from "../../lib/format";
 import { LocationPicker, LocationPickerValue } from "../../components/LocationPicker";
 
 // DISTRO currently delivers only within the Kathmandu Valley.
@@ -75,7 +75,18 @@ export function CheckoutScreen({ navigation }: any) {
       const orderNumber = res.data.order?.orderNumber ?? res.data.orderNumber ?? `ORD-${orderId}`;
       navigation.replace("OrderConfirm", { orderId, orderNumber });
     } catch (err: any) {
-      setError(err.message ?? "Order failed. Please try again.");
+      // Checkout race — someone took the stock first. Refresh caps and send
+      // the buyer back to the cart where each line shows an "Update to N" fix.
+      if (err?.status === 409 && err?.data?.code === "INSUFFICIENT_STOCK") {
+        const short: Array<{ productId: string; available: number }> = err.data.items ?? [];
+        useCartStore.getState().applyValidation(
+          short.map((s) => ({ productId: s.productId, maxOrderQty: s.available })),
+        );
+        setError("Stock changed while you were checking out — adjust the highlighted items in your cart.");
+        navigation.navigate("Cart");
+      } else {
+        setError(err.message ?? "Order failed. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -151,9 +162,9 @@ export function CheckoutScreen({ navigation }: any) {
         {items.map((item) => (
           <View key={item.productId} style={styles.summaryRow}>
             <Text style={styles.summaryName} numberOfLines={1}>
-              {item.name} × {item.qty} carton{item.qty > 1 ? "s" : ""}
+              {item.name} × {item.qty} {unitShort(item.sellUnit)}
             </Text>
-            <Text style={styles.summaryAmt}>{fmtRs(item.pricePerCarton * item.qty)}</Text>
+            <Text style={styles.summaryAmt}>{fmtRs(item.price * item.qty)}</Text>
           </View>
         ))}
         <View style={styles.divider} />

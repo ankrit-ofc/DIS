@@ -33,7 +33,7 @@ function BannerPreview({ title, subtitle, imageUrl, bgColor, textColor }: Partia
   const hasImage = !!imageUrl;
   return (
     <div
-      className="h-28 rounded-2xl overflow-hidden relative flex flex-col justify-end p-4"
+      className="h-28 rounded-[8px] overflow-hidden relative flex flex-col justify-end p-4"
       style={{ backgroundColor: hasImage ? "#000" : bgColor }}
     >
       {hasImage && (
@@ -171,14 +171,14 @@ export default function AdminBannersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-grotesk font-bold text-2xl text-ink">Banners</h1>
+          <h1 className="font-grotesk font-bold text-xl text-ink">Banners</h1>
           <p className="text-sm text-gray-400 mt-0.5">
             {activeBanners.length} active · shown as slides on the buyer home screen
           </p>
         </div>
         <button
           onClick={openAdd}
-          className="flex items-center gap-2 bg-blue hover:bg-blue-dark text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors"
+          className="flex items-center gap-2 bg-blue hover:bg-blue-dark text-white text-sm font-medium px-4 py-2 rounded-[6px] transition-colors"
         >
           <Plus size={16} /> Add Banner
         </button>
@@ -186,8 +186,8 @@ export default function AdminBannersPage() {
 
       {/* Live preview strip */}
       {activeBanners.length > 0 && (
-        <div className="rounded-2xl border border-blue/20 overflow-hidden">
-          <div className="bg-blue-pale px-4 py-2 flex items-center justify-between">
+        <div className="rounded-[8px] border border-blue/20 overflow-hidden">
+          <div className="bg-gray-50 px-4 py-2 flex items-center justify-between">
             <span className="text-xs font-medium text-blue uppercase tracking-wide">App Preview</span>
             <span className="text-xs text-blue">{activeBanners.length} slide{activeBanners.length !== 1 ? "s" : ""}</span>
           </div>
@@ -208,11 +208,11 @@ export default function AdminBannersPage() {
       {isLoading ? (
         <div className="space-y-3">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-20 bg-blue-pale rounded-2xl animate-pulse" />
+            <div key={i} className="h-20 bg-gray-50 rounded-[8px] animate-pulse" />
           ))}
         </div>
       ) : banners.length === 0 ? (
-        <div className="bg-white border border-gray-200 rounded-2xl p-12 text-center">
+        <div className="bg-white border border-gray-200 rounded-[8px] p-12 text-center">
           <ImageIcon size={32} className="text-gray-300 mx-auto mb-3" />
           <p className="text-gray-400 text-sm">No banners yet. Add one to show it on the home screen.</p>
         </div>
@@ -221,11 +221,11 @@ export default function AdminBannersPage() {
           {banners.map((b) => (
             <div
               key={b.id}
-              className={`bg-white border rounded-2xl overflow-hidden transition-colors ${b.active ? "border-blue/30" : "border-gray-200"}`}
+              className={`bg-white border rounded-[8px] overflow-hidden transition-colors ${b.active ? "border-blue/30" : "border-gray-200"}`}
             >
               <div className="flex items-center gap-4 p-4">
                 {/* Thumbnail or swatch */}
-                <div className="w-14 h-14 rounded-xl flex-shrink-0 overflow-hidden">
+                <div className="w-14 h-14 rounded-[6px] flex-shrink-0 overflow-hidden">
                   {b.imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -256,18 +256,22 @@ export default function AdminBannersPage() {
                 </div>
 
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${b.active ? "bg-green-light text-green" : "bg-gray-100 text-gray-400"}`}>
+                  <span className={`inline-flex items-center gap-1.5 text-xs ${b.active ? "text-ink" : "text-gray-400"}`}>
+                    <span
+                      className="w-1.5 h-1.5 rounded-full shrink-0"
+                      style={{ backgroundColor: b.active ? "#00C46F" : "#9BA3BF" }}
+                    />
                     {b.active ? "Active" : "Inactive"}
                   </span>
                   <button onClick={() => toggle.mutate({ id: b.id, active: !b.active })} className={b.active ? "text-green" : "text-gray-300"}>
                     {b.active ? <ToggleRight size={22} /> : <ToggleLeft size={22} />}
                   </button>
-                  <button onClick={() => openEdit(b)} className="p-1.5 rounded-lg text-gray-400 hover:text-blue hover:bg-blue-pale transition-colors">
+                  <button onClick={() => openEdit(b)} className="p-1.5 rounded-[6px] text-gray-400 hover:text-blue hover:bg-gray-50 transition-colors">
                     <Pencil size={15} />
                   </button>
                   <button
                     onClick={() => { if (confirm("Delete this banner?")) remove.mutate(b.id); }}
-                    className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                    className="p-1.5 rounded-[6px] text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
                   >
                     <Trash2 size={15} />
                   </button>
@@ -281,8 +285,8 @@ export default function AdminBannersPage() {
       {/* Create / Edit modal */}
       {showModal && (
         <>
-          <div className="fixed inset-0 bg-ink/40 backdrop-blur-sm z-50" onClick={closeModal} />
-          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl z-50 p-6 w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="fixed inset-0 bg-ink/40 z-50" onClick={closeModal} />
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-[8px] z-50 p-6 w-full max-w-md border border-gray-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h2 className="font-grotesk font-semibold text-base text-ink">
                 {editing ? "Edit Banner" : "New Banner"}
@@ -305,7 +309,7 @@ export default function AdminBannersPage() {
                   <button
                     onClick={() => fileRef.current?.click()}
                     disabled={uploading}
-                    className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:border-blue hover:text-blue transition-colors disabled:opacity-50"
+                    className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-[6px] text-sm text-gray-600 hover:bg-gray-50 hover:text-blue transition-colors disabled:opacity-50"
                   >
                     <Upload size={14} />
                     {uploading ? "Uploading…" : imageUrl ? "Change image" : "Upload image"}
@@ -313,7 +317,7 @@ export default function AdminBannersPage() {
                   {imageUrl && (
                     <button
                       onClick={() => setImageUrl("")}
-                      className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-red-400 hover:bg-red-50 transition-colors"
+                      className="px-3 py-2 border border-gray-200 rounded-[6px] text-sm text-red-400 hover:bg-red-50 transition-colors"
                     >
                       Remove
                     </button>
@@ -327,7 +331,7 @@ export default function AdminBannersPage() {
                 <input
                   value={title} onChange={(e) => setTitle(e.target.value)}
                   placeholder="e.g. Free delivery this week"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
+                  className="w-full border border-gray-200 rounded-[6px] px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
                 />
               </div>
 
@@ -336,7 +340,7 @@ export default function AdminBannersPage() {
                 <input
                   value={subtitle} onChange={(e) => setSubtitle(e.target.value)}
                   placeholder="e.g. On orders above Rs 5,000"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
+                  className="w-full border border-gray-200 rounded-[6px] px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
                 />
               </div>
 
@@ -350,15 +354,15 @@ export default function AdminBannersPage() {
                         key={p.bgColor}
                         onClick={() => { setBgColor(p.bgColor); setTextColor(p.textColor); }}
                         title={p.label}
-                        className={`w-8 h-8 rounded-lg border-2 transition-transform hover:scale-110 ${bgColor === p.bgColor ? "border-ink scale-110" : "border-transparent"}`}
+                        className={`w-8 h-8 rounded-[6px] border-2 transition-transform hover:scale-110 ${bgColor === p.bgColor ? "border-ink scale-110" : "border-transparent"}`}
                         style={{ backgroundColor: p.bgColor }}
                       />
                     ))}
                     <div className="flex items-center gap-1 ml-1">
                       <input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)}
-                        className="w-8 h-8 rounded-lg cursor-pointer border border-gray-200" title="Custom background" />
+                        className="w-8 h-8 rounded-[6px] cursor-pointer border border-gray-200" title="Custom background" />
                       <input type="color" value={textColor} onChange={(e) => setTextColor(e.target.value)}
-                        className="w-8 h-8 rounded-lg cursor-pointer border border-gray-200" title="Custom text color" />
+                        className="w-8 h-8 rounded-[6px] cursor-pointer border border-gray-200" title="Custom text color" />
                     </div>
                   </div>
                 </div>
@@ -368,11 +372,11 @@ export default function AdminBannersPage() {
                 <button
                   onClick={handleSave}
                   disabled={!title.trim() || save.isPending || uploading}
-                  className="flex-1 bg-blue hover:bg-blue-dark disabled:bg-gray-200 text-white font-medium py-3 rounded-xl transition-colors text-sm"
+                  className="flex-1 bg-blue hover:bg-blue-dark disabled:bg-gray-200 text-white font-medium py-3 rounded-[6px] transition-colors text-sm"
                 >
                   {save.isPending ? "Saving…" : editing ? "Save Changes" : "Add Banner"}
                 </button>
-                <button onClick={closeModal} className="flex-1 border border-gray-200 text-sm text-gray-600 hover:bg-off-white py-3 rounded-xl transition-colors">
+                <button onClick={closeModal} className="flex-1 border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 py-3 rounded-[6px] transition-colors">
                   Cancel
                 </button>
               </div>

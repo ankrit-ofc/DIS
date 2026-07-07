@@ -56,18 +56,18 @@ export default function AdminAnnouncementsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="font-grotesk font-bold text-2xl text-ink">Announcements</h1>
+        <h1 className="font-grotesk font-bold text-xl text-ink">Announcements</h1>
         <button
           onClick={openAdd}
-          className="flex items-center gap-2 bg-blue hover:bg-blue-dark text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors"
+          className="flex items-center gap-2 bg-blue hover:bg-blue-dark text-white text-sm font-medium px-4 py-2 rounded-[6px] transition-colors"
         >
           <Plus size={16} /> Add Announcement
         </button>
       </div>
 
       {/* Live ticker preview */}
-      <div className="rounded-2xl overflow-hidden border border-blue border-dashed">
-        <div className="bg-blue-pale px-4 py-2 flex items-center justify-between">
+      <div className="rounded-[8px] overflow-hidden border border-blue border-dashed">
+        <div className="bg-gray-50 px-4 py-2 flex items-center justify-between">
           <span className="text-xs font-medium text-blue uppercase tracking-wide">Ticker Preview</span>
           <span className="text-xs text-blue">{activeMessages.length} active</span>
         </div>
@@ -81,10 +81,10 @@ export default function AdminAnnouncementsPage() {
       {/* List */}
       {isLoading ? (
         <div className="space-y-3">
-          {[...Array(4)].map((_, i) => <div key={i} className="h-16 bg-blue-pale rounded-2xl animate-pulse" />)}
+          {[...Array(4)].map((_, i) => <div key={i} className="h-16 bg-gray-50 rounded-[8px] animate-pulse" />)}
         </div>
       ) : announcements.length === 0 ? (
-        <div className="bg-white border border-gray-200 rounded-2xl p-12 text-center text-gray-400">
+        <div className="bg-white border border-gray-200 rounded-[8px] p-12 text-center text-gray-400">
           <p>No announcements yet.</p>
         </div>
       ) : (
@@ -92,25 +92,29 @@ export default function AdminAnnouncementsPage() {
           {announcements.map((a) => (
             <div
               key={a.id}
-              className={`bg-white border rounded-2xl p-4 flex items-center gap-4 transition-colors ${a.active ? "border-blue" : "border-gray-200"}`}
+              className={`bg-white border rounded-[8px] p-4 flex items-center gap-4 transition-colors ${a.active ? "border-blue" : "border-gray-200"}`}
             >
               <div className="flex-1 min-w-0">
                 <p className={`text-sm font-medium ${a.active ? "text-ink" : "text-gray-400"}`}>{a.text}</p>
                 <p className="text-xs text-gray-400 mt-1">{new Date(a.createdAt).toLocaleDateString("en-NP")}</p>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${a.active ? "bg-green-light text-green" : "bg-gray-200 text-gray-400"}`}>
+                <span className={`inline-flex items-center gap-1.5 text-xs ${a.active ? "text-ink" : "text-gray-400"}`}>
+                  <span
+                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{ backgroundColor: a.active ? "#00C46F" : "#9BA3BF" }}
+                  />
                   {a.active ? "Active" : "Inactive"}
                 </span>
                 <button onClick={() => toggleActive.mutate({ id: a.id, active: !a.active })} className={a.active ? "text-green" : "text-gray-400"}>
                   {a.active ? <ToggleRight size={22} /> : <ToggleLeft size={22} />}
                 </button>
-                <button onClick={() => openEdit(a)} className="p-1.5 rounded-lg text-gray-400 hover:text-blue hover:bg-blue-pale transition-colors">
+                <button onClick={() => openEdit(a)} className="p-1.5 rounded-[6px] text-gray-400 hover:text-blue hover:bg-gray-50 transition-colors">
                   <Pencil size={15} />
                 </button>
                 <button
                   onClick={() => { if (confirm("Delete this announcement?")) remove.mutate(a.id); }}
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                  className="p-1.5 rounded-[6px] text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
                 >
                   <Trash2 size={15} />
                 </button>
@@ -123,8 +127,8 @@ export default function AdminAnnouncementsPage() {
       {/* Modal */}
       {showModal && (
         <>
-          <div className="fixed inset-0 bg-ink/40 backdrop-blur-sm z-50" onClick={() => setShowModal(false)} />
-          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl z-50 p-6 w-full max-w-md shadow-2xl">
+          <div className="fixed inset-0 bg-ink/40 z-50" onClick={() => setShowModal(false)} />
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-[8px] z-50 p-6 w-full max-w-md border border-gray-200">
             <div className="flex items-center justify-between mb-5">
               <h2 className="font-grotesk font-semibold text-base text-ink">
                 {editing ? "Edit Announcement" : "New Announcement"}
@@ -137,11 +141,11 @@ export default function AdminAnnouncementsPage() {
                 <textarea
                   rows={3} value={text} onChange={(e) => setText(e.target.value)}
                   placeholder="e.g. Free delivery on orders above Rs 5,000"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue resize-none"
+                  className="w-full border border-gray-200 rounded-[6px] px-4 py-2.5 text-sm focus:outline-none focus:border-blue resize-none"
                 />
               </div>
               {text && (
-                <div className="bg-blue py-2.5 rounded-xl overflow-hidden">
+                <div className="bg-blue py-2.5 rounded-[6px] overflow-hidden">
                   <p className="text-white text-xs text-center font-medium">{text}</p>
                 </div>
               )}
@@ -149,11 +153,11 @@ export default function AdminAnnouncementsPage() {
                 <button
                   onClick={() => save.mutate({ text, active: editing ? editing.active : true })}
                   disabled={!text.trim() || save.isPending}
-                  className="flex-1 bg-blue hover:bg-blue-dark disabled:bg-gray-200 text-white font-medium py-3 rounded-xl transition-colors text-sm"
+                  className="flex-1 bg-blue hover:bg-blue-dark disabled:bg-gray-200 text-white font-medium py-3 rounded-[6px] transition-colors text-sm"
                 >
                   {save.isPending ? "Saving…" : editing ? "Save Changes" : "Add Announcement"}
                 </button>
-                <button onClick={() => setShowModal(false)} className="flex-1 border border-gray-200 text-sm text-gray-600 hover:bg-off-white py-3 rounded-xl transition-colors">
+                <button onClick={() => setShowModal(false)} className="flex-1 border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 py-3 rounded-[6px] transition-colors">
                   Cancel
                 </button>
               </div>

@@ -17,6 +17,7 @@ interface DriverOrder {
   deliveryAddress: string;
   deliveryDistrict: string;
   totalCartons: number;
+  totalPieces: number;
   total: number;
   createdAt: string;
 }
@@ -145,7 +146,12 @@ export default function DriverDashboardPage() {
                   <p className="text-xs text-gray-500">{o.status}</p>
                 </div>
                 <span className="text-xs font-medium bg-blue-pale text-blue px-2.5 py-1 rounded-full">
-                  {o.totalCartons} {o.totalCartons === 1 ? "carton" : "cartons"}
+                  {[
+                    o.totalCartons > 0 ? `${o.totalCartons} ctn` : null,
+                    o.totalPieces > 0 ? `${o.totalPieces} pcs` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" + ") || "0 items"}
                 </span>
               </div>
 

@@ -33,8 +33,10 @@ model Profile {
   updatedAt     DateTime  @updatedAt
 
   sessions     Session[]
+  otpCodes     OtpCode[]
   resetCodes   PasswordResetCode[]
   orders       Order[]
+  salesOrders  Order[]             @relation("SalesRepOrders")
   ledger       Ledger[]
   notes        CustomerNote[]
   conversation Conversation?
@@ -60,6 +62,19 @@ model Session {
   expiresAt DateTime
   createdAt DateTime @default(now())
   profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+}
+
+model OtpCode {
+  id        String    @id @default(cuid())
+  profileId String
+  code      String
+  expiresAt DateTime
+  usedAt    DateTime?
+  attempts  Int       @default(0)
+  createdAt DateTime  @default(now())
+  profile   Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, expiresAt])
 }
 
 model PasswordResetCode {
@@ -101,7 +116,11 @@ model Product {
   description     String?         @db.Text
   sku             String?         @unique
   categoryId      String?
-  // price + moq + unit retained for backward compat (mobile app); carton fields are authoritative on web.
+  // sellUnit decides which pricing fields are authoritative:
+  //   PIECE  → price (Rs/pc), moq (pcs), unit (label); carton fields ignored.
+  //   CARTON → piecesPerCarton + pricePerCarton; moq is in cartons (default 1).
+  // stockQty is ALWAYS pieces regardless of sellUnit.
+  sellUnit        SellUnit        @default(PIECE)
   price           Float
   mrp             Float?
   unit            String          @default("piece")
@@ -133,6 +152,8 @@ model Order {
   id               String          @id @default(cuid())
   orderNumber      String          @unique
   buyerId          String
+  // Set when a SALES rep (or admin) places the order on the buyer's behalf.
+  salesRepId       String?
   status           OrderStatus     @default(PENDING)
   paymentStatus    PayStatus       @default(UNPAID)
   paymentMethod    PayMethod       @default(COD)
@@ -150,17 +171,22 @@ model Order {
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   buyer            Profile         @relation(fields: [buyerId], references: [id])
+  salesRep         Profile?        @relation("SalesRepOrders", fields: [salesRepId], references: [id])
   items            OrderItem[]
   payments         Payment[]
   activity         OrderActivity[]
+
+  @@index([salesRepId])
 }
 
 model OrderItem {
-  id              String  @id @default(cuid())
+  id              String   @id @default(cuid())
   orderId         String
   productId       String
   name            String
-  // price = price per carton (snapshot); qty = number of cartons.
+  // unit = sellUnit snapshot at order time. price = Rs per <unit>; qty = number
+  // of <unit>s. For CARTON rows piecesPerCarton is the at-order snapshot.
+  unit            SellUnit @default(CARTON)
   price           Float
   qty             Int
   piecesPerCarton Int?
@@ -261,6 +287,12 @@ enum Role {
   ADMIN
   BUYER
   DRIVER
+  SALES
+}
+
+enum SellUnit {
+  PIECE
+  CARTON
 }
 
 enum Status {
@@ -289,6 +321,7 @@ enum PayMethod {
   ESEWA
   KHALTI
   COD
+  CREDIT
 }
 
 enum LedgerType {

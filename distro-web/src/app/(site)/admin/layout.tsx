@@ -18,10 +18,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (!token || user?.role !== "ADMIN") return null;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-off-white">
+    <div className="flex h-screen overflow-hidden bg-white">
       <AdminSidebar />
       <main className="flex-1 overflow-y-auto">
-        <div className="p-6 lg:p-8">{children}</div>
+        <div className="p-5 lg:p-6">{children}</div>
       </main>
     </div>
   );

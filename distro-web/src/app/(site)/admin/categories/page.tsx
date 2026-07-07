@@ -136,14 +136,14 @@ export default function AdminCategoriesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-grotesk font-bold text-2xl text-ink">Categories</h1>
+          <h1 className="font-grotesk font-bold text-xl text-ink">Categories</h1>
           <p className="text-sm text-gray-400 mt-0.5">
             {categories.length} total · shown on the buyer home and catalogue screens
           </p>
         </div>
         <button
           onClick={openAdd}
-          className="flex items-center gap-2 bg-blue hover:bg-blue-dark text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors"
+          className="flex items-center gap-2 bg-blue hover:bg-blue-dark text-white text-sm font-medium px-4 py-2 rounded-[6px] transition-colors"
         >
           <Plus size={16} /> Add Category
         </button>
@@ -152,9 +152,9 @@ export default function AdminCategoriesPage() {
       {/* Prominent CTA banner */}
       <button
         onClick={openAdd}
-        className="w-full flex items-center gap-4 bg-blue-pale border border-blue/30 rounded-2xl p-4 hover:bg-blue/10 transition-colors group"
+        className="w-full flex items-center gap-4 bg-gray-50 border border-blue/30 rounded-[8px] p-4 hover:bg-blue/10 transition-colors group"
       >
-        <div className="w-10 h-10 rounded-xl bg-blue flex items-center justify-center flex-shrink-0">
+        <div className="w-10 h-10 rounded-[6px] bg-blue flex items-center justify-center flex-shrink-0">
           <Plus size={20} className="text-white" />
         </div>
         <div className="flex-1 text-left">
@@ -168,18 +168,18 @@ export default function AdminCategoriesPage() {
       {isLoading ? (
         <div className="space-y-3">
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-20 bg-blue-pale rounded-2xl animate-pulse" />
+            <div key={i} className="h-20 bg-gray-50 rounded-[8px] animate-pulse" />
           ))}
         </div>
       ) : categories.length === 0 ? (
-        <div className="bg-white border border-gray-200 rounded-2xl p-12 text-center">
+        <div className="bg-white border border-gray-200 rounded-[8px] p-12 text-center">
           <Tags size={32} className="text-gray-300 mx-auto mb-3" />
           <p className="text-gray-400 text-sm mb-4">
             No categories yet. Create one to organise products for shoppers.
           </p>
           <button
             onClick={openAdd}
-            className="inline-flex items-center gap-2 bg-blue hover:bg-blue-dark text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors"
+            className="inline-flex items-center gap-2 bg-blue hover:bg-blue-dark text-white text-sm font-medium px-4 py-2 rounded-[6px] transition-colors"
           >
             <Plus size={16} /> Create first category
           </button>
@@ -189,9 +189,9 @@ export default function AdminCategoriesPage() {
           {topLevel.map((c) => {
             const children = categories.filter((k) => k.parentId === c.id);
             return (
-              <div key={c.id} className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+              <div key={c.id} className="bg-white border border-gray-200 rounded-[8px] overflow-hidden">
                 <div className="flex items-center gap-4 p-4">
-                  <div className="w-12 h-12 aspect-square rounded-xl bg-blue-pale flex items-center justify-center text-2xl flex-shrink-0 overflow-hidden">
+                  <div className="w-12 h-12 aspect-square rounded-[6px] bg-gray-50 flex items-center justify-center text-2xl flex-shrink-0 overflow-hidden">
                     {c.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={getImageUrl(c.imageUrl)} alt={c.name} className="w-full h-full object-cover" />
@@ -209,7 +209,7 @@ export default function AdminCategoriesPage() {
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button
                       onClick={() => openEdit(c)}
-                      className="p-2 rounded-lg text-gray-400 hover:text-blue hover:bg-blue-pale transition-colors"
+                      className="p-2 rounded-[6px] text-gray-400 hover:text-blue hover:bg-gray-50 transition-colors"
                     >
                       <Pencil size={15} />
                     </button>
@@ -217,20 +217,20 @@ export default function AdminCategoriesPage() {
                       onClick={() => {
                         if (confirm(`Delete "${c.name}"?`)) remove.mutate(c.id);
                       }}
-                      className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                      className="p-2 rounded-[6px] text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
                     >
                       <Trash2 size={15} />
                     </button>
                   </div>
                 </div>
                 {children.length > 0 && (
-                  <div className="border-t border-gray-100 bg-off-white">
+                  <div className="border-t border-gray-200 bg-gray-50">
                     {children.map((ch) => (
                       <div
                         key={ch.id}
-                        className="flex items-center gap-3 px-6 py-2.5 border-b border-gray-100 last:border-b-0"
+                        className="flex items-center gap-3 px-6 py-2.5 border-b border-gray-200 last:border-b-0"
                       >
-                        <div className="w-6 h-6 aspect-square rounded bg-blue-pale flex items-center justify-center text-base flex-shrink-0 overflow-hidden">
+                        <div className="w-6 h-6 aspect-square rounded bg-gray-50 flex items-center justify-center text-base flex-shrink-0 overflow-hidden">
                           {ch.imageUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={getImageUrl(ch.imageUrl)} alt={ch.name} className="w-full h-full object-cover" />
@@ -246,7 +246,7 @@ export default function AdminCategoriesPage() {
                         </div>
                         <button
                           onClick={() => openEdit(ch)}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-blue hover:bg-blue-pale transition-colors"
+                          className="p-1.5 rounded-[6px] text-gray-400 hover:text-blue hover:bg-gray-50 transition-colors"
                         >
                           <Pencil size={13} />
                         </button>
@@ -254,7 +254,7 @@ export default function AdminCategoriesPage() {
                           onClick={() => {
                             if (confirm(`Delete "${ch.name}"?`)) remove.mutate(ch.id);
                           }}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                          className="p-1.5 rounded-[6px] text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
                         >
                           <Trash2 size={13} />
                         </button>
@@ -271,8 +271,8 @@ export default function AdminCategoriesPage() {
       {/* Create / Edit modal */}
       {showModal && (
         <>
-          <div className="fixed inset-0 bg-ink/40 backdrop-blur-sm z-50" onClick={closeModal} />
-          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl z-50 p-6 w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="fixed inset-0 bg-ink/40 z-50" onClick={closeModal} />
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-[8px] z-50 p-6 w-full max-w-md border border-gray-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h2 className="font-grotesk font-semibold text-base text-ink">
                 {editing ? "Edit Category" : "New Category"}
@@ -284,8 +284,8 @@ export default function AdminCategoriesPage() {
 
             <div className="space-y-4">
               {/* Live preview */}
-              <div className="flex items-center gap-3 bg-blue-pale border border-blue/20 rounded-xl p-4">
-                <div className="w-14 h-14 aspect-square rounded-xl overflow-hidden bg-white flex items-center justify-center text-3xl flex-shrink-0">
+              <div className="flex items-center gap-3 bg-gray-50 border border-blue/20 rounded-[6px] p-4">
+                <div className="w-14 h-14 aspect-square rounded-[6px] overflow-hidden bg-white flex items-center justify-center text-3xl flex-shrink-0">
                   {imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={getImageUrl(imageUrl)} alt="Preview" className="w-full h-full object-cover" />
@@ -306,7 +306,7 @@ export default function AdminCategoriesPage() {
                   value={name}
                   onChange={(e) => { setName(e.target.value); if (nameError) setNameError(null); }}
                   placeholder="e.g. Snacks"
-                  className={`w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue ${
+                  className={`w-full border rounded-[6px] px-4 py-2.5 text-sm focus:outline-none focus:border-blue ${
                     nameError ? "border-red-300" : "border-gray-200"
                   }`}
                 />
@@ -327,7 +327,7 @@ export default function AdminCategoriesPage() {
                     type="button"
                     onClick={() => fileRef.current?.click()}
                     disabled={uploading}
-                    className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:border-blue hover:text-blue transition-colors disabled:opacity-50"
+                    className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-[6px] text-sm text-gray-600 hover:bg-gray-50 hover:text-blue transition-colors disabled:opacity-50"
                   >
                     <Upload size={14} />
                     {uploading ? "Uploading…" : imageUrl ? "Change image" : "Upload image"}
@@ -336,7 +336,7 @@ export default function AdminCategoriesPage() {
                     <button
                       type="button"
                       onClick={() => setImageUrl("")}
-                      className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-red-400 hover:bg-red-50 transition-colors"
+                      className="px-3 py-2 border border-gray-200 rounded-[6px] text-sm text-red-400 hover:bg-red-50 transition-colors"
                     >
                       Remove
                     </button>
@@ -355,7 +355,7 @@ export default function AdminCategoriesPage() {
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="e.g. Local & imported brews, cases and kegs for every shop size."
                   rows={3}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue resize-none"
+                  className="w-full border border-gray-200 rounded-[6px] px-4 py-2.5 text-sm focus:outline-none focus:border-blue resize-none"
                 />
                 <p className="text-xs text-gray-400 mt-1.5">Shown on the buyer home "Shop by category" cards.</p>
               </div>
@@ -368,10 +368,10 @@ export default function AdminCategoriesPage() {
                   <button
                     type="button"
                     onClick={() => setParentId(null)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                    className={`px-3 py-1.5 rounded-[6px] text-xs font-medium transition-colors ${
                       !parentId
                         ? "bg-blue text-white"
-                        : "bg-white border border-gray-200 text-gray-600 hover:border-blue"
+                        : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
                     }`}
                   >
                     None (top-level)
@@ -381,10 +381,10 @@ export default function AdminCategoriesPage() {
                       key={p.id}
                       type="button"
                       onClick={() => setParentId(p.id)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                      className={`px-3 py-1.5 rounded-[6px] text-xs font-medium transition-colors ${
                         parentId === p.id
                           ? "bg-blue text-white"
-                          : "bg-white border border-gray-200 text-gray-600 hover:border-blue"
+                          : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
                       }`}
                     >
                       {p.emoji ?? "📦"} {p.name}
@@ -397,13 +397,13 @@ export default function AdminCategoriesPage() {
                 <button
                   onClick={handleSave}
                   disabled={!name.trim() || save.isPending}
-                  className="flex-1 bg-blue hover:bg-blue-dark disabled:bg-gray-200 text-white font-medium py-3 rounded-xl transition-colors text-sm"
+                  className="flex-1 bg-blue hover:bg-blue-dark disabled:bg-gray-200 text-white font-medium py-3 rounded-[6px] transition-colors text-sm"
                 >
                   {save.isPending ? "Saving…" : editing ? "Save Changes" : "Add Category"}
                 </button>
                 <button
                   onClick={closeModal}
-                  className="flex-1 border border-gray-200 text-sm text-gray-600 hover:bg-off-white py-3 rounded-xl transition-colors"
+                  className="flex-1 border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 py-3 rounded-[6px] transition-colors"
                 >
                   Cancel
                 </button>

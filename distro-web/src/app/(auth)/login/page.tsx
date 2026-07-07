@@ -55,6 +55,7 @@ function LoginContent() {
     const redirect = searchParams.get("redirect");
     if (user.role === "ADMIN") router.push(redirect || "/admin");
     else if (user.role === "DRIVER") router.push(redirect || "/driver");
+    else if (user.role === "SALES") router.push(redirect || "/sales");
     else router.push(redirect || "/");
   }
 

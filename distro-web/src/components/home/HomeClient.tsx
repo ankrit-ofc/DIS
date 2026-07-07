@@ -21,7 +21,8 @@ import { useCartStore } from "@/store/cartStore";
 import { AnimatedTestimonials } from "@/components/ui/animated-testimonials";
 import { DISTRO_ANIMATED_TESTIMONIALS } from "@/data/distro-testimonials";
 import { useReveal } from "@/hooks/useReveal";
-import { getImageUrl } from "@/lib/utils";
+import { getImageUrl, unitShort } from "@/lib/utils";
+import { unitPriceOf } from "@/components/PriceBlock";
 import type { Product } from "@/components/ProductCard";
 
 interface Category {
@@ -362,26 +363,25 @@ export default function HomeClient({
   }, [products, activeBrand]);
 
   function addToCart(product: Product) {
-    const piecesPerCarton = product.piecesPerCarton ?? product.moq ?? 1;
-    const ppcRaw = product.pricePerCarton;
-    const pricePerCarton =
-      ppcRaw == null
-        ? product.price * (product.moq ?? 1)
-        : typeof ppcRaw === "string"
-          ? parseFloat(ppcRaw)
-          : ppcRaw;
+    if (product.stockStatus === "OUT_OF_STOCK") {
+      toast.error(`${product.name} is out of stock`);
+      return;
+    }
     addItem({
       id: product.id,
       name: product.name,
-      price: pricePerCarton,
+      sellUnit: product.sellUnit,
+      price: unitPriceOf(product),
       mrp: product.mrp,
-      unit: product.unit,
       moq: product.moq,
-      piecesPerCarton,
+      maxOrderQty: product.maxOrderQty,
+      piecesPerCarton: product.piecesPerCarton,
       image: product.imageUrl ?? product.image,
       brand: product.brand,
     });
-    toast.success(`${product.name} — 1 carton added to your van`);
+    toast.success(
+      `${product.name} — ${product.moq} ${unitShort(product.sellUnit)} added to your van`,
+    );
   }
 
   return (

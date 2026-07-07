@@ -1,21 +1,15 @@
 "use client";
 
-import { useState, Suspense, useEffect } from "react";
+import { useState, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useCartStore } from "@/store/cartStore";
 import { useAuthStore } from "@/store/authStore";
-import { formatPrice } from "@/lib/utils";
+import { useCartValidation } from "@/hooks/useCartValidation";
+import { formatPrice, unitShort } from "@/lib/utils";
 import api from "@/lib/api";
 import { AlertCircle, MapPin } from "lucide-react";
 import toast from "react-hot-toast";
-
-interface StockIssue {
-  productId: number | string;
-  name: string;
-  requested: number;
-  available: number;
-}
 
 const MapLocationPicker = dynamic(
   () => import("@/components/MapLocationPicker"),
@@ -24,7 +18,7 @@ const MapLocationPicker = dynamic(
 
 function CheckoutForm() {
   const router = useRouter();
-  const { items, subtotal, clearCart } = useCartStore();
+  const { items, subtotal, clearCart, updateQty, removeItem } = useCartStore();
   const { user } = useAuthStore();
 
   const [storeName, setStoreName] = useState(user?.storeName || "");
@@ -43,50 +37,8 @@ function CheckoutForm() {
   const belowMin = sub < MIN_ORDER;
   const needed = Math.max(0, MIN_ORDER - sub);
 
-  const [stockIssues, setStockIssues] = useState<StockIssue[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (items.length === 0) {
-      setStockIssues([]);
-      return;
-    }
-    (async () => {
-      try {
-        const checks = await Promise.all(
-          items.map((it) =>
-            api
-              .get(`/products/${it.id}`)
-              .then((r) => ({ item: it, product: r.data }))
-              .catch(() => null)
-          )
-        );
-        if (cancelled) return;
-        const issues: StockIssue[] = [];
-        for (const c of checks) {
-          if (!c) continue;
-          // stockQty is in pieces; cart qty is in cartons.
-          const availablePieces = c.product?.stockQty ?? c.product?.stock ?? 0;
-          const ppc = c.item.piecesPerCarton || 1;
-          const cartonsAvailable = Math.floor(availablePieces / ppc);
-          if (cartonsAvailable < c.item.qty) {
-            issues.push({
-              productId: c.item.id,
-              name: c.item.name,
-              requested: c.item.qty,
-              available: cartonsAvailable,
-            });
-          }
-        }
-        setStockIssues(issues);
-      } catch {
-        /* ignore — backend will re-validate on submit */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [items]);
+  // Server-side re-validation (stock, inactive, price drift) on mount.
+  const { issues: stockIssues, revalidate } = useCartValidation();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -129,8 +81,21 @@ function CheckoutForm() {
       }
       router.push(`/order-confirm/${orderId}`);
     } catch (err: unknown) {
-      const errData = (err as { response?: { data?: { message?: string; error?: string } } })?.response?.data;
-      const message = errData?.message || errData?.error || "Failed to place order. Please try again.";
+      const resp = (err as {
+        response?: {
+          status?: number;
+          data?: { message?: string; error?: string; code?: string; items?: Array<{ productId: string; requested: number; available: number }> };
+        };
+      })?.response;
+      // Checkout race: someone took the stock first — surface the same inline
+      // "Update to N" cart UI instead of a generic failure toast.
+      if (resp?.status === 409 && resp.data?.code === "INSUFFICIENT_STOCK") {
+        void revalidate();
+        setError("Stock changed while you were checking out — review the highlighted items above.");
+        setSubmitting(false);
+        return;
+      }
+      const message = resp?.data?.message || resp?.data?.error || "Failed to place order. Please try again.";
       setError(message);
       toast.error(message);
       setSubmitting(false);
@@ -153,18 +118,38 @@ function CheckoutForm() {
       {stockIssues.length > 0 && (
         <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <p className="font-semibold flex items-center gap-2">
-            <AlertCircle size={16} /> Some items in your van no longer have enough stock
+            <AlertCircle size={16} /> Some items in your van need attention
           </p>
-          <ul className="mt-2 list-disc pl-5 space-y-0.5 text-xs">
+          <ul className="mt-2 space-y-1.5 text-xs">
             {stockIssues.map((s) => (
-              <li key={s.productId}>
-                {s.name}: requested {s.requested} cartons, only {s.available} available
+              <li key={s.id} className="flex flex-wrap items-center gap-2">
+                <span>
+                  {s.name}:{" "}
+                  {s.type === "INACTIVE"
+                    ? "no longer available"
+                    : s.type === "PRICE"
+                    ? `price changed to ${formatPrice(s.price ?? 0)}`
+                    : `requested ${s.requested}, only ${s.available} available`}
+                </span>
+                {s.type === "STOCK" && s.available > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => { updateQty(s.id, s.available); void revalidate(); }}
+                    className="font-semibold text-white bg-amber-500 hover:bg-amber-600 rounded-md px-2 py-0.5 transition-colors"
+                  >
+                    Update to {s.available}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { removeItem(s.id); void revalidate(); }}
+                  className="font-semibold underline hover:no-underline"
+                >
+                  Remove
+                </button>
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-xs">
-            Reduce the quantity in your van or remove the item before checking out.
-          </p>
         </div>
       )}
       <div className="grid lg:grid-cols-[1fr_360px] gap-6">
@@ -324,7 +309,7 @@ function CheckoutForm() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-ink truncate">{item.name}</p>
                     <p className="text-xs text-gray-400">
-                      {item.qty} {item.qty === 1 ? "carton" : "cartons"} × {formatPrice(item.price)}
+                      {item.qty} {unitShort(item.sellUnit)} × {formatPrice(item.price)}
                     </p>
                   </div>
                   <p className="text-sm font-grotesk font-medium text-ink">

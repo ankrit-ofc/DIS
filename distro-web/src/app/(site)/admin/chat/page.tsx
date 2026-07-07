@@ -167,14 +167,14 @@ export default function AdminChatPage() {
     <div className="flex h-[calc(100vh-64px)] -m-6 lg:-m-8">
       {/* Sidebar */}
       <div className="w-[260px] flex-shrink-0 border-r border-gray-200 bg-white flex flex-col">
-        <div className="p-3 border-b border-gray-100">
+        <div className="p-3 border-b border-gray-200">
           <div className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search..."
-              className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-blue"
+              className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-[6px] outline-none focus:border-blue"
             />
           </div>
         </div>
@@ -228,7 +228,7 @@ export default function AdminChatPage() {
       </div>
 
       {/* Main panel */}
-      <div className="flex-1 flex flex-col bg-off-white min-w-0">
+      <div className="flex-1 flex flex-col bg-gray-50 min-w-0">
         {!activeConv ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-3 text-gray-400">
             <MessageSquare size={40} strokeWidth={1} />
@@ -248,19 +248,17 @@ export default function AdminChatPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <span
-                  className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    activeConv.status === "OPEN"
-                      ? "bg-green-100 text-green-700"
-                      : "bg-gray-100 text-gray-500"
-                  }`}
-                >
+                <span className="inline-flex items-center gap-1.5 text-xs text-ink">
+                  <span
+                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{ backgroundColor: activeConv.status === "OPEN" ? "#00C46F" : "#9BA3BF" }}
+                  />
                   {activeConv.status}
                 </span>
                 {activeConv.status === "OPEN" && (
                   <button
                     onClick={handleMarkResolved}
-                    className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                    className="text-xs px-3 py-1.5 rounded-[6px] border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
                   >
                     Mark resolved
                   </button>
@@ -293,7 +291,7 @@ export default function AdminChatPage() {
             </div>
 
             {/* Input */}
-            <div className="bg-white border-t border-gray-200 px-4 py-3 flex items-end gap-3 flex-shrink-0">
+            <div className="bg-white border-t border-gray-200 px-3 py-2 flex items-end gap-3 flex-shrink-0">
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -301,7 +299,7 @@ export default function AdminChatPage() {
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
                 }}
                 placeholder="Type a reply..."
-                className="flex-1 resize-none border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue transition-colors max-h-[120px]"
+                className="flex-1 resize-none border border-gray-200 rounded-[6px] px-4 py-2.5 text-sm outline-none focus:border-blue transition-colors max-h-[120px]"
                 rows={1}
               />
               <button

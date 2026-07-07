@@ -102,16 +102,16 @@ export default function AdminInventoryPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="font-grotesk font-bold text-2xl text-ink">Inventory</h1>
+        <h1 className="font-grotesk font-bold text-xl text-ink">Inventory</h1>
         <div className="flex gap-3 text-sm">
           {lowStockCount > 0 && (
-            <span className="flex items-center gap-1.5 text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg font-medium">
+            <span className="flex items-center gap-1.5 text-amber-600 bg-amber-50 px-3 py-1.5 rounded-[6px] font-medium">
               <AlertTriangle size={14} />
               {lowStockCount} Low Stock
             </span>
           )}
           {outOfStockCount > 0 && (
-            <span className="flex items-center gap-1.5 text-red-500 bg-red-50 px-3 py-1.5 rounded-lg font-medium">
+            <span className="flex items-center gap-1.5 text-red-500 bg-red-50 px-3 py-1.5 rounded-[6px] font-medium">
               <AlertTriangle size={14} />
               {outOfStockCount} Out of Stock
             </span>
@@ -121,12 +121,12 @@ export default function AdminInventoryPage() {
 
       <div className="flex flex-wrap gap-3">
         {/* Tabs */}
-        <div className="flex gap-1 bg-off-white rounded-xl p-1">
+        <div className="flex gap-1 bg-gray-50 rounded-[6px] p-1">
           {(["all", "low"] as TabType[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors capitalize ${
+              className={`px-4 py-1.5 rounded-[6px] text-sm font-medium transition-colors capitalize ${
                 tab === t
                   ? "bg-white shadow-sm text-ink"
                   : "text-gray-400 hover:text-ink"
@@ -148,28 +148,28 @@ export default function AdminInventoryPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search products…"
-            className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-blue"
+            className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-[6px] text-sm bg-white focus:outline-none focus:border-blue"
           />
         </div>
       </div>
 
       <div className="flex gap-6">
         {/* Table */}
-        <div className="flex-1 bg-white border border-gray-200 rounded-2xl overflow-hidden">
+        <div className="flex-1 bg-white border border-gray-200 rounded-[8px] overflow-hidden">
           {isLoading ? (
             <div className="p-4 space-y-2">
               {[...Array(8)].map((_, i) => (
-                <div key={i} className="h-12 bg-blue-pale rounded-xl animate-pulse" />
+                <div key={i} className="h-12 bg-gray-50 rounded-[6px] animate-pulse" />
               ))}
             </div>
           ) : (
             <table className="w-full text-sm">
-              <thead className="bg-off-white">
+              <thead className="bg-gray-50">
                 <tr>
                   {["Product", "Stock", "MOQ", "Status", "Actions"].map((h) => (
                     <th
                       key={h}
-                      className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide"
+                      className="text-left px-3 py-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wide"
                     >
                       {h}
                     </th>
@@ -181,12 +181,12 @@ export default function AdminInventoryPage() {
                   const isLow = p.stock > 0 && p.stock <= p.moq * 2;
                   const isOut = p.stock === 0;
                   return (
-                    <tr key={p.id} className="hover:bg-off-white transition-colors">
-                      <td className="px-4 py-3">
+                    <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-3 py-2">
                         <p className="font-medium text-ink">{p.name}</p>
                         <p className="text-xs text-gray-400">{p.brand}</p>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2">
                         <span
                           className={`font-grotesk font-bold text-base ${
                             isOut
@@ -200,27 +200,25 @@ export default function AdminInventoryPage() {
                         </span>
                         <span className="text-xs text-gray-400 ml-1">{p.unit}</span>
                       </td>
-                      <td className="px-4 py-3 text-gray-600 text-sm">
+                      <td className="px-3 py-2 text-gray-600 text-sm">
                         {p.moq} {p.unit}
                       </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${
-                            isOut
-                              ? "bg-red-50 text-red-500"
-                              : isLow
-                              ? "bg-amber-50 text-amber-600"
-                              : "bg-green-light text-green"
-                          }`}
-                        >
+                      <td className="px-3 py-2">
+                        <span className="inline-flex items-center gap-1.5 text-sm text-ink whitespace-nowrap">
+                          <span
+                            className="w-1.5 h-1.5 rounded-full shrink-0"
+                            style={{
+                              backgroundColor: isOut ? "#DC2626" : isLow ? "#D97706" : "#00C46F",
+                            }}
+                          />
                           {isOut ? "Out of Stock" : isLow ? "Low Stock" : "In Stock"}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2">
                         <div className="flex gap-1">
                           <button
                             onClick={() => openAdjust(p)}
-                            className="text-xs text-blue border border-blue rounded-lg px-2 py-1 hover:bg-blue-pale transition-colors"
+                            className="text-xs text-ink border border-gray-200 rounded-[6px] px-2 py-1 hover:bg-gray-50 transition-colors"
                           >
                             Adjust
                           </button>
@@ -230,7 +228,7 @@ export default function AdminInventoryPage() {
                                 historyProductId === p.id ? null : p.id
                               )
                             }
-                            className="text-xs text-gray-400 border border-gray-200 rounded-lg px-2 py-1 hover:bg-off-white transition-colors"
+                            className="text-xs text-gray-400 border border-gray-200 rounded-[6px] px-2 py-1 hover:bg-gray-50 transition-colors"
                           >
                             History
                           </button>
@@ -246,14 +244,14 @@ export default function AdminInventoryPage() {
 
         {/* Movement history panel */}
         {historyProductId && (
-          <div className="w-72 flex-shrink-0 bg-white border border-gray-200 rounded-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+          <div className="w-72 flex-shrink-0 bg-white border border-gray-200 rounded-[8px] overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200">
               <p className="font-grotesk font-semibold text-sm text-ink">
                 Stock Movements
               </p>
               <button
                 onClick={() => setHistoryProductId(null)}
-                className="p-1 rounded-lg hover:bg-gray-200"
+                className="p-1 rounded-[6px] hover:bg-gray-200"
               >
                 <X size={14} />
               </button>
@@ -267,18 +265,17 @@ export default function AdminInventoryPage() {
                 movements.map((m) => (
                   <div
                     key={m.id}
-                    className="bg-off-white rounded-xl p-3 text-xs"
+                    className="bg-gray-50 rounded-[6px] p-3 text-xs"
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span
-                        className={`font-medium px-2 py-0.5 rounded-full text-xs ${
-                          m.type === "IN"
-                            ? "bg-green-light text-green"
-                            : m.type === "OUT"
-                            ? "bg-red-50 text-red-500"
-                            : "bg-blue-light text-blue"
-                        }`}
-                      >
+                      <span className="inline-flex items-center gap-1.5 text-xs text-ink">
+                        <span
+                          className="w-1.5 h-1.5 rounded-full shrink-0"
+                          style={{
+                            backgroundColor:
+                              m.type === "IN" ? "#00C46F" : m.type === "OUT" ? "#DC2626" : "#5C6480",
+                          }}
+                        />
                         {m.type}
                       </span>
                       <span className="font-grotesk font-bold text-ink">
@@ -303,10 +300,10 @@ export default function AdminInventoryPage() {
       {adjustProduct && (
         <>
           <div
-            className="fixed inset-0 bg-ink/40 backdrop-blur-sm z-50"
+            className="fixed inset-0 bg-ink/40 z-50"
             onClick={() => setAdjustProduct(null)}
           />
-          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl z-50 p-6 w-full max-w-sm shadow-2xl">
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-[8px] z-50 p-6 w-full max-w-sm border border-gray-200">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-grotesk font-semibold text-base text-ink">
                 Adjust Stock
@@ -327,7 +324,7 @@ export default function AdminInventoryPage() {
                     key={t}
                     type="button"
                     onClick={() => setAdjustType(t)}
-                    className={`py-2 rounded-xl text-xs font-semibold border-2 transition-colors ${
+                    className={`py-2 rounded-[6px] text-xs font-semibold border-2 transition-colors ${
                       adjustType === t
                         ? t === "IN"
                           ? "border-green bg-green-light text-green"
@@ -351,7 +348,7 @@ export default function AdminInventoryPage() {
                   value={adjustQty}
                   onChange={(e) => setAdjustQty(e.target.value)}
                   required
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
+                  className="w-full border border-gray-200 rounded-[6px] px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
                 />
               </div>
               <div>
@@ -364,13 +361,13 @@ export default function AdminInventoryPage() {
                   onChange={(e) => setAdjustReason(e.target.value)}
                   required
                   placeholder="e.g. Received from supplier"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
+                  className="w-full border border-gray-200 rounded-[6px] px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
                 />
               </div>
               <button
                 type="submit"
                 disabled={adjustStock.isPending}
-                className="w-full bg-blue hover:bg-blue-dark disabled:bg-gray-200 text-white font-medium py-3 rounded-xl transition-colors text-sm"
+                className="w-full bg-blue hover:bg-blue-dark disabled:bg-gray-200 text-white font-medium py-3 rounded-[6px] transition-colors text-sm"
               >
                 {adjustStock.isPending ? "Saving…" : "Adjust Stock"}
               </button>

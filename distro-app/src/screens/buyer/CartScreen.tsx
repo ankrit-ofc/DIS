@@ -20,13 +20,24 @@ import Animated, {
 } from "react-native-reanimated";
 import { Swipeable } from "react-native-gesture-handler";
 import { Ionicons } from "@expo/vector-icons";
+import { useCallback, useState } from "react";
+import { Alert } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { useCartStore } from "../../store/cartStore";
+import { api } from "../../lib/api";
 import { colors, spacing, radius, shadow, typography } from "../../lib/theme";
-import { fmtRs } from "../../lib/format";
+import { fmtRs, unitShort } from "../../lib/format";
 import { resolveImageUrl } from "../../lib/imageUrl";
 import { SkeletonLoader } from "../../components/SkeletonLoader";
 
 const { width: W } = Dimensions.get("window");
+
+export interface CartIssue {
+  productId: string;
+  type: "STOCK" | "INACTIVE" | "PRICE";
+  available: number;
+  price?: number;
+}
 
 // ─── Swipe-to-delete action ───────────────────────────────────────────────────
 function DeleteAction({ onDelete }: { onDelete: () => void }) {
@@ -42,13 +53,17 @@ function DeleteAction({ onDelete }: { onDelete: () => void }) {
 function CartItem({
   item,
   index,
+  issue,
   onQtyChange,
   onRemove,
+  onFixIssue,
 }: {
   item: any;
   index: number;
+  issue?: CartIssue;
   onQtyChange: (id: string, qty: number) => void;
   onRemove: (id: string) => void;
+  onFixIssue: (issue: CartIssue) => void;
 }) {
   const btnScale = useSharedValue(1);
 
@@ -101,23 +116,38 @@ function CartItem({
           <View style={styles.cardInfo}>
             <Text style={styles.cardName} numberOfLines={2}>{item.name}</Text>
             <Text style={styles.cardUnitPrice}>
-              {item.qty} carton{item.qty > 1 ? "s" : ""} ({item.qty * item.piecesPerCarton} {item.unit}{item.qty * item.piecesPerCarton > 1 ? "s" : ""})
+              {item.qty} {unitShort(item.sellUnit)}
+              {item.sellUnit === "CARTON" && item.piecesPerCarton
+                ? ` (${item.qty * item.piecesPerCarton} pcs)`
+                : ""}
             </Text>
             <Text style={styles.cardLineTotal}>
-              Rs {(item.pricePerCarton * item.qty).toLocaleString()}
+              Rs {(item.price * item.qty).toLocaleString()}
             </Text>
+            {item.qty >= item.maxOrderQty && !issue && (
+              <Text style={styles.capHint}>Only {item.maxOrderQty} available</Text>
+            )}
           </View>
 
-          {/* Qty stepper — cartons, min 1 */}
+          {/* Qty stepper — steps in the item's sellUnit */}
           <View style={styles.qtyCol}>
             <Animated.View style={btnStyle}>
               <TouchableOpacity
                 style={styles.qtyBtn}
-                onPress={() => pressBtn(() => onQtyChange(item.productId, Math.max(1, item.qty - 1)))}
+                onPress={() => pressBtn(() => {
+                  if (item.qty - 1 < item.moq) {
+                    // Below MOQ = leaving the product — subtle confirm.
+                    Alert.alert("Remove item?", `${item.name} will be removed from your cart.`, [
+                      { text: "Cancel", style: "cancel" },
+                      { text: "Remove", style: "destructive", onPress: () => onRemove(item.productId) },
+                    ]);
+                  } else {
+                    onQtyChange(item.productId, item.qty - 1);
+                  }
+                })}
                 activeOpacity={0.9}
-                disabled={item.qty <= 1}
               >
-                <Text style={[styles.qtyBtnText, item.qty <= 1 && { opacity: 0.4 }]}>−</Text>
+                <Text style={styles.qtyBtnText}>−</Text>
               </TouchableOpacity>
             </Animated.View>
 
@@ -127,12 +157,36 @@ function CartItem({
               style={styles.qtyBtn}
               onPress={() => onQtyChange(item.productId, item.qty + 1)}
               activeOpacity={0.9}
+              disabled={item.qty >= item.maxOrderQty}
             >
-              <Text style={styles.qtyBtnText}>+</Text>
+              <Text style={[styles.qtyBtnText, item.qty >= item.maxOrderQty && { opacity: 0.4 }]}>+</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Swipeable>
+
+      {issue && (
+        <View style={styles.issueBanner}>
+          <Ionicons name="alert-circle-outline" size={14} color="#B45309" />
+          <Text style={styles.issueText}>
+            {issue.type === "INACTIVE"
+              ? "No longer available"
+              : issue.type === "PRICE"
+              ? `Price changed to Rs ${(issue.price ?? 0).toLocaleString()}`
+              : `Only ${issue.available} available`}
+          </Text>
+          {issue.type === "STOCK" && issue.available > 0 && (
+            <TouchableOpacity style={styles.issueBtn} onPress={() => onFixIssue(issue)} activeOpacity={0.85}>
+              <Text style={styles.issueBtnText}>Update to {issue.available}</Text>
+            </TouchableOpacity>
+          )}
+          {(issue.type === "INACTIVE" || issue.type === "PRICE") && (
+            <TouchableOpacity style={styles.issueBtn} onPress={() => onFixIssue(issue)} activeOpacity={0.85}>
+              <Text style={styles.issueBtnText}>{issue.type === "PRICE" ? "Use new price" : "Remove"}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
     </Animated.View>
   );
 }
@@ -159,8 +213,59 @@ function EmptyCart({ onBrowse }: { onBrowse: () => void }) {
 // ─── Main screen ──────────────────────────────────────────────────────────────
 export function CartScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
-  const { items, updateQty, removeItem, totalAmount, clearCart } = useCartStore();
+  const { items, updateQty, removeItem, totalAmount, clearCart, applyValidation } = useCartStore();
   const totalItems = items.reduce((s, i) => s + i.qty, 0);
+  const [issues, setIssues] = useState<CartIssue[]>([]);
+
+  // Server-side re-validation whenever the cart gains focus. Never
+  // auto-adjusts — each problem line gets an inline warning + one-tap fix.
+  const revalidate = useCallback(async () => {
+    const current = useCartStore.getState().items;
+    if (current.length === 0) { setIssues([]); return; }
+    try {
+      const res = await api.post("/cart/validate", {
+        items: current.map((i) => ({ productId: i.productId, qty: i.qty, price: i.price })),
+      });
+      const lines: Array<{
+        productId: string | null; requested: number; inactive: boolean;
+        available: number; price?: number; priceChanged: boolean;
+      }> = res.data.lines ?? [];
+      const found: CartIssue[] = [];
+      const caps: Array<{ productId: string; maxOrderQty: number }> = [];
+      for (const line of lines) {
+        if (!line.productId) continue;
+        caps.push({ productId: line.productId, maxOrderQty: line.available });
+        if (line.inactive) {
+          found.push({ productId: line.productId, type: "INACTIVE", available: 0 });
+        } else if (line.requested > line.available) {
+          found.push({ productId: line.productId, type: "STOCK", available: line.available });
+        } else if (line.priceChanged) {
+          found.push({ productId: line.productId, type: "PRICE", available: line.available, price: line.price });
+        }
+      }
+      applyValidation(caps);
+      setIssues(found);
+    } catch {
+      // Offline / auth issues — checkout re-validates server-side anyway.
+    }
+  }, [applyValidation]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void revalidate();
+    }, [revalidate])
+  );
+
+  function fixIssue(issue: CartIssue) {
+    if (issue.type === "STOCK") {
+      updateQty(issue.productId, issue.available);
+    } else if (issue.type === "PRICE" && issue.price != null) {
+      applyValidation([{ productId: issue.productId, price: issue.price }]);
+    } else {
+      removeItem(issue.productId);
+    }
+    void revalidate();
+  }
 
   if (items.length === 0) {
     return (
@@ -209,8 +314,10 @@ export function CartScreen({ navigation }: any) {
           <CartItem
             item={item}
             index={index}
+            issue={issues.find((i) => i.productId === item.productId)}
             onQtyChange={updateQty}
             onRemove={removeItem}
+            onFixIssue={fixIssue}
           />
         )}
         ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
@@ -340,6 +447,29 @@ const styles = StyleSheet.create({
     minWidth: 24,
     textAlign: "center",
   },
+
+  capHint: { fontSize: 11, color: "#B45309", fontFamily: typography.body, marginTop: 2 },
+  issueBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+    backgroundColor: "#FFFBEB",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    marginTop: 4,
+  },
+  issueText: { flex: 1, fontSize: 12, color: "#92400E", fontFamily: typography.bodyMedium },
+  issueBtn: {
+    backgroundColor: "#F59E0B",
+    borderRadius: radius.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  issueBtnText: { fontSize: 11, color: colors.white, fontFamily: typography.bodySemiBold },
 
   deleteAction: {
     backgroundColor: colors.red,

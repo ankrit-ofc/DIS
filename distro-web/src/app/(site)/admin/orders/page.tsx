@@ -8,12 +8,13 @@ import dynamic from "next/dynamic";
 import toast from "react-hot-toast";
 import api from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
+import { StatusDot } from "@/components/admin/ui";
 
 const MapView = dynamic(() => import("@/components/admin/OrderMapView"), {
   ssr: false,
   loading: () => (
-    <div className="h-48 bg-blue-pale rounded-xl animate-pulse flex items-center justify-center">
-      <MapPin size={24} className="text-blue animate-pulse" />
+    <div className="h-48 bg-white border border-gray-200 rounded-[6px] animate-pulse flex items-center justify-center">
+      <MapPin size={24} className="text-gray-400" />
     </div>
   ),
 });
@@ -49,15 +50,6 @@ const DATE_RANGES = [
   { key: "30D", label: "Last 30 days" },
   { key: "ALL", label: "All time" },
 ];
-
-const STATUS_STYLES: Record<string, string> = {
-  PENDING: "bg-amber-50 text-amber-600",
-  CONFIRMED: "bg-blue-light text-blue",
-  PROCESSING: "bg-purple-50 text-purple-600",
-  DISPATCHED: "bg-indigo-50 text-indigo-600",
-  DELIVERED: "bg-green-light text-green",
-  CANCELLED: "bg-red-50 text-red-500",
-};
 
 function dayKey(d: string | Date): string {
   const date = new Date(d);
@@ -260,11 +252,11 @@ function OrdersContent() {
       <div className="flex-1 flex flex-col min-w-0">
         <div className="mb-5 space-y-3">
           <div className="flex items-center justify-between">
-            <h1 className="font-grotesk font-bold text-2xl text-ink">Orders</h1>
+            <h1 className="font-grotesk font-bold text-xl text-ink">Orders</h1>
             <button
               onClick={() => refetch()}
               disabled={isFetching}
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-blue border border-blue rounded-lg px-3 py-1.5 hover:bg-blue-pale transition-colors disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-ink bg-white border border-gray-200 rounded-[6px] px-3 py-1.5 hover:bg-gray-50 transition-colors disabled:opacity-60"
             >
               <RefreshCw size={13} className={isFetching ? "animate-spin" : ""} />
               Refresh
@@ -277,10 +269,10 @@ function OrdersContent() {
               <button
                 key={r.key}
                 onClick={() => setDateRange(r.key)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+                className={`px-3 py-1.5 rounded-[6px] text-xs font-medium whitespace-nowrap transition-colors border ${
                   dateRange === r.key
-                    ? "bg-ink text-white"
-                    : "bg-white border border-gray-200 text-gray-600 hover:border-ink"
+                    ? "bg-blue-light text-blue border-blue-light"
+                    : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
                 }`}
               >
                 {r.label}
@@ -294,10 +286,10 @@ function OrdersContent() {
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+                className={`px-3 py-1.5 rounded-[6px] text-xs font-medium whitespace-nowrap transition-colors border ${
                   statusFilter === s
-                    ? "bg-blue text-white"
-                    : "bg-white border border-gray-200 text-gray-600 hover:border-blue"
+                    ? "bg-blue-light text-blue border-blue-light"
+                    : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
                 }`}
               >
                 {s}
@@ -316,7 +308,7 @@ function OrdersContent() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search order number, store name, phone…"
-              className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-blue"
+              className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-[6px] text-sm bg-white focus:outline-none focus:border-blue"
             />
             {search && (
               <button
@@ -331,7 +323,7 @@ function OrdersContent() {
 
         {/* Bulk action bar */}
         {selectedIds.size > 0 && (
-          <div className="mb-3 flex flex-wrap items-center gap-2 bg-blue-pale border border-blue/30 rounded-xl px-4 py-2.5">
+          <div className="mb-3 flex flex-wrap items-center gap-2 bg-blue-light border border-gray-200 rounded-[6px] px-4 py-2.5">
             <CheckCircle2 size={16} className="text-blue" />
             <span className="text-sm font-medium text-ink">
               {selectedIds.size} selected
@@ -342,7 +334,7 @@ function OrdersContent() {
                 key={s}
                 onClick={() => runBulk(s)}
                 disabled={bulkUpdate.isPending}
-                className="text-xs font-medium px-2.5 py-1 rounded-lg bg-white border border-gray-200 text-gray-600 hover:border-blue hover:text-blue disabled:opacity-60"
+                className="text-xs font-medium px-2.5 py-1 rounded-[6px] bg-white border border-gray-200 text-gray-600 hover:text-blue disabled:opacity-60"
               >
                 {s}
               </button>
@@ -357,13 +349,13 @@ function OrdersContent() {
         )}
 
         {/* Table — grouped by day */}
-        <div className="flex-1 overflow-auto bg-white border border-gray-200 rounded-2xl">
+        <div className="flex-1 overflow-auto bg-white border border-gray-200 rounded-[8px]">
           {isLoading ? (
             <div className="space-y-2 p-4">
               {[...Array(8)].map((_, i) => (
                 <div
                   key={i}
-                  className="h-14 bg-blue-pale rounded-xl animate-pulse"
+                  className="h-10 bg-gray-50 rounded-[6px] animate-pulse"
                 />
               ))}
             </div>
@@ -373,9 +365,9 @@ function OrdersContent() {
             </div>
           ) : (
             <table className="w-full text-sm">
-              <thead className="bg-off-white sticky top-0 z-10">
+              <thead className="bg-white sticky top-0 z-10 shadow-[inset_0_-1px_0_#E5E7EB]">
                 <tr>
-                  <th className="w-10 px-4 py-3">
+                  <th className="w-10 px-3 py-2">
                     <input
                       type="checkbox"
                       checked={allSelected}
@@ -383,10 +375,18 @@ function OrdersContent() {
                       className="accent-blue"
                     />
                   </th>
-                  {["#", "Store", "Status", "Payment", "Total", "Time"].map((h) => (
+                  {["#", "Store", "Status", "Payment"].map((h) => (
                     <th
                       key={h}
-                      className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide"
+                      className="text-left px-3 py-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wide"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                  {["Total", "Time"].map((h) => (
+                    <th
+                      key={h}
+                      className="text-right px-3 py-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wide"
                     >
                       {h}
                     </th>
@@ -400,8 +400,8 @@ function OrdersContent() {
                     bucket.orders.every((o) => selectedIds.has(o.id));
                   return (
                     <Fragment key={day}>
-                      <tr className="bg-off-white">
-                        <td className="px-4 py-2">
+                      <tr className="bg-gray-50">
+                        <td className="px-3 py-1.5">
                           <input
                             type="checkbox"
                             checked={groupAllSelected}
@@ -410,7 +410,7 @@ function OrdersContent() {
                             className="accent-blue"
                           />
                         </td>
-                        <td colSpan={5} className="px-4 py-2 text-xs font-semibold text-ink">
+                        <td colSpan={5} className="px-3 py-1.5 text-xs font-semibold text-ink">
                           {dayLabel(day)}{" "}
                           <span className="text-gray-400 font-normal">
                             · {bucket.orders.length} orders · {formatPrice(bucket.revenue)} revenue
@@ -424,11 +424,11 @@ function OrdersContent() {
                             setSelectedId(o.id);
                             router.replace(`/admin/orders?id=${o.id}`, { scroll: false });
                           }}
-                          className={`cursor-pointer hover:bg-off-white transition-colors ${
-                            selectedId === o.id ? "bg-blue-pale" : ""
+                          className={`cursor-pointer transition-colors ${
+                            selectedId === o.id ? "bg-blue-light" : "hover:bg-gray-50"
                           }`}
                         >
-                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                          <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                             <input
                               type="checkbox"
                               checked={selectedIds.has(o.id)}
@@ -436,10 +436,10 @@ function OrdersContent() {
                               className="accent-blue"
                             />
                           </td>
-                          <td className="px-4 py-3 font-grotesk font-semibold text-ink">
+                          <td className="px-3 py-2 font-grotesk font-medium text-ink">
                             #{o.orderNumber}
                           </td>
-                          <td className="px-4 py-3 text-gray-600 max-w-[160px] truncate">
+                          <td className="px-3 py-2 text-gray-600 max-w-[160px] truncate">
                             <p className="truncate">{getOrderStoreName(o)}</p>
                             {getOrderPhone(o) && (
                               <a
@@ -451,22 +451,16 @@ function OrdersContent() {
                               </a>
                             )}
                           </td>
-                          <td className="px-4 py-3">
-                            <span
-                              className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${
-                                STATUS_STYLES[o.status] || ""
-                              }`}
-                            >
-                              {o.status}
-                            </span>
+                          <td className="px-3 py-2">
+                            <StatusDot status={o.status} />
                           </td>
-                          <td className="px-4 py-3 text-xs text-gray-600">
+                          <td className="px-3 py-2 text-xs text-gray-600">
                             {o.paymentMethod}
                           </td>
-                          <td className="px-4 py-3 font-grotesk font-semibold text-blue">
+                          <td className="px-3 py-2 text-right font-grotesk font-medium text-ink tabular-nums">
                             {formatPrice(o.total)}
                           </td>
-                          <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
+                          <td className="px-3 py-2 text-right text-xs text-gray-400 whitespace-nowrap">
                             {new Date(o.createdAt).toLocaleTimeString("en-NP", {
                               hour: "2-digit",
                               minute: "2-digit",
@@ -485,7 +479,7 @@ function OrdersContent() {
 
       {/* Right: detail panel */}
       {selectedOrder && (
-        <div className="w-80 xl:w-96 flex-shrink-0 flex flex-col overflow-hidden bg-white border border-gray-200 rounded-2xl">
+        <div className="w-80 xl:w-96 flex-shrink-0 flex flex-col overflow-hidden bg-white border border-gray-200 rounded-[8px]">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
             <p className="font-grotesk font-bold text-sm text-ink">
               #{selectedOrder.orderNumber}
@@ -495,7 +489,7 @@ function OrdersContent() {
                 setSelectedId(null);
                 router.replace("/admin/orders", { scroll: false });
               }}
-              className="p-1.5 rounded-lg hover:bg-gray-200 transition-colors"
+              className="p-1.5 rounded-[6px] hover:bg-gray-50 transition-colors"
             >
               <X size={16} />
             </button>
@@ -523,10 +517,10 @@ function OrdersContent() {
                           status: s,
                         })
                       }
-                      className={`inline-flex items-center justify-center gap-1 text-xs font-medium py-1.5 px-2 rounded-lg border transition-colors disabled:opacity-60 ${
+                      className={`inline-flex items-center justify-center gap-1 text-xs font-medium py-1.5 px-2 rounded-[6px] border transition-colors disabled:opacity-60 ${
                         selectedOrder.status === s
                           ? "border-blue bg-blue text-white"
-                          : "border-gray-200 hover:border-blue text-gray-600"
+                          : "border-gray-200 hover:bg-gray-50 text-gray-600"
                       }`}
                     >
                       {pendingThis && <Loader2 size={12} className="animate-spin" />}
@@ -547,7 +541,7 @@ function OrdersContent() {
                   href={`${(process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api").replace(/\/api\/?$/, "")}${selectedOrder.invoicePdfPath}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-xs font-medium px-3 py-2 rounded-lg border border-blue text-blue hover:bg-blue-pale transition-colors"
+                  className="inline-flex items-center gap-2 text-xs font-medium px-3 py-2 rounded-[6px] border border-gray-200 text-ink hover:bg-gray-50 transition-colors"
                 >
                   Download Invoice PDF
                 </a>
@@ -571,7 +565,7 @@ function OrdersContent() {
             )}
 
             {/* Delivery info */}
-            <div className="bg-off-white rounded-xl p-3 text-xs space-y-1.5 text-gray-600">
+            <div className="border border-gray-200 rounded-[6px] p-3 text-xs space-y-1.5 text-gray-600">
               <p>
                 <span className="font-medium text-ink">Store:</span>{" "}
                 {getOrderStoreName(selectedOrder)}
@@ -605,7 +599,7 @@ function OrdersContent() {
                 Items {orderItems.length > 0 && `(${orderItems.length})`}
               </p>
               {orderItems.length === 0 ? (
-                <div className="flex items-center gap-2 text-xs text-gray-400 border border-gray-200 rounded-xl px-3 py-3">
+                <div className="flex items-center gap-2 text-xs text-gray-400 border border-gray-200 rounded-[6px] px-3 py-3">
                   {detailFetching ? (
                     <>
                       <Loader2 size={13} className="animate-spin" />
@@ -616,7 +610,7 @@ function OrdersContent() {
                   )}
                 </div>
               ) : (
-                <ul className="divide-y divide-gray-200 border border-gray-200 rounded-xl overflow-hidden">
+                <ul className="divide-y divide-gray-200 border border-gray-200 rounded-[6px] overflow-hidden">
                   {orderItems.map((item) => (
                     <li
                       key={item.id}
@@ -649,7 +643,7 @@ function OrdersContent() {
               </div>
               <div className="flex justify-between font-grotesk font-bold text-sm text-ink">
                 <span>Total</span>
-                <span className="text-blue">{formatPrice(selectedOrder.total)}</span>
+                <span>{formatPrice(selectedOrder.total)}</span>
               </div>
             </div>
           </div>

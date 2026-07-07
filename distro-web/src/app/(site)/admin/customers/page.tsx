@@ -138,7 +138,7 @@ export default function AdminCustomersPage() {
       {/* Customer list */}
       <div className="flex-1 flex flex-col min-w-0">
         <div className="mb-5 space-y-3">
-          <h1 className="font-grotesk font-bold text-2xl text-ink">Customers</h1>
+          <h1 className="font-grotesk font-bold text-xl text-ink">Customers</h1>
           <div className="relative max-w-sm">
             <Search
               size={15}
@@ -149,26 +149,26 @@ export default function AdminCustomersPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search store name, phone…"
-              className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-blue"
+              className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-[6px] text-sm bg-white focus:outline-none focus:border-blue"
             />
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto bg-white border border-gray-200 rounded-2xl">
+        <div className="flex-1 overflow-auto bg-white border border-gray-200 rounded-[8px]">
           {isLoading ? (
             <div className="p-4 space-y-2">
               {[...Array(6)].map((_, i) => (
-                <div key={i} className="h-16 bg-blue-pale rounded-xl animate-pulse" />
+                <div key={i} className="h-16 bg-gray-50 rounded-[6px] animate-pulse" />
               ))}
             </div>
           ) : (
             <table className="w-full text-sm">
-              <thead className="bg-off-white sticky top-0">
+              <thead className="bg-gray-50 sticky top-0">
                 <tr>
                   {["Store", "Phone", "District", "Credit", "Status", ""].map((h) => (
                     <th
                       key={h}
-                      className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide"
+                      className="text-left px-3 py-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wide"
                     >
                       {h}
                     </th>
@@ -183,33 +183,31 @@ export default function AdminCustomersPage() {
                       setSelectedId(c.id);
                       setTab("profile");
                     }}
-                    className={`cursor-pointer hover:bg-off-white transition-colors ${
-                      selectedId === c.id ? "bg-blue-pale" : ""
+                    className={`cursor-pointer hover:bg-gray-50 transition-colors ${
+                      selectedId === c.id ? "bg-gray-50" : ""
                     }`}
                   >
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2">
                       <p className="font-medium text-ink">{c.storeName}</p>
                       <p className="text-xs text-gray-400">{c.ownerName}</p>
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{c.phone}</td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">
+                    <td className="px-3 py-2 text-gray-600">{c.phone}</td>
+                    <td className="px-3 py-2 text-gray-600 text-xs">
                       {c.district || "—"}
                     </td>
-                    <td className="px-4 py-3 w-32">
+                    <td className="px-3 py-2 w-32">
                       <CreditMiniBar used={c.creditUsed} limit={c.creditLimit} />
                     </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${
-                          c.status === "ACTIVE"
-                            ? "bg-green-light text-green"
-                            : "bg-red-50 text-red-500"
-                        }`}
-                      >
+                    <td className="px-3 py-2">
+                      <span className="inline-flex items-center gap-1.5 text-sm text-ink whitespace-nowrap">
+                        <span
+                          className="w-1.5 h-1.5 rounded-full shrink-0"
+                          style={{ backgroundColor: c.status === "ACTIVE" ? "#00C46F" : "#DC2626" }}
+                        />
                         {c.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2">
                       <ChevronRight size={14} className="text-gray-400" />
                     </td>
                   </tr>
@@ -222,14 +220,14 @@ export default function AdminCustomersPage() {
 
       {/* Detail panel */}
       {selectedCustomer && (
-        <div className="w-80 xl:w-96 flex-shrink-0 flex flex-col overflow-hidden bg-white border border-gray-200 rounded-2xl">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+        <div className="w-80 xl:w-96 flex-shrink-0 flex flex-col overflow-hidden bg-white border border-gray-200 rounded-[8px]">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200">
             <p className="font-grotesk font-bold text-sm text-ink truncate">
               {selectedCustomer.storeName}
             </p>
             <button
               onClick={() => setSelectedId(null)}
-              className="p-1.5 rounded-lg hover:bg-gray-200"
+              className="p-1.5 rounded-[6px] hover:bg-gray-200"
             >
               <X size={16} />
             </button>
@@ -297,7 +295,7 @@ export default function AdminCustomersPage() {
                         type="number"
                         value={editCredit}
                         onChange={(e) => setEditCredit(e.target.value)}
-                        className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue"
+                        className="flex-1 border border-gray-200 rounded-[6px] px-3 py-1.5 text-sm focus:outline-none focus:border-blue"
                       />
                       <button
                         onClick={() =>
@@ -306,7 +304,7 @@ export default function AdminCustomersPage() {
                             creditLimit: Number(editCredit),
                           })
                         }
-                        className="px-3 py-1.5 bg-blue text-white text-xs rounded-lg"
+                        className="px-3 py-1.5 bg-blue text-white text-xs rounded-[6px]"
                       >
                         Save
                       </button>
@@ -372,7 +370,7 @@ export default function AdminCustomersPage() {
                   customerOrders.map((o) => (
                     <div
                       key={o.id}
-                      className="flex items-center justify-between p-3 border border-gray-200 rounded-xl text-xs"
+                      className="flex items-center justify-between p-3 border border-gray-200 rounded-[6px] text-xs"
                     >
                       <div>
                         <p className="font-grotesk font-semibold text-ink">
@@ -383,7 +381,7 @@ export default function AdminCustomersPage() {
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="font-grotesk font-semibold text-blue">
+                        <p className="font-grotesk font-medium text-ink">
                           {formatPrice(o.total)}
                         </p>
                         <p className="text-gray-400">{o.status}</p>
@@ -404,16 +402,14 @@ export default function AdminCustomersPage() {
                   ledger.map((e) => (
                     <div
                       key={e.id}
-                      className="flex items-center justify-between p-3 border border-gray-200 rounded-xl text-xs"
+                      className="flex items-center justify-between p-3 border border-gray-200 rounded-[6px] text-xs"
                     >
                       <div>
-                        <span
-                          className={`font-medium px-2 py-0.5 rounded-full text-xs ${
-                            e.type === "CREDIT"
-                              ? "bg-green-light text-green"
-                              : "bg-red-50 text-red-500"
-                          }`}
-                        >
+                        <span className="inline-flex items-center gap-1.5 text-xs text-ink">
+                          <span
+                            className="w-1.5 h-1.5 rounded-full shrink-0"
+                            style={{ backgroundColor: e.type === "CREDIT" ? "#00C46F" : "#DC2626" }}
+                          />
                           {e.type}
                         </span>
                         <p className="text-gray-400 mt-1">{e.note || "—"}</p>
@@ -435,7 +431,7 @@ export default function AdminCustomersPage() {
                     value={newNote}
                     onChange={(e) => setNewNote(e.target.value)}
                     placeholder="Add internal note…"
-                    className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-blue"
+                    className="flex-1 border border-gray-200 rounded-[6px] px-3 py-1.5 text-xs focus:outline-none focus:border-blue"
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && newNote.trim()) {
                         addNote.mutate(newNote.trim());
@@ -444,7 +440,7 @@ export default function AdminCustomersPage() {
                   />
                   <button
                     onClick={() => newNote.trim() && addNote.mutate(newNote.trim())}
-                    className="p-2 bg-blue text-white rounded-lg hover:bg-blue-dark transition-colors"
+                    className="p-2 bg-blue text-white rounded-[6px] hover:bg-blue-dark transition-colors"
                   >
                     <Plus size={14} />
                   </button>
@@ -457,7 +453,7 @@ export default function AdminCustomersPage() {
                   notes.map((n) => (
                     <div
                       key={n.id}
-                      className="bg-off-white rounded-xl p-3 text-xs"
+                      className="bg-gray-50 rounded-[6px] p-3 text-xs"
                     >
                       <p className="text-ink">{n.note}</p>
                       <p className="text-gray-400 mt-1">

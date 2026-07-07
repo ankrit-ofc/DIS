@@ -25,6 +25,16 @@ export function middleware(request: NextRequest) {
     }
   }
 
+  // Sales portal — SALES only (cosmetic gate; the API enforces real authz).
+  if (pathname === "/sales" || pathname.startsWith("/sales/")) {
+    if (!token || role !== "SALES") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      url.searchParams.set("redirect", pathname);
+      return NextResponse.redirect(url);
+    }
+  }
+
   // Buyer-authenticated routes
   if (pathname.startsWith("/orders") || pathname === "/account") {
     if (!token) {
@@ -39,5 +49,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/orders/:path*", "/account", "/driver", "/driver/:path*"],
+  matcher: ["/admin/:path*", "/orders/:path*", "/account", "/driver", "/driver/:path*", "/sales", "/sales/:path*"],
 };

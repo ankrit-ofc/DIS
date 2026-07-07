@@ -77,12 +77,38 @@ export function normalizeDistrictsList<T = unknown>(body: unknown): T[] {
   return [];
 }
 
-export function getStockLabel(stock: number, moq: number): {
+// ── sellUnit-aware helpers ───────────────────────────────────────────────────
+export type SellUnit = "PIECE" | "CARTON";
+export type StockStatus = "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK";
+
+/** Short unit label: "ctn" / "pcs". */
+export function unitShort(sellUnit: SellUnit): string {
+  return sellUnit === "CARTON" ? "ctn" : "pcs";
+}
+
+const rs0 = (n: number) =>
+  new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(n);
+
+/** "Rs 436/pc" — per-piece figure, whole rupees. */
+export function formatPerPiece(amount: number): string {
+  return `Rs ${rs0(amount)}/pc`;
+}
+
+/**
+ * Per-piece retail margin for the shopkeeper: MRP − buy price per piece.
+ * Returns null when MRP is missing or not above the buy price (omit segment).
+ */
+export function pieceMargin(mrp: number | null | undefined, perPiecePrice: number): number | null {
+  if (mrp == null || mrp <= perPiecePrice) return null;
+  return mrp - perPiecePrice;
+}
+
+export function stockStatusLabel(status: StockStatus): {
   label: string;
   color: string;
 } {
-  if (stock <= 0) return { label: "Out of Stock", color: "text-red-500 bg-red-50" };
-  if (stock <= moq * 2) return { label: "Low Stock", color: "text-orange-500 bg-orange-50" };
+  if (status === "OUT_OF_STOCK") return { label: "Out of Stock", color: "text-red-500 bg-red-50" };
+  if (status === "LOW_STOCK") return { label: "Low stock", color: "text-orange-500 bg-orange-50" };
   return { label: "In Stock", color: "text-green bg-green-light" };
 }
 
@@ -113,7 +139,7 @@ export function getSessionDisplayName(
     name?: string | null;
     storeName?: string | null;
     phone: string;
-    role: "BUYER" | "ADMIN" | "DRIVER";
+    role: "BUYER" | "ADMIN" | "DRIVER" | "SALES";
   } | null
 ): string {
   if (!user) return "";

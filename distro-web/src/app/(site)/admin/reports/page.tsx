@@ -9,7 +9,7 @@ import { formatPrice } from "@/lib/utils";
 const RevenueChart = dynamic(() => import("@/components/admin/RevenueChart"), {
   ssr: false,
   loading: () => (
-    <div className="h-[224px] bg-blue-pale rounded-xl animate-pulse" />
+    <div className="h-[224px] bg-gray-50 rounded-[6px] animate-pulse" />
   ),
 });
 
@@ -72,47 +72,47 @@ export default function AdminReportsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="font-grotesk font-bold text-2xl text-ink">Reports</h1>
+        <h1 className="font-grotesk font-bold text-xl text-ink">Reports</h1>
         <div className="flex items-center gap-2">
           <input
             type="date"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue"
+            className="border border-gray-200 rounded-[6px] px-3 py-1.5 text-sm focus:outline-none focus:border-blue"
           />
           <span className="text-gray-400 text-sm">to</span>
           <input
             type="date"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue"
+            className="border border-gray-200 rounded-[6px] px-3 py-1.5 text-sm focus:outline-none focus:border-blue"
           />
         </div>
       </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="bg-white border border-gray-200 rounded-2xl p-5">
+        <div className="bg-white border border-gray-200 rounded-[8px] p-5">
           <p className="text-xs text-gray-400 mb-1">Total Revenue</p>
-          <p className="font-grotesk font-bold text-2xl text-blue">
+          <p className="font-grotesk font-bold text-2xl text-ink">
             {data ? formatPrice(data.totalRevenue) : "—"}
           </p>
         </div>
-        <div className="bg-white border border-gray-200 rounded-2xl p-5">
+        <div className="bg-white border border-gray-200 rounded-[8px] p-5">
           <p className="text-xs text-gray-400 mb-1">Total Orders</p>
-          <p className="font-grotesk font-bold text-2xl text-ink">
+          <p className="font-grotesk font-bold text-xl text-ink">
             {data ? data.totalOrders : "—"}
           </p>
         </div>
       </div>
 
       {/* Revenue chart */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-5">
+      <div className="bg-white border border-gray-200 rounded-[8px] p-5">
         <h2 className="font-grotesk font-semibold text-base text-ink mb-5">
           Revenue by Day
         </h2>
         {isLoading ? (
-          <div className="h-56 bg-blue-pale rounded-xl animate-pulse" />
+          <div className="h-56 bg-gray-50 rounded-[6px] animate-pulse" />
         ) : chartData.length === 0 ? (
           <div className="h-56 flex items-center justify-center text-gray-400 text-sm">
             No data for selected period.
@@ -124,7 +124,7 @@ export default function AdminReportsPage() {
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Top products */}
-        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+        <div className="bg-white border border-gray-200 rounded-[8px] overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-200">
             <h2 className="font-grotesk font-semibold text-base text-ink">
               Top 5 Products by Revenue
@@ -133,7 +133,7 @@ export default function AdminReportsPage() {
           {isLoading ? (
             <div className="p-4 space-y-2">
               {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-12 bg-blue-pale rounded-xl animate-pulse" />
+                <div key={i} className="h-12 bg-gray-50 rounded-[6px] animate-pulse" />
               ))}
             </div>
           ) : (
@@ -154,7 +154,7 @@ export default function AdminReportsPage() {
                       {p.unitsSold} units sold
                     </p>
                   </div>
-                  <p className="font-grotesk font-semibold text-blue text-sm">
+                  <p className="font-grotesk font-medium text-ink text-sm">
                     {formatPrice(p.revenue)}
                   </p>
                 </li>
@@ -169,7 +169,7 @@ export default function AdminReportsPage() {
         </div>
 
         {/* Top buyers */}
-        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+        <div className="bg-white border border-gray-200 rounded-[8px] overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-200">
             <h2 className="font-grotesk font-semibold text-base text-ink">
               Top 5 Buyers by Order Value
@@ -178,7 +178,7 @@ export default function AdminReportsPage() {
           {isLoading ? (
             <div className="p-4 space-y-2">
               {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-12 bg-blue-pale rounded-xl animate-pulse" />
+                <div key={i} className="h-12 bg-gray-50 rounded-[6px] animate-pulse" />
               ))}
             </div>
           ) : (
@@ -197,7 +197,7 @@ export default function AdminReportsPage() {
                     </p>
                     <p className="text-xs text-gray-400">{b.totalOrders} orders</p>
                   </div>
-                  <p className="font-grotesk font-semibold text-blue text-sm">
+                  <p className="font-grotesk font-medium text-ink text-sm">
                     {formatPrice(b.totalValue)}
                   </p>
                 </li>

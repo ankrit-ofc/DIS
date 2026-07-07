@@ -80,18 +80,22 @@ export default function OrderDetailPage() {
     if (!order) return;
     try {
       const res = await api.post(`/orders/${order.id}/reorder`);
-      const items: Array<{ productId: string; name: string; price: number; qty: number; moq: number; piecesPerCarton: number; unit: string; imageUrl: string | null; available: boolean }> = res.data.items ?? [];
+      const items: Array<{
+        productId: string; name: string; sellUnit: "PIECE" | "CARTON"; price: number;
+        qty: number; moq: number; piecesPerCarton: number | null; imageUrl: string | null;
+        maxOrderQty: number; available: boolean;
+      }> = res.data.items ?? [];
       let unavailable = 0;
       for (const it of items) {
         if (!it.available) { unavailable++; continue; }
         addItem({
-          id: it.productId as unknown as number,
+          id: it.productId,
           name: it.name,
+          sellUnit: it.sellUnit,
           price: it.price,
-          mrp: it.price,
-          unit: it.unit,
           moq: it.moq,
-          piecesPerCarton: it.piecesPerCarton ?? it.moq ?? 1,
+          maxOrderQty: it.maxOrderQty,
+          piecesPerCarton: it.piecesPerCarton,
           image: it.imageUrl ?? undefined,
         }, it.qty);
       }

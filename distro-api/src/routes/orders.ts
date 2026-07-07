@@ -12,6 +12,7 @@ import { OrderStatusEmail } from '../emails/OrderStatusEmail';
 import { InvoiceEmail } from '../emails/InvoiceEmail';
 import { NewOrderAdminEmail } from '../emails/NewOrderAdminEmail';
 import { generateInvoicePdf } from '../services/invoice';
+import { maxOrderQty, moqUnits, piecesPerSellUnit, stockStatus, unitLabel, unitPrice } from '../lib/stock';
 
 const router = Router();
 
@@ -26,10 +27,28 @@ const ORDER_STATUSES = [
 const MIN_ORDER_VALUE = 10000;
 
 class OrderError extends Error {
-  constructor(public statusCode: number, message: string) {
+  constructor(
+    public statusCode: number,
+    message: string,
+    /** Extra JSON fields merged into the error response (e.g. structured 409s). */
+    public body?: Record<string, unknown>,
+  ) {
     super(message);
     this.name = 'OrderError';
   }
+}
+
+interface InsufficientStockItem {
+  productId: string;
+  requested: number;
+  available: number;
+}
+
+function insufficientStockError(items: InsufficientStockItem[]): OrderError {
+  return new OrderError(409, 'Insufficient stock for some items', {
+    code: 'INSUFFICIENT_STOCK',
+    items,
+  });
 }
 
 function esewaSignature(message: string): string {
@@ -39,19 +58,20 @@ function esewaSignature(message: string): string {
     .digest('base64');
 }
 
-// ─── POST /api/orders — BUYER, fully atomic ───────────────────────────────────
+// ─── POST /api/orders — BUYER for self; SALES/ADMIN may order for a buyer ─────
 router.post(
   '/',
   requireAuth,
-  requireRole('BUYER'),
+  requireRole('BUYER', 'SALES', 'ADMIN'),
   async (req: Request, res: Response): Promise<void> => {
-    const buyer = (req as any).profile as {
-      id: string; phone: string; email?: string | null;
-      creditUsed: number; creditLimit: number;
+    const operator = (req as any).profile as {
+      id: string; role: string; phone: string; email?: string | null;
+      storeName?: string | null;
     };
 
     const {
       items,
+      buyerId,
       deliveryDistrict,
       deliveryAddress,
       deliveryLat,
@@ -60,6 +80,7 @@ router.post(
       notes,
     } = req.body as {
       items?: Array<{ productId: string; qty: number }>;
+      buyerId?: string;
       deliveryDistrict?: string;
       deliveryAddress?: string;
       deliveryLat?: number;
@@ -67,6 +88,41 @@ router.post(
       paymentMethod?: string;
       notes?: string;
     };
+
+    // buyerId is honoured ONLY for SALES/ADMIN sessions — buyers always order
+    // for themselves regardless of what the request claims.
+    const onBehalf = (operator.role === 'SALES' || operator.role === 'ADMIN') && !!buyerId;
+    if (operator.role === 'BUYER' && buyerId && buyerId !== operator.id) {
+      res.status(403).json({ error: 'Buyers can only order for themselves' });
+      return;
+    }
+    if ((operator.role === 'SALES' || operator.role === 'ADMIN') && !buyerId) {
+      res.status(400).json({ error: 'buyerId is required when ordering on behalf of a buyer' });
+      return;
+    }
+
+    // All financial effects (ledger DEBIT, credit-limit check, creditUsed) go
+    // against the BUYER's profile — the rep is just the operator.
+    let buyer: {
+      id: string; phone: string; email?: string | null; storeName?: string | null;
+    };
+    if (onBehalf) {
+      const target = await prisma.profile.findUnique({
+        where: { id: buyerId },
+        select: { id: true, phone: true, email: true, storeName: true, role: true, status: true },
+      });
+      if (!target || target.role !== 'BUYER') {
+        res.status(400).json({ error: 'buyerId must reference a buyer account' });
+        return;
+      }
+      if (target.status !== 'ACTIVE') {
+        res.status(400).json({ error: 'Buyer account is not active' });
+        return;
+      }
+      buyer = target;
+    } else {
+      buyer = operator as any;
+    }
 
     if (!Array.isArray(items) || items.length === 0) {
       res.status(400).json({ error: 'items array is required' });
@@ -76,8 +132,11 @@ router.post(
       res.status(400).json({ error: 'deliveryDistrict and deliveryAddress are required' });
       return;
     }
-    if (!paymentMethod || !['ESEWA', 'KHALTI', 'COD'].includes(paymentMethod)) {
-      res.status(400).json({ error: 'paymentMethod must be ESEWA, KHALTI, or COD' });
+    // CREDIT (pay-on-account) is only available in the field flow, where a
+    // SALES rep or admin is placing the order.
+    const allowedMethods = onBehalf ? ['COD', 'CREDIT'] : ['ESEWA', 'KHALTI', 'COD'];
+    if (!paymentMethod || !allowedMethods.includes(paymentMethod)) {
+      res.status(400).json({ error: `paymentMethod must be one of: ${allowedMethods.join(', ')}` });
       return;
     }
 
@@ -85,7 +144,9 @@ router.post(
 
     try {
       createdOrder = await withTransaction(async (tx) => {
-        // 1. Validate all items — qty represents CARTONS (whole numbers, ≥ 1)
+        // 1. Validate all items — qty is in the product's sellUnit
+        //    (pieces for PIECE products, cartons for CARTON products).
+        const shortItems: InsufficientStockItem[] = [];
         for (const item of items) {
           if (!item.productId) {
             throw new OrderError(400, 'Each item requires productId');
@@ -95,7 +156,7 @@ router.post(
             !Number.isInteger(item.qty) ||
             item.qty < 1
           ) {
-            throw new OrderError(400, 'Cartons must be a whole number of 1 or more');
+            throw new OrderError(400, 'Quantity must be a whole number of 1 or more');
           }
           const product = await tx.product.findUnique({ where: { id: item.productId } });
           if (!product) {
@@ -104,16 +165,21 @@ router.post(
           if (!product.active) {
             throw new OrderError(400, `Product is not available: ${product.name}`);
           }
-          // stockQty is in pieces; ordering N cartons consumes N * piecesPerCarton pieces.
-          const piecesPerCarton = product.piecesPerCarton ?? product.moq;
-          const piecesNeeded = item.qty * piecesPerCarton;
-          if (product.stockQty < piecesNeeded) {
-            const cartonsAvailable = Math.floor(product.stockQty / piecesPerCarton);
+          const minQty = moqUnits(product);
+          if (item.qty < minQty) {
             throw new OrderError(
               400,
-              `Insufficient stock for "${product.name}". Available: ${cartonsAvailable} cartons, requested: ${item.qty} cartons`,
+              `Minimum order for "${product.name}" is ${minQty} ${unitLabel(product.sellUnit)}`,
             );
           }
+          // stockQty is in pieces; ordering N sell-units consumes N × pieces-per-unit.
+          const available = maxOrderQty(product);
+          if (item.qty > available) {
+            shortItems.push({ productId: product.id, requested: item.qty, available });
+          }
+        }
+        if (shortItems.length > 0) {
+          throw insufficientStockError(shortItems);
         }
 
         // 2. Delivery fee from District table
@@ -128,8 +194,7 @@ router.post(
         let subtotal = 0;
         for (const item of items) {
           const p = productMap.get(item.productId)!;
-          const ppc = p.pricePerCarton != null ? Number(p.pricePerCarton) : p.price * p.moq;
-          subtotal += ppc * item.qty;
+          subtotal += unitPrice(p) * item.qty;
         }
 
         if (subtotal < MIN_ORDER_VALUE) {
@@ -143,12 +208,31 @@ router.post(
         const vat = Number((subtotal * vatRate).toFixed(2));
         const total = Number((subtotal + vat + deliveryFee).toFixed(2));
 
+        // 3b. Lock the buyer's profile row — serializes ledger + credit writes
+        // for this buyer against concurrent orders/cancels/payment webhooks.
+        // NOTE: must be a locking read that also RETURNS the fresh values;
+        // under REPEATABLE READ a later plain SELECT would still see the
+        // transaction's pre-lock snapshot.
+        const lockedBuyer = await tx.$queryRaw<Array<{ creditLimit: number; creditUsed: number }>>`
+          SELECT creditLimit, creditUsed FROM Profile WHERE id = ${buyer.id} FOR UPDATE`;
+
+        // 3c. Enforce credit limit (0 = no limit set) using fresh, locked values.
+        const freshBuyer = lockedBuyer[0];
+        if (
+          freshBuyer &&
+          freshBuyer.creditLimit > 0 &&
+          Number(freshBuyer.creditUsed) + total > Number(freshBuyer.creditLimit)
+        ) {
+          throw new OrderError(400, 'Credit limit exceeded');
+        }
+
         // 4. Create Order
-        const orderNumber = `ORD-${Date.now()}`;
+        const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
         const order = await tx.order.create({
           data: {
             orderNumber,
             buyerId: buyer.id,
+            salesRepId: onBehalf ? operator.id : null,
             paymentMethod: paymentMethod as any,
             subtotal,
             vat,
@@ -162,40 +246,65 @@ router.post(
           },
         });
 
-        // 5. Create OrderItem rows — price = price per carton, qty = cartons
+        // 5. Create OrderItem rows — price/qty in the product's sellUnit,
+        //    with the unit snapshotted alongside the price.
         for (const item of items) {
           const p = productMap.get(item.productId)!;
-          const ppc = p.pricePerCarton != null ? Number(p.pricePerCarton) : p.price * p.moq;
-          const piecesPerCarton = p.piecesPerCarton ?? p.moq;
+          const perUnit = unitPrice(p);
           await tx.orderItem.create({
             data: {
               orderId:         order.id,
               productId:       item.productId,
               name:            p.name,
-              price:           ppc,
+              unit:            p.sellUnit,
+              price:           perUnit,
               qty:             item.qty,
-              piecesPerCarton,
-              total:           Number((ppc * item.qty).toFixed(2)),
+              piecesPerCarton: p.sellUnit === 'CARTON' ? piecesPerSellUnit(p) : null,
+              total:           Number((perUnit * item.qty).toFixed(2)),
             },
           });
         }
 
-        // 6. Decrement stockQty (in pieces) for each product
+        // 6. Decrement stockQty (in pieces) for each product — conditional so
+        // two concurrent orders can't both pass the earlier check and drive
+        // stock negative; count === 0 means someone else took the stock first.
         for (const item of items) {
           const p = productMap.get(item.productId)!;
-          const piecesPerCarton = p.piecesPerCarton ?? p.moq;
-          await tx.product.update({
-            where: { id: item.productId },
-            data:  { stockQty: { decrement: item.qty * piecesPerCarton } },
+          const piecesNeeded = item.qty * piecesPerSellUnit(p);
+          const r = await tx.product.updateMany({
+            where: { id: item.productId, stockQty: { gte: piecesNeeded } },
+            data:  { stockQty: { decrement: piecesNeeded } },
+          });
+          if (r.count === 0) {
+            // Someone else took the stock between our check and this write —
+            // report fresh availability so the client can offer "Update to N".
+            // Must be a locking read: under REPEATABLE READ a plain SELECT
+            // would return this transaction's stale pre-race snapshot.
+            const freshRows = await tx.$queryRaw<Array<{ stockQty: number }>>`
+              SELECT stockQty FROM Product WHERE id = ${item.productId} FOR UPDATE`;
+            const freshStock = Number(freshRows[0]?.stockQty ?? 0);
+            throw insufficientStockError([{
+              productId: item.productId,
+              requested: item.qty,
+              available: Math.max(0, Math.floor(freshStock / piecesPerSellUnit(p))),
+            }]);
+          }
+          await tx.stockMovement.create({
+            data: {
+              productId: item.productId,
+              type:      'OUT',
+              qty:       piecesNeeded,
+              reason:    `Order ${orderNumber}`,
+            },
           });
         }
 
-        // 7. Create Ledger DEBIT entry
-        const lastEntry = await tx.ledger.findFirst({
-          where:   { buyerId: buyer.id },
-          orderBy: { createdAt: 'desc' },
-        });
-        const newBalance = (lastEntry?.balance ?? 0) + total;
+        // 7. Create Ledger DEBIT entry — locking read so we see the latest
+        // committed balance, not this transaction's snapshot.
+        const lastRows = await tx.$queryRaw<Array<{ balance: number }>>`
+          SELECT balance FROM Ledger WHERE buyerId = ${buyer.id}
+          ORDER BY createdAt DESC, id DESC LIMIT 1 FOR UPDATE`;
+        const newBalance = Number(lastRows[0]?.balance ?? 0) + total;
 
         await tx.ledger.create({
           data: {
@@ -222,7 +331,7 @@ router.post(
       });
     } catch (err) {
       if (err instanceof OrderError) {
-        res.status(err.statusCode).json({ error: err.message });
+        res.status(err.statusCode).json({ error: err.message, ...(err.body ?? {}) });
         return;
       }
       console.error('[ORDER] Unhandled error creating order:', err);
@@ -289,10 +398,11 @@ router.post(
   },
 );
 
-// ─── GET /api/orders — BUYER sees own, ADMIN sees all ─────────────────────────
+// ─── GET /api/orders — BUYER sees own, SALES sees own reps' orders, ADMIN all ─
 router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const profile     = (req as any).profile as { id: string; role: string };
   const isAdminUser = profile.role === 'ADMIN';
+  const isSalesUser = profile.role === 'SALES';
 
   const status   = qs(req.query.status   as string | string[] | undefined);
   const search   = qs(req.query.search   as string | string[] | undefined);
@@ -307,7 +417,8 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
   const skip     = (pageNum - 1) * limitNum;
 
   const where: Record<string, any> = {};
-  if (!isAdminUser) where.buyerId = profile.id;
+  if (isSalesUser) where.salesRepId = profile.id;
+  else if (!isAdminUser) where.buyerId = profile.id;
   else if (buyerId) where.buyerId = buyerId;
   if (status)       where.status  = status;
   if (from || to) {
@@ -360,7 +471,9 @@ router.get('/:id', requireAuth, async (req: Request, res: Response): Promise<voi
     res.status(404).json({ error: 'Order not found' });
     return;
   }
-  if (profile.role !== 'ADMIN' && order.buyerId !== profile.id) {
+  const isOwner    = order.buyerId === profile.id;
+  const isRepOwner = profile.role === 'SALES' && order.salesRepId === profile.id;
+  if (profile.role !== 'ADMIN' && !isOwner && !isRepOwner) {
     res.status(403).json({ error: 'Forbidden' });
     return;
   }
@@ -595,7 +708,7 @@ router.post(
       res.json({
         fields: {
           amount:                  order.subtotal,
-          tax_amount:              0,
+          tax_amount:              order.vat,
           total_amount:            order.total,
           transaction_uuid:        transactionUuid,
           product_code:            merchantCode,
@@ -657,9 +770,9 @@ router.get(
       return;
     }
 
-    const vatRate    = 0.13;
-    const vatAmount  = order.subtotal * vatRate;
-    const grandTotal = order.subtotal + vatAmount + order.deliveryFee;
+    // Use the VAT stored on the order (snapshot at order time), not a recompute.
+    const vatAmount  = order.vat;
+    const grandTotal = order.total;
 
     const companyName    = process.env.COMPANY_NAME    ?? 'DISTRO Nepal Pvt Ltd';
     const companyAddress = process.env.COMPANY_ADDRESS ?? 'Kathmandu, Nepal';
@@ -743,10 +856,14 @@ router.get(
       const bg   = i % 2 === 0 ? '#F7F9FF' : 'white';
       doc.rect(leftX, rowY, 510, rowH).fill(bg).stroke('#cccccc');
       doc.fillColor('black');
-      doc.text(item.name,                            colX.item,   rowY + 5, { width: 230, ellipsis: true });
-      doc.text(String(item.qty),                     colX.qty,    rowY + 5);
-      doc.text(`Rs ${item.price.toFixed(2)}`,        colX.unit,   rowY + 5);
-      doc.text(`Rs ${item.total.toFixed(2)}`,        colX.amount, rowY + 5);
+      // Carton rows show pieces-per-carton in the description; qty carries its unit.
+      const desc = item.unit === 'CARTON' && item.piecesPerCarton != null
+        ? `${item.name} (${item.piecesPerCarton} pcs/ctn)`
+        : item.name;
+      doc.text(desc,                                       colX.item,   rowY + 5, { width: 230, ellipsis: true });
+      doc.text(`${item.qty} ${unitLabel(item.unit)}`,      colX.qty,    rowY + 5);
+      doc.text(`Rs ${item.price.toFixed(2)}`,              colX.unit,   rowY + 5);
+      doc.text(`Rs ${item.total.toFixed(2)}`,              colX.amount, rowY + 5);
       rowY += rowH;
     }
 
@@ -831,6 +948,10 @@ router.patch(
       res.status(400).json({ error: 'Only PENDING orders can be cancelled' });
       return;
     }
+    if (order.paymentStatus === 'PAID') {
+      res.status(400).json({ error: 'Paid orders must be cancelled by support' });
+      return;
+    }
     if (Date.now() - order.createdAt.getTime() > 30 * 60 * 1000) {
       res.status(400).json({ error: 'Cancellation window has passed (30 minutes)' });
       return;
@@ -839,29 +960,45 @@ router.patch(
     let cancelled: any;
     try {
       cancelled = await withTransaction(async (tx) => {
+        // Lock the buyer's profile row — serializes ledger + credit writes.
+        await tx.$queryRaw`SELECT id FROM Profile WHERE id = ${profile.id} FOR UPDATE`;
+
         // a. Update order status
         const upd = await tx.order.update({
           where: { id },
           data: { status: 'CANCELLED' },
         });
 
-        // b. Restore stockQty (in pieces) for each item; item.qty is cartons
+        // b. Restore stockQty (in pieces) for each item; the unit snapshot on
+        // the item decides whether qty was pieces or cartons.
         for (const item of order.items) {
-          const product = await tx.product.findUnique({ where: { id: item.productId } });
-          const piecesPerCarton =
-            item.piecesPerCarton ?? product?.piecesPerCarton ?? product?.moq ?? 1;
+          let piecesReturned = item.qty;
+          if (item.unit === 'CARTON') {
+            const product = await tx.product.findUnique({ where: { id: item.productId } });
+            const piecesPerCarton =
+              item.piecesPerCarton ?? product?.piecesPerCarton ?? 1;
+            piecesReturned = item.qty * piecesPerCarton;
+          }
           await tx.product.update({
             where: { id: item.productId },
-            data: { stockQty: { increment: item.qty * piecesPerCarton } },
+            data: { stockQty: { increment: piecesReturned } },
+          });
+          await tx.stockMovement.create({
+            data: {
+              productId: item.productId,
+              type:      'IN',
+              qty:       piecesReturned,
+              reason:    `Cancel ${order.orderNumber}`,
+            },
           });
         }
 
-        // c. Create Ledger CREDIT entry (reverse the debit)
-        const lastEntry = await tx.ledger.findFirst({
-          where: { buyerId: profile.id },
-          orderBy: { createdAt: 'desc' },
-        });
-        const newBalance = (lastEntry?.balance ?? 0) - order.total;
+        // c. Create Ledger CREDIT entry (reverse the debit) — locking read so we
+        // see the latest committed balance, not this transaction's snapshot.
+        const lastRows = await tx.$queryRaw<Array<{ balance: number }>>`
+          SELECT balance FROM Ledger WHERE buyerId = ${profile.id}
+          ORDER BY createdAt DESC, id DESC LIMIT 1 FOR UPDATE`;
+        const newBalance = Number(lastRows[0]?.balance ?? 0) - order.total;
         await tx.ledger.create({
           data: {
             buyerId: profile.id,
@@ -940,30 +1077,41 @@ router.post(
     const products = await prisma.product.findMany({ where: { id: { in: productIds } } });
     const productMap = new Map(products.map((p) => [p.id, p]));
 
-    const items = order.items.map((row) => {
+    // Buyer-facing: no raw stockQty — expose stockStatus + maxOrderQty instead.
+    const reorderItems = order.items.map((row) => {
       const p = productMap.get(row.productId);
-      const piecesPerCarton =
-        p?.piecesPerCarton ?? row.piecesPerCarton ?? p?.moq ?? 1;
-      const pricePerCarton = p?.pricePerCarton != null
-        ? Number(p.pricePerCarton)
-        : (p ? p.price * (p.moq ?? 1) : row.price);
-      const piecesNeeded = row.qty * piecesPerCarton;
-      const available = !!p && p.active && p.stockQty >= piecesNeeded;
+      if (!p) {
+        return {
+          productId: row.productId,
+          name: row.name,
+          sellUnit: row.unit,
+          price: row.price,
+          qty: row.qty,
+          piecesPerCarton: row.piecesPerCarton,
+          imageUrl: null,
+          moq: 1,
+          stockStatus: 'OUT_OF_STOCK' as const,
+          maxOrderQty: 0,
+          available: false,
+        };
+      }
+      const cap = maxOrderQty(p);
       return {
         productId: row.productId,
-        name: p?.name ?? row.name,
-        price: pricePerCarton,
+        name: p.name,
+        sellUnit: p.sellUnit,
+        price: unitPrice(p),
         qty: row.qty,
-        piecesPerCarton,
-        stockQty: p?.stockQty ?? 0,
-        imageUrl: p?.imageUrl ?? null,
-        unit: p?.unit ?? 'piece',
-        moq: p?.moq ?? 1,
-        available,
+        piecesPerCarton: p.sellUnit === 'CARTON' ? piecesPerSellUnit(p) : null,
+        imageUrl: p.imageUrl ?? null,
+        moq: moqUnits(p),
+        stockStatus: stockStatus(p),
+        maxOrderQty: cap,
+        available: p.active && cap >= row.qty,
       };
     });
 
-    res.json({ items });
+    res.json({ items: reorderItems });
   },
 );
 

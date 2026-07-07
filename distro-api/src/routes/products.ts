@@ -3,13 +3,27 @@ import path from 'path';
 import multer from 'multer';
 import { prisma } from '../lib/prisma';
 import { requireAuth, isAdmin } from '../middleware/auth';
+import { validateSession } from '../lib/auth';
 import { withTransaction } from '../lib/transaction';
+import { toBuyerProduct } from '../lib/stock';
 
 const router = Router();
 
 /** Safely extract a scalar string from req.query or req.params (Express 5 types as string | string[]). */
 const qs = (v: string | string[] | undefined): string | undefined =>
   typeof v === 'string' ? v : Array.isArray(v) ? v[0] : undefined;
+
+/**
+ * Public product endpoints serve two audiences: admins (raw stockQty, inactive
+ * rows) and buyers/guests (stockStatus + maxOrderQty only). Sniff the optional
+ * bearer token to decide — no token or non-admin token gets the buyer shape.
+ */
+async function isAdminRequest(req: Request): Promise<boolean> {
+  const auth = req.headers.authorization;
+  if (!auth?.startsWith('Bearer ')) return false;
+  const profile = await validateSession(auth.split(' ')[1]);
+  return profile?.role === 'ADMIN';
+}
 
 // ─── Multer setup ─────────────────────────────────────────────────────────────
 const storage = multer.diskStorage({
@@ -68,7 +82,9 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   // Override search with 'q' param (used by admin list)
   const searchTerm = q ?? search;
 
-  const where: Record<string, any> = all === '1' ? {} : { active: true };
+  // Only admins may see inactive products or raw stock numbers.
+  const admin = await isAdminRequest(req);
+  const where: Record<string, any> = admin && all === '1' ? {} : { active: true };
   if (categoryId) where.categoryId = categoryId;
   if (brandList.length === 1) where.brand = { contains: brandList[0] };
   else if (brandList.length > 1) where.brand = { in: brandList };
@@ -98,7 +114,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       skip,
       take: limitNum,
       select: {
-        id: true, name: true, brand: true, price: true, mrp: true,
+        id: true, name: true, brand: true, sellUnit: true, price: true, mrp: true,
         unit: true, moq: true, piecesPerCarton: true, pricePerCarton: true,
         stockQty: true, imageUrl: true, active: true,
         category: { select: { id: true, name: true, emoji: true } },
@@ -107,7 +123,8 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     prisma.product.count({ where }),
   ]);
 
-  res.json({ products, total, page: pageNum, pages: Math.ceil(total / limitNum) });
+  const payload = admin ? products : products.map(toBuyerProduct);
+  res.json({ products: payload, total, page: pageNum, pages: Math.ceil(total / limitNum) });
 });
 
 // ─── POST /api/products/bulk-price — ADMIN ────────────────────────────────────
@@ -196,7 +213,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
   const product = await prisma.product.findUnique({
     where: { id },
     select: {
-      id: true, name: true, brand: true, price: true, mrp: true,
+      id: true, name: true, brand: true, sellUnit: true, price: true, mrp: true,
       unit: true, moq: true, piecesPerCarton: true, pricePerCarton: true,
       stockQty: true, imageUrl: true, active: true,
       description: true,
@@ -204,32 +221,94 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
     },
   });
   if (!product) { res.status(404).json({ error: 'Product not found' }); return; }
-  res.json(product);
+
+  const admin = await isAdminRequest(req);
+  if (admin) { res.json(product); return; }
+  if (!product.active) { res.status(404).json({ error: 'Product not found' }); return; }
+  res.json(toBuyerProduct(product));
 });
+
+/**
+ * Validate + normalize the sellUnit-dependent pricing fields.
+ * PIECE  → price (Rs/pc) authoritative, moq in pieces, carton fields nulled.
+ * CARTON → piecesPerCarton + pricePerCarton authoritative, moq in cartons
+ *          (default 1); legacy `price` is kept as the derived per-piece price
+ *          so old clients keep seeing a sane number.
+ */
+interface PricingData {
+  sellUnit: 'PIECE' | 'CARTON';
+  price: number;
+  moq: number;
+  piecesPerCarton: number | null;
+  pricePerCarton: number | null;
+}
+
+function normalizePricing(body: {
+  sellUnit?: string; price?: number; moq?: number;
+  piecesPerCarton?: number | null; pricePerCarton?: number | null;
+}): { error?: string; data?: PricingData } {
+  const sellUnit = body.sellUnit ?? 'PIECE';
+  if (!['PIECE', 'CARTON'].includes(sellUnit)) {
+    return { error: 'sellUnit must be PIECE or CARTON' };
+  }
+  if (sellUnit === 'PIECE') {
+    if (body.price == null || body.price <= 0) {
+      return { error: 'price (Rs per piece) must be a positive number' };
+    }
+    if (body.moq != null && (!Number.isInteger(body.moq) || body.moq < 1)) {
+      return { error: 'moq must be a whole number ≥ 1' };
+    }
+    return {
+      data: {
+        sellUnit: 'PIECE',
+        price: body.price,
+        moq: body.moq ?? 1,
+        piecesPerCarton: null,
+        pricePerCarton: null,
+      },
+    };
+  }
+  // CARTON
+  if (body.piecesPerCarton == null || !Number.isInteger(body.piecesPerCarton) || body.piecesPerCarton < 1) {
+    return { error: 'piecesPerCarton must be a positive integer' };
+  }
+  if (body.pricePerCarton == null || body.pricePerCarton <= 0) {
+    return { error: 'pricePerCarton must be a positive number' };
+  }
+  if (body.moq != null && (!Number.isInteger(body.moq) || body.moq < 1)) {
+    return { error: 'moq (cartons) must be a whole number ≥ 1' };
+  }
+  return {
+    data: {
+      sellUnit: 'CARTON',
+      piecesPerCarton: body.piecesPerCarton,
+      pricePerCarton: body.pricePerCarton,
+      moq: body.moq ?? 1,
+      price: Number((body.pricePerCarton / body.piecesPerCarton).toFixed(2)),
+    },
+  };
+}
 
 // ─── POST /api/products — create, ADMIN ──────────────────────────────────────
 router.post('/', requireAuth, isAdmin, async (req: Request, res: Response): Promise<void> => {
   const {
-    name, brand, description, sku, categoryId,
+    name, brand, description, sku, categoryId, sellUnit,
     price, mrp, unit, moq, piecesPerCarton, pricePerCarton,
     stockQty, imageUrl, active,
   } = req.body as {
     name?: string; brand?: string; description?: string; sku?: string;
-    categoryId?: string; price?: number; mrp?: number; unit?: string;
+    categoryId?: string; sellUnit?: string; price?: number; mrp?: number; unit?: string;
     moq?: number; piecesPerCarton?: number; pricePerCarton?: number;
     stockQty?: number; imageUrl?: string; active?: boolean;
   };
 
-  if (!name || price == null) {
-    res.status(400).json({ error: 'name and price are required' });
+  if (!name) {
+    res.status(400).json({ error: 'name is required' });
     return;
   }
-  if (piecesPerCarton == null || !Number.isInteger(piecesPerCarton) || piecesPerCarton < 1) {
-    res.status(400).json({ error: 'piecesPerCarton must be a positive integer' });
-    return;
-  }
-  if (pricePerCarton == null || pricePerCarton <= 0) {
-    res.status(400).json({ error: 'pricePerCarton must be a positive number' });
+  const pricing = normalizePricing({ sellUnit, price, moq, piecesPerCarton, pricePerCarton });
+  if (pricing.error) {
+    res.status(400).json({ error: pricing.error });
     return;
   }
 
@@ -240,53 +319,23 @@ router.post('/', requireAuth, isAdmin, async (req: Request, res: Response): Prom
       description:     description ?? null,
       sku:             sku         ?? null,
       categoryId:      categoryId  ?? null,
-      price,
       mrp:             mrp      ?? null,
       unit:            unit     ?? 'piece',
-      moq:             moq      ?? 1,
-      piecesPerCarton,
-      pricePerCarton,
       stockQty:        stockQty ?? 0,
       imageUrl:        imageUrl ?? null,
       active:          active   ?? true,
+      ...pricing.data!,
     },
   });
   res.status(201).json({ product });
 });
 
-// ─── PUT /api/products/:id — update, ADMIN ───────────────────────────────────
-router.put('/:id', requireAuth, isAdmin, async (req: Request, res: Response): Promise<void> => {
+// ─── PUT/PATCH /api/products/:id — update, ADMIN ─────────────────────────────
+async function updateProduct(req: Request, res: Response): Promise<void> {
   const id = qs(req.params.id)!;
-  const { name, price, mrp, moq, piecesPerCarton, pricePerCarton, stockQty, active, description, imageUrl } = req.body as {
-    name?: string; price?: number; mrp?: number; moq?: number;
-    piecesPerCarton?: number; pricePerCarton?: number;
-    stockQty?: number; active?: boolean; description?: string; imageUrl?: string;
-  };
-
-  const product = await prisma.product.update({
-    where: { id },
-    data: {
-      ...(name             !== undefined && { name }),
-      ...(price            !== undefined && { price }),
-      ...(mrp              !== undefined && { mrp }),
-      ...(moq              !== undefined && { moq }),
-      ...(piecesPerCarton  !== undefined && { piecesPerCarton }),
-      ...(pricePerCarton   !== undefined && { pricePerCarton }),
-      ...(stockQty         !== undefined && { stockQty }),
-      ...(active           !== undefined && { active }),
-      ...(description      !== undefined && { description }),
-      ...(imageUrl         !== undefined && { imageUrl }),
-    },
-  });
-  res.json({ product });
-});
-
-// ─── PATCH /api/products/:id — alias for PUT (used by web frontend) ───────────
-router.patch('/:id', requireAuth, isAdmin, async (req: Request, res: Response): Promise<void> => {
-  const id = qs(req.params.id)!;
-  const { name, brand, unit, price, mrp, moq, piecesPerCarton, pricePerCarton, stockQty, stock, active, description, imageUrl, image, categoryId } = req.body as {
-    name?: string; brand?: string; unit?: string; price?: number; mrp?: number; moq?: number;
-    piecesPerCarton?: number; pricePerCarton?: number;
+  const { name, brand, unit, sellUnit, price, mrp, moq, piecesPerCarton, pricePerCarton, stockQty, stock, active, description, imageUrl, image, categoryId } = req.body as {
+    name?: string; brand?: string; unit?: string; sellUnit?: string; price?: number; mrp?: number; moq?: number;
+    piecesPerCarton?: number | null; pricePerCarton?: number | null;
     stockQty?: number; stock?: number; active?: boolean; description?: string;
     imageUrl?: string; image?: string; categoryId?: string;
   };
@@ -295,25 +344,54 @@ router.patch('/:id', requireAuth, isAdmin, async (req: Request, res: Response): 
   const resolvedStockQty = stockQty ?? stock;
   const resolvedImageUrl = imageUrl ?? image;
 
+  const existing = await prisma.product.findUnique({ where: { id } });
+  if (!existing) {
+    res.status(404).json({ error: 'Product not found' });
+    return;
+  }
+
+  // If any pricing-mode field is touched, re-validate the merged pricing set so
+  // a product can never end up half PIECE / half CARTON.
+  let pricingData: Record<string, any> = {};
+  const touchesPricing =
+    sellUnit !== undefined || price !== undefined || moq !== undefined ||
+    piecesPerCarton !== undefined || pricePerCarton !== undefined;
+  if (touchesPricing) {
+    const pricing = normalizePricing({
+      sellUnit:        sellUnit ?? existing.sellUnit,
+      price:           price ?? existing.price,
+      moq:             moq ?? existing.moq,
+      piecesPerCarton: piecesPerCarton !== undefined ? piecesPerCarton : existing.piecesPerCarton,
+      pricePerCarton:  pricePerCarton !== undefined
+        ? pricePerCarton
+        : existing.pricePerCarton != null ? Number(existing.pricePerCarton) : null,
+    });
+    if (pricing.error) {
+      res.status(400).json({ error: pricing.error });
+      return;
+    }
+    pricingData = pricing.data!;
+  }
+
   const product = await prisma.product.update({
     where: { id },
     data: {
       ...(name               !== undefined && { name }),
       ...(brand              !== undefined && { brand }),
       ...(unit               !== undefined && { unit }),
-      ...(price              !== undefined && { price }),
       ...(mrp                !== undefined && { mrp }),
-      ...(moq                !== undefined && { moq }),
-      ...(piecesPerCarton    !== undefined && { piecesPerCarton }),
-      ...(pricePerCarton     !== undefined && { pricePerCarton }),
       ...(resolvedStockQty   !== undefined && { stockQty: resolvedStockQty }),
       ...(active             !== undefined && { active }),
       ...(description        !== undefined && { description }),
       ...(resolvedImageUrl   !== undefined && { imageUrl: resolvedImageUrl }),
       ...(categoryId         !== undefined && { categoryId }),
+      ...pricingData,
     },
   });
   res.json({ product });
-});
+}
+
+router.put('/:id', requireAuth, isAdmin, updateProduct);
+router.patch('/:id', requireAuth, isAdmin, updateProduct);
 
 export default router;

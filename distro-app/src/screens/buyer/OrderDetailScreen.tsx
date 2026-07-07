@@ -232,20 +232,24 @@ export function OrderDetailScreen({ navigation, route }: any) {
     setActionLoading(true);
     try {
       const res = await api.post(`/orders/${orderId}/reorder`);
-      const items: Array<{ productId: string; name: string; price: number; qty: number; piecesPerCarton: number; unit: string; imageUrl: string | null; available: boolean }> = res.data.items ?? [];
+      const items: Array<{
+        productId: string; name: string; sellUnit: "PIECE" | "CARTON"; price: number;
+        qty: number; moq: number; piecesPerCarton: number | null; imageUrl: string | null;
+        maxOrderQty: number; available: boolean;
+      }> = res.data.items ?? [];
       let unavailable = 0;
       for (const it of items) {
         if (!it.available) { unavailable++; continue; }
         addItem({
           productId: it.productId,
           name: it.name,
+          sellUnit: it.sellUnit,
           price: it.price,
+          moq: it.moq,
+          maxOrderQty: it.maxOrderQty,
           piecesPerCarton: it.piecesPerCarton,
-          pricePerCarton: it.price,
-          unit: it.unit,
           image: it.imageUrl ?? undefined,
-        });
-        updateQty(it.productId, it.qty);
+        }, it.qty);
       }
       Alert.alert(
         "Added to cart",

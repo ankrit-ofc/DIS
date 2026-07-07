@@ -84,18 +84,18 @@ export default function AdminLedgerPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="font-grotesk font-bold text-2xl text-ink">Ledger</h1>
+        <h1 className="font-grotesk font-bold text-xl text-ink">Ledger</h1>
         <div className="flex gap-2">
           <button
             onClick={exportTally}
-            className="flex items-center gap-2 border border-gray-200 text-sm text-gray-600 hover:bg-blue-pale px-4 py-2 rounded-xl transition-colors"
+            className="flex items-center gap-2 border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 px-4 py-2 rounded-[6px] transition-colors"
           >
             <Download size={15} />
             Export Tally XML
           </button>
           <button
             onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 bg-blue hover:bg-blue-dark text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors"
+            className="flex items-center gap-2 bg-blue hover:bg-blue-dark text-white text-sm font-medium px-4 py-2 rounded-[6px] transition-colors"
           >
             <Plus size={16} />
             Manual Entry
@@ -111,7 +111,7 @@ export default function AdminLedgerPage() {
             type="date"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue"
+            className="border border-gray-200 rounded-[6px] px-3 py-1.5 text-sm focus:outline-none focus:border-blue"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -120,13 +120,13 @@ export default function AdminLedgerPage() {
             type="date"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue"
+            className="border border-gray-200 rounded-[6px] px-3 py-1.5 text-sm focus:outline-none focus:border-blue"
           />
         </div>
         <select
           value={customerId}
           onChange={(e) => setCustomerId(Number(e.target.value) || "")}
-          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:border-blue text-ink"
+          className="border border-gray-200 rounded-[6px] px-3 py-1.5 text-sm bg-white focus:outline-none focus:border-blue text-ink"
         >
           <option value="">All Customers</option>
           {customers.map((c) => (
@@ -150,7 +150,7 @@ export default function AdminLedgerPage() {
         ].map((s) => (
           <div
             key={s.label}
-            className="bg-white border border-gray-200 rounded-2xl p-4 text-center"
+            className="bg-white border border-gray-200 rounded-[8px] p-4 text-center"
           >
             <p className={`font-grotesk font-bold text-xl ${s.color}`}>
               {s.value}
@@ -161,11 +161,11 @@ export default function AdminLedgerPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+      <div className="bg-white border border-gray-200 rounded-[8px] overflow-hidden">
         {isLoading ? (
           <div className="p-4 space-y-2">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-12 bg-blue-pale rounded-xl animate-pulse" />
+              <div key={i} className="h-12 bg-gray-50 rounded-[6px] animate-pulse" />
             ))}
           </div>
         ) : entries.length === 0 ? (
@@ -174,12 +174,12 @@ export default function AdminLedgerPage() {
           </p>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-off-white">
+            <thead className="bg-gray-50">
               <tr>
                 {["Date", "Customer", "Type", "Description", "Amount"].map((h) => (
                   <th
                     key={h}
-                    className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide"
+                    className="text-left px-3 py-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wide"
                   >
                     {h}
                   </th>
@@ -188,29 +188,27 @@ export default function AdminLedgerPage() {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {entries.map((e) => (
-                <tr key={e.id} className="hover:bg-off-white transition-colors">
-                  <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
+                <tr key={e.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">
                     {new Date(e.createdAt).toLocaleDateString("en-NP", {
                       day: "numeric",
                       month: "short",
                     })}
                   </td>
-                  <td className="px-4 py-3 font-medium text-ink">
+                  <td className="px-3 py-2 font-medium text-ink">
                     {e.customer?.storeName}
                   </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${
-                        e.type === "CREDIT"
-                          ? "bg-green-light text-green"
-                          : "bg-red-50 text-red-500"
-                      }`}
-                    >
+                  <td className="px-3 py-2">
+                    <span className="inline-flex items-center gap-1.5 text-sm text-ink whitespace-nowrap">
+                      <span
+                        className="w-1.5 h-1.5 rounded-full shrink-0"
+                        style={{ backgroundColor: e.type === "CREDIT" ? "#00C46F" : "#DC2626" }}
+                      />
                       {e.type}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{e.description}</td>
-                  <td className="px-4 py-3 font-grotesk font-semibold text-ink">
+                  <td className="px-3 py-2 text-gray-600">{e.description}</td>
+                  <td className="px-3 py-2 font-grotesk font-semibold text-ink">
                     {formatPrice(e.amount)}
                   </td>
                 </tr>
@@ -224,10 +222,10 @@ export default function AdminLedgerPage() {
       {showModal && (
         <>
           <div
-            className="fixed inset-0 bg-ink/40 backdrop-blur-sm z-50"
+            className="fixed inset-0 bg-ink/40 z-50"
             onClick={() => setShowModal(false)}
           />
-          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl z-50 p-6 w-full max-w-sm shadow-2xl">
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-[8px] z-50 p-6 w-full max-w-sm border border-gray-200">
             <div className="flex items-center justify-between mb-5">
               <h2 className="font-grotesk font-semibold text-base text-ink">
                 Manual Entry
@@ -245,7 +243,7 @@ export default function AdminLedgerPage() {
                   value={form.customerId}
                   onChange={(e) => setForm((f) => ({ ...f, customerId: e.target.value }))}
                   required
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm bg-white focus:outline-none focus:border-blue"
+                  className="w-full border border-gray-200 rounded-[6px] px-4 py-2.5 text-sm bg-white focus:outline-none focus:border-blue"
                 >
                   <option value="">Select customer…</option>
                   {customers.map((c) => (
@@ -258,7 +256,7 @@ export default function AdminLedgerPage() {
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => setForm((f) => ({ ...f, type: "DEBIT" }))}
-                  className={`py-2 rounded-xl text-sm font-medium border-2 transition-colors ${
+                  className={`py-2 rounded-[6px] text-sm font-medium border-2 transition-colors ${
                     form.type === "DEBIT"
                       ? "border-red-500 bg-red-50 text-red-500"
                       : "border-gray-200 text-gray-600"
@@ -268,7 +266,7 @@ export default function AdminLedgerPage() {
                 </button>
                 <button
                   onClick={() => setForm((f) => ({ ...f, type: "CREDIT" }))}
-                  className={`py-2 rounded-xl text-sm font-medium border-2 transition-colors ${
+                  className={`py-2 rounded-[6px] text-sm font-medium border-2 transition-colors ${
                     form.type === "CREDIT"
                       ? "border-green bg-green-light text-green"
                       : "border-gray-200 text-gray-600"
@@ -286,7 +284,7 @@ export default function AdminLedgerPage() {
                   min={1}
                   value={form.amount}
                   onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
+                  className="w-full border border-gray-200 rounded-[6px] px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
                 />
               </div>
               <div>
@@ -298,7 +296,7 @@ export default function AdminLedgerPage() {
                   value={form.description}
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                   placeholder="e.g. Cash payment received"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
+                  className="w-full border border-gray-200 rounded-[6px] px-4 py-2.5 text-sm focus:outline-none focus:border-blue"
                 />
               </div>
               <button
@@ -309,7 +307,7 @@ export default function AdminLedgerPage() {
                   !form.description ||
                   !form.customerId
                 }
-                className="w-full bg-blue hover:bg-blue-dark disabled:bg-gray-200 text-white font-medium py-3 rounded-xl transition-colors text-sm"
+                className="w-full bg-blue hover:bg-blue-dark disabled:bg-gray-200 text-white font-medium py-3 rounded-[6px] transition-colors text-sm"
               >
                 {addEntry.isPending ? "Saving…" : "Add Entry"}
               </button>

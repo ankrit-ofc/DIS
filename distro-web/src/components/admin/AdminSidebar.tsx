@@ -8,6 +8,7 @@ import {
   Tag,
   Tags,
   Users,
+  BriefcaseBusiness,
   BookOpen,
   Warehouse,
   CreditCard,
@@ -31,6 +32,7 @@ const NAV = [
   { href: "/admin/categories", label: "Categories", icon: Tags },
   { href: "/admin/pricing", label: "Pricing", icon: Tag },
   { href: "/admin/customers", label: "Customers", icon: Users },
+  { href: "/admin/sales", label: "Sales Team", icon: BriefcaseBusiness },
   { href: "/admin/ledger", label: "Ledger", icon: BookOpen },
   { href: "/admin/inventory", label: "Inventory", icon: Warehouse },
   { href: "/admin/payments", label: "Payments", icon: CreditCard },
@@ -67,37 +69,32 @@ export default function AdminSidebar() {
 
   return (
     <aside
-      className={`relative flex flex-col h-full bg-ink transition-all duration-300 ease-in-out shadow-2xl shadow-ink/20 ${
-        collapsed ? "w-18" : "w-[240px]"
+      className={`relative flex flex-col h-full bg-white border-r border-gray-200 ${
+        collapsed ? "w-18" : "w-[220px]"
       }`}
     >
       {/* Logo */}
       <div
-        className={`flex items-center h-16 border-b border-white/5 px-5 ${
+        className={`flex items-center h-14 border-b border-gray-200 px-5 ${
           collapsed ? "justify-center" : ""
         }`}
       >
-        {!collapsed && (
-          <span className="font-grotesk font-bold text-xl text-blue tracking-tight">
-            DISTRO
-          </span>
-        )}
-        {collapsed && (
-          <span className="font-grotesk font-bold text-xl text-blue">D</span>
-        )}
+        <span className="font-grotesk font-bold text-lg text-ink tracking-tight">
+          {collapsed ? "D" : "DISTRO"}
+        </span>
       </div>
 
       {/* Collapse toggle */}
       <button
         onClick={() => setCollapsed((v) => !v)}
-        className="absolute -right-3 top-[72px] w-6 h-6 bg-ink border border-white/20 rounded-full flex items-center justify-center text-white/60 hover:text-white transition-colors z-10"
+        className="absolute -right-3 top-[64px] w-6 h-6 bg-white border border-gray-200 rounded-full flex items-center justify-center text-gray-400 hover:text-ink z-10"
         aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
       >
         {collapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
       </button>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto py-3 px-2">
+      <nav className="flex-1 overflow-y-auto py-2 px-2">
         {NAV.map((item) => {
           const active = isActive(item.href, item.exact);
           const Icon = item.icon;
@@ -106,18 +103,15 @@ export default function AdminSidebar() {
               key={item.href}
               onClick={() => router.push(item.href)}
               title={collapsed ? item.label : undefined}
-              className={`flex items-center gap-3.5 px-4 py-3 rounded-2xl mb-1.5 transition-all duration-200 group cursor-pointer ${
+              className={`flex items-center gap-3 px-3 py-2 rounded-[6px] mb-0.5 cursor-pointer transition-colors ${
                 active
-                  ? "bg-gradient-to-r from-blue to-blue-dark text-white shadow-lg shadow-blue/20"
-                  : "text-white/50 hover:text-white hover:bg-white/5"
+                  ? "bg-blue-light text-blue"
+                  : "text-gray-600 hover:bg-gray-50 hover:text-ink"
               }`}
             >
-              <Icon
-                size={19}
-                className={`flex-shrink-0 transition-transform group-hover:scale-110 ${active ? "text-white" : "opacity-80"}`}
-              />
+              <Icon size={16} className="flex-shrink-0" />
               {!collapsed && (
-                <span className="text-sm font-medium truncate">{item.label}</span>
+                <span className="text-sm truncate">{item.label}</span>
               )}
             </div>
           );
@@ -125,21 +119,21 @@ export default function AdminSidebar() {
       </nav>
 
       {/* User + logout */}
-      <div className="border-t border-white/10 p-3">
+      <div className="border-t border-gray-200 p-3">
         {!collapsed && (
-          <div className="px-2 py-2 mb-1 flex items-center gap-2 min-w-0">
+          <div className="px-1 py-2 mb-1 flex items-center gap-2 min-w-0">
             <span
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue text-white text-sm font-grotesk font-bold"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-light text-blue text-sm font-grotesk font-bold"
               title={user?.ownerName || user?.storeName || user?.phone || "Admin"}
               aria-hidden
             >
               {getSessionInitial(user ?? undefined)}
             </span>
             <div className="min-w-0">
-              <p className="text-xs text-white/40 font-medium uppercase tracking-wider">
+              <p className="text-[11px] text-gray-400 font-medium uppercase tracking-wider">
                 Admin
               </p>
-              <p className="text-xs text-white/70 truncate mt-0.5">
+              <p className="text-xs text-gray-600 truncate mt-0.5">
                 {user?.ownerName || user?.name || user?.storeName || user?.phone}
               </p>
             </div>
@@ -147,7 +141,7 @@ export default function AdminSidebar() {
         )}
         {collapsed && (
           <div className="flex justify-center mb-2" title={user?.ownerName || user?.storeName || user?.phone || "Admin"}>
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue text-white text-sm font-grotesk font-bold">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-light text-blue text-sm font-grotesk font-bold">
               {getSessionInitial(user ?? undefined)}
             </span>
           </div>
@@ -155,10 +149,10 @@ export default function AdminSidebar() {
         <button
           onClick={handleLogout}
           title={collapsed ? "Logout" : undefined}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-colors w-full"
+          className="flex items-center gap-3 px-3 py-2 rounded-[6px] text-gray-600 hover:text-ink hover:bg-gray-50 transition-colors w-full"
         >
-          <LogOut size={18} className="flex-shrink-0" />
-          {!collapsed && <span className="text-sm font-medium">Logout</span>}
+          <LogOut size={16} className="flex-shrink-0" />
+          {!collapsed && <span className="text-sm">Logout</span>}
         </button>
       </div>
     </aside>

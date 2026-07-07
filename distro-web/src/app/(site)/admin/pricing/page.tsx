@@ -118,33 +118,33 @@ export default function AdminPricingPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="font-grotesk font-bold text-2xl text-ink">Pricing</h1>
+        <h1 className="font-grotesk font-bold text-xl text-ink">Pricing</h1>
         {pendingEdits.length > 0 && (
           <button
             onClick={() => setShowBulkConfirm(true)}
-            className="flex items-center gap-2 bg-blue hover:bg-blue-dark text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors"
+            className="flex items-center gap-2 bg-blue hover:bg-blue-dark text-white text-sm font-medium px-4 py-2 rounded-[6px] transition-colors"
           >
             Bulk Update ({pendingEdits.length})
           </button>
         )}
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+      <div className="bg-white border border-gray-200 rounded-[8px] overflow-hidden">
         {isLoading ? (
           <div className="p-4 space-y-2">
             {[...Array(8)].map((_, i) => (
-              <div key={i} className="h-14 bg-blue-pale rounded-xl animate-pulse" />
+              <div key={i} className="h-14 bg-gray-50 rounded-[6px] animate-pulse" />
             ))}
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-off-white">
+            <thead className="bg-gray-50">
               <tr>
                 {["Product", "Current Price", "MRP", "New Price", "New MRP", ""].map(
                   (h) => (
                     <th
                       key={h}
-                      className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide"
+                      className="text-left px-3 py-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wide"
                     >
                       {h}
                     </th>
@@ -160,23 +160,23 @@ export default function AdminPricingPage() {
                   <>
                     <tr
                       key={p.id}
-                      className={`hover:bg-off-white transition-colors ${
-                        edit ? "bg-blue-pale" : ""
+                      className={`hover:bg-gray-50 transition-colors ${
+                        edit ? "bg-gray-50" : ""
                       }`}
                     >
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2">
                         <p className="font-medium text-ink">{p.name}</p>
                         <p className="text-xs text-gray-400">
                           {p.brand} · {p.unit}
                         </p>
                       </td>
-                      <td className="px-4 py-3 font-grotesk font-semibold text-blue">
+                      <td className="px-3 py-2 font-grotesk font-medium text-ink">
                         {formatPrice(p.price)}
                       </td>
-                      <td className="px-4 py-3 text-gray-400 line-through text-xs">
+                      <td className="px-3 py-2 text-gray-400 line-through text-xs">
                         {formatPrice(p.mrp)}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2">
                         {edit ? (
                           <input
                             type="number"
@@ -187,7 +187,7 @@ export default function AdminPricingPage() {
                                 [p.id]: { ...prev[p.id], price: e.target.value },
                               }))
                             }
-                            className="w-24 border border-blue rounded-lg px-2 py-1 text-sm font-grotesk focus:outline-none"
+                            className="w-24 border border-blue rounded-[6px] px-2 py-1 text-sm font-grotesk focus:outline-none"
                           />
                         ) : (
                           <button
@@ -198,7 +198,7 @@ export default function AdminPricingPage() {
                           </button>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2">
                         {edit ? (
                           <input
                             type="number"
@@ -209,26 +209,26 @@ export default function AdminPricingPage() {
                                 [p.id]: { ...prev[p.id], mrp: e.target.value },
                               }))
                             }
-                            className="w-24 border border-blue rounded-lg px-2 py-1 text-sm font-grotesk focus:outline-none"
+                            className="w-24 border border-blue rounded-[6px] px-2 py-1 text-sm font-grotesk focus:outline-none"
                           />
                         ) : (
                           <span className="text-gray-400 text-xs">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2">
                         <div className="flex items-center gap-1">
                           {edit ? (
                             <>
                               <button
                                 onClick={() => saveSingle(p)}
-                                className="p-1.5 text-green hover:bg-green-light rounded-lg transition-colors"
+                                className="p-1.5 text-green hover:bg-green-light rounded-[6px] transition-colors"
                                 title="Save"
                               >
                                 <Check size={15} />
                               </button>
                               <button
                                 onClick={() => cancelEdit(p.id)}
-                                className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition-colors"
+                                className="p-1.5 text-red-400 hover:bg-red-50 rounded-[6px] transition-colors"
                                 title="Cancel"
                               >
                                 <X size={15} />
@@ -237,7 +237,7 @@ export default function AdminPricingPage() {
                           ) : (
                             <button
                               onClick={() => toggleHistory(p.id)}
-                              className="p-1.5 text-gray-400 hover:text-blue hover:bg-blue-pale rounded-lg transition-colors"
+                              className="p-1.5 text-gray-400 hover:text-blue hover:bg-gray-50 rounded-[6px] transition-colors"
                               title="Price history"
                             >
                               {hasHistory ? (
@@ -251,7 +251,7 @@ export default function AdminPricingPage() {
                       </td>
                     </tr>
                     {hasHistory && (
-                      <tr key={`${p.id}-history`} className="bg-off-white">
+                      <tr key={`${p.id}-history`} className="bg-gray-50">
                         <td colSpan={6} className="px-8 py-3">
                           <div className="flex items-center gap-2 text-xs text-gray-400 mb-2">
                             <History size={12} />
@@ -296,10 +296,10 @@ export default function AdminPricingPage() {
       {showBulkConfirm && (
         <>
           <div
-            className="fixed inset-0 bg-ink/40 backdrop-blur-sm z-50"
+            className="fixed inset-0 bg-ink/40 z-50"
             onClick={() => setShowBulkConfirm(false)}
           />
-          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl z-50 p-6 w-full max-w-sm shadow-2xl">
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-[8px] z-50 p-6 w-full max-w-sm border border-gray-200">
             <h2 className="font-grotesk font-semibold text-base text-ink mb-2">
               Bulk Price Update
             </h2>
@@ -315,19 +315,19 @@ export default function AdminPricingPage() {
               value={bulkReason}
               onChange={(e) => setBulkReason(e.target.value)}
               placeholder="e.g. Monthly price revision"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue mb-4"
+              className="w-full border border-gray-200 rounded-[6px] px-4 py-2.5 text-sm focus:outline-none focus:border-blue mb-4"
             />
             <div className="flex gap-3">
               <button
                 onClick={handleBulkUpdate}
                 disabled={!bulkReason.trim() || updatePrice.isPending}
-                className="flex-1 bg-blue hover:bg-blue-dark disabled:bg-gray-200 text-white font-medium py-2.5 rounded-xl transition-colors text-sm"
+                className="flex-1 bg-blue hover:bg-blue-dark disabled:bg-gray-200 text-white font-medium py-2.5 rounded-[6px] transition-colors text-sm"
               >
                 {updatePrice.isPending ? "Updating…" : "Confirm Update"}
               </button>
               <button
                 onClick={() => setShowBulkConfirm(false)}
-                className="flex-1 border border-gray-200 text-sm text-gray-600 hover:bg-off-white py-2.5 rounded-xl transition-colors"
+                className="flex-1 border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 py-2.5 rounded-[6px] transition-colors"
               >
                 Cancel
               </button>

@@ -71,7 +71,31 @@ router.get('/webhook/esewa', webhookLimiter, async (req: Request, res: Response)
     return;
   }
 
+  // The gateway-confirmed amount must match the order total — otherwise a
+  // buyer could pay for a cheaper transaction and get the order marked PAID.
+  const paidAmount = Number(String(payload.total_amount ?? '').replace(/,/g, ''));
+  if (paidAmount !== order.total) {
+    console.error(
+      `[ESEWA] Amount mismatch for ${order.orderNumber}: paid ${paidAmount}, expected ${order.total}`,
+    );
+    await prisma.payment.create({
+      data: {
+        orderId:     order.id,
+        method:      'ESEWA',
+        status:      'UNPAID',
+        amount:      Number.isFinite(paidAmount) ? paidAmount : 0,
+        reference:   payload.transaction_code ?? transactionUuid,
+        rawResponse: payload as any,
+      },
+    });
+    res.status(400).json({ error: 'Amount mismatch' });
+    return;
+  }
+
   await withTransaction(async (tx) => {
+    // Lock the buyer's profile row — serializes ledger + credit writes.
+    await tx.$queryRaw`SELECT id FROM Profile WHERE id = ${order.buyerId} FOR UPDATE`;
+
     await tx.order.update({
       where: { id: order.id },
       data:  { paymentStatus: 'PAID' },
@@ -88,11 +112,12 @@ router.get('/webhook/esewa', webhookLimiter, async (req: Request, res: Response)
       },
     });
 
-    const lastEntry = await tx.ledger.findFirst({
-      where:   { buyerId: order.buyerId },
-      orderBy: { createdAt: 'desc' },
-    });
-    const newBalance = (lastEntry?.balance ?? 0) - order.total;
+    // Locking read so we see the latest committed balance, not this
+    // transaction's snapshot.
+    const lastRows = await tx.$queryRaw<Array<{ balance: number }>>`
+      SELECT balance FROM Ledger WHERE buyerId = ${order.buyerId}
+      ORDER BY createdAt DESC, id DESC LIMIT 1 FOR UPDATE`;
+    const newBalance = Number(lastRows[0]?.balance ?? 0) - order.total;
 
     await tx.ledger.create({
       data: {
@@ -183,7 +208,29 @@ router.post('/webhook/khalti', webhookLimiter, async (req: Request, res: Respons
     return;
   }
 
+  // Khalti amounts are in paisa — must match the order total exactly.
+  if (khaltiData.total_amount !== Math.round(order.total * 100)) {
+    console.error(
+      `[KHALTI] Amount mismatch for ${order.orderNumber}: paid ${khaltiData.total_amount} paisa, expected ${Math.round(order.total * 100)}`,
+    );
+    await prisma.payment.create({
+      data: {
+        orderId:     order.id,
+        method:      'KHALTI',
+        status:      'UNPAID',
+        amount:      Number(khaltiData.total_amount) / 100 || 0,
+        reference:   pidx,
+        rawResponse: khaltiData as any,
+      },
+    });
+    res.status(400).json({ error: 'Amount mismatch' });
+    return;
+  }
+
   await withTransaction(async (tx) => {
+    // Lock the buyer's profile row — serializes ledger + credit writes.
+    await tx.$queryRaw`SELECT id FROM Profile WHERE id = ${order.buyerId} FOR UPDATE`;
+
     await tx.order.update({
       where: { id: order.id },
       data:  { paymentStatus: 'PAID' },
@@ -200,11 +247,12 @@ router.post('/webhook/khalti', webhookLimiter, async (req: Request, res: Respons
       },
     });
 
-    const lastEntry = await tx.ledger.findFirst({
-      where:   { buyerId: order.buyerId },
-      orderBy: { createdAt: 'desc' },
-    });
-    const newBalance = (lastEntry?.balance ?? 0) - order.total;
+    // Locking read so we see the latest committed balance, not this
+    // transaction's snapshot.
+    const lastRows = await tx.$queryRaw<Array<{ balance: number }>>`
+      SELECT balance FROM Ledger WHERE buyerId = ${order.buyerId}
+      ORDER BY createdAt DESC, id DESC LIMIT 1 FOR UPDATE`;
+    const newBalance = Number(lastRows[0]?.balance ?? 0) - order.total;
 
     await tx.ledger.create({
       data: {

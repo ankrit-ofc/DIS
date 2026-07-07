@@ -34,6 +34,10 @@ api.interceptors.response.use(
       err.response?.data?.message ??
       err.message ??
       "Network error";
-    return Promise.reject(new Error(message));
+    // Keep the structured body (e.g. 409 INSUFFICIENT_STOCK items) reachable.
+    const wrapped = new Error(message) as Error & { status?: number; data?: unknown };
+    wrapped.status = err.response?.status;
+    wrapped.data = err.response?.data;
+    return Promise.reject(wrapped);
   }
 );
