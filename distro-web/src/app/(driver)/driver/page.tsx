@@ -16,14 +16,22 @@ interface DriverOrder {
   customerPhone: string;
   deliveryAddress: string;
   deliveryDistrict: string;
+  /** Order pin, else the shop's saved profile location; null when neither exists. */
+  lat: number | null;
+  lng: number | null;
   totalCartons: number;
   totalPieces: number;
   total: number;
   createdAt: string;
 }
 
-function buildMapsUrl(address: string, district: string): string {
-  const parts = [address, district, "Nepal"].filter(Boolean).join(", ");
+// Exact coordinates beat a text-address guess; no destination at all → no button.
+function buildMapsUrl(o: DriverOrder): string | null {
+  if (o.lat != null && o.lng != null) {
+    return `https://www.google.com/maps/dir/?api=1&destination=${o.lat},${o.lng}`;
+  }
+  const parts = [o.deliveryAddress, o.deliveryDistrict, "Nepal"].filter(Boolean).join(", ");
+  if (!o.deliveryAddress) return null;
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(parts)}`;
 }
 
@@ -133,7 +141,9 @@ export default function DriverDashboardPage() {
         )}
 
         <ul className="space-y-3">
-          {orders.map((o) => (
+          {orders.map((o) => {
+            const mapsUrl = buildMapsUrl(o);
+            return (
             <li
               key={o.id}
               className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm"
@@ -178,18 +188,21 @@ export default function DriverDashboardPage() {
                 <p className="font-grotesk font-semibold text-sm text-ink">
                   {formatPrice(o.total)}
                 </p>
-                <a
-                  href={buildMapsUrl(o.deliveryAddress, o.deliveryDistrict)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 bg-blue hover:bg-blue-dark text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors"
-                >
-                  <Navigation size={14} />
-                  Navigate
-                </a>
+                {mapsUrl && (
+                  <a
+                    href={mapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 bg-blue hover:bg-blue-dark text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors"
+                  >
+                    <Navigation size={14} />
+                    Navigate
+                  </a>
+                )}
               </div>
             </li>
-          ))}
+            );
+          })}
         </ul>
       </main>
     </div>

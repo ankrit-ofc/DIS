@@ -18,6 +18,9 @@ model Profile {
   ownerName     String?
   district      String?
   address       String?
+  // Shop geolocation, captured by a sales rep at the doorway (or the buyer).
+  latitude      Decimal?  @db.Decimal(10, 7)
+  longitude     Decimal?  @db.Decimal(10, 7)
   companyName   String?
   panNumber     String?   @unique
   googleId      String?   @unique

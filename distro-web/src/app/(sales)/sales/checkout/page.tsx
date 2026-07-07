@@ -2,58 +2,106 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Minus, Plus, Trash2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { ChevronLeft, Minus, Plus, Trash2, AlertCircle, CheckCircle2, MapPin, Pencil, Store } from "lucide-react";
 import api from "@/lib/api";
-import { formatPrice, unitShort } from "@/lib/utils";
-import { useSalesStore } from "@/store/salesStore";
+import { formatPrice, unitShort, normalizeDistrictsList } from "@/lib/utils";
+import { useSalesStore, type SalesBuyer } from "@/store/salesStore";
 import { useCartStore } from "@/store/cartStore";
 import { useCartValidation } from "@/hooks/useCartValidation";
 
 const MIN_ORDER = 10000;
 const VAT_RATE = 0.13;
 
+interface District {
+  id: string;
+  name: string;
+  deliveryFee: number;
+  active: boolean;
+}
+
 // Field checkout: COD or credit only — no online gateways on a shop visit.
 export default function SalesCheckoutPage() {
   const router = useRouter();
-  const { buyer, clearBuyer } = useSalesStore();
+  const { buyer, setBuyer, clearBuyer } = useSalesStore();
   const { items, subtotal, updateQty, removeItem, clearCart } = useCartStore();
   const { issues, revalidate } = useCartValidation();
 
   const [paymentMethod, setPaymentMethod] = useState<"COD" | "CREDIT">("COD");
   const [address, setAddress] = useState("");
+  const [district, setDistrict] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [saveMode, setSaveMode] = useState<"order" | "profile">("order");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [placed, setPlaced] = useState<{ orderNumber: string; total: number } | null>(null);
 
+  const { data: districts = [] } = useQuery<District[]>({
+    queryKey: ["districts-active"],
+    queryFn: () =>
+      api.get("/districts?active=true").then((r) => normalizeDistrictsList<District>(r.data)),
+  });
+
   useEffect(() => {
     if (!buyer) router.replace("/sales");
   }, [buyer, router]);
 
+  // Pre-fill from the SELECTED BUYER's profile — never the rep's own.
   useEffect(() => {
-    if (buyer?.address) setAddress(buyer.address);
+    if (buyer) {
+      setAddress(buyer.address ?? "");
+      setDistrict(buyer.district ?? "");
+    }
   }, [buyer]);
 
   if (!buyer) return null;
 
+  const hasSavedAddress = !!(buyer.address?.trim() && buyer.district);
+
   const sub = subtotal();
   const vat = Math.round(sub * VAT_RATE * 100) / 100;
+  // Mirror of the server's District-table fee lookup, so the total shown at
+  // the shop door matches what the order will actually cost.
+  const deliveryFee = districts.find((d) => d.name === district)?.deliveryFee ?? 0;
   const belowMin = sub < MIN_ORDER;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!buyer || items.length === 0 || belowMin) return;
+    if (!district) {
+      setError("Select the delivery district.");
+      return;
+    }
+    if (!address.trim()) {
+      setError("Enter the delivery address.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
       const res = await api.post("/orders", {
         buyerId: buyer.id,
-        deliveryDistrict: buyer.district ?? "Kathmandu",
-        deliveryAddress: address || buyer.address || buyer.storeName || "At shop",
+        deliveryDistrict: district,
+        deliveryAddress: address.trim(),
         paymentMethod,
         notes: notes || undefined,
         items: items.map((i) => ({ productId: i.id, qty: i.qty })),
       });
+
+      // "Save as shop's new address" — persist onto the buyer's profile.
+      if (editing && saveMode === "profile") {
+        try {
+          const upd = await api.patch(`/sales/buyers/${buyer.id}`, {
+            address: address.trim(),
+            district,
+          });
+          setBuyer(upd.data.buyer as SalesBuyer); // same id — selection survives
+        } catch {
+          // Order is in; profile save is best-effort.
+        }
+      }
+
       const order = res.data?.order;
       clearCart();
       setPlaced({ orderNumber: order?.orderNumber ?? "—", total: order?.total ?? 0 });
@@ -184,18 +232,96 @@ export default function SalesCheckoutPage() {
 
           {/* Delivery + payment */}
           <div className="bg-white border border-gray-200 rounded-[8px] p-4 space-y-3">
-            <div>
-              <label className="text-xs font-medium text-gray-600 block mb-1">
-                Delivery address
-              </label>
-              <textarea
-                rows={2}
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="Street, tole, landmark…"
-                className="w-full border border-gray-200 rounded-[6px] px-3 py-2 text-sm focus:outline-none focus:border-blue resize-none"
-              />
-            </div>
+            {hasSavedAddress && !editing ? (
+              /* Saved shop address — read-only card, zero fields */
+              <div className="flex items-start gap-3 rounded-[6px] border border-gray-200 bg-off-white/60 p-3">
+                <span className="w-8 h-8 shrink-0 rounded-full bg-blue-light text-blue flex items-center justify-center">
+                  <Store size={14} />
+                </span>
+                <div className="flex-1 min-w-0 text-sm">
+                  <p className="font-semibold text-ink truncate">
+                    {buyer.storeName ?? buyer.phone}
+                  </p>
+                  <p className="text-gray-600 text-xs mt-0.5">{buyer.address}</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5 flex items-center gap-1">
+                    <MapPin size={10} /> {buyer.district}
+                    {deliveryFee > 0 ? ` · delivery ${formatPrice(deliveryFee)}` : " · free delivery"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setEditing(true); setSaveMode("order"); }}
+                  className="shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-blue hover:text-blue-dark transition-colors"
+                >
+                  <Pencil size={11} />
+                  Change
+                </button>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">
+                    Delivery address
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="Street, tole, landmark…"
+                    className="w-full border border-gray-200 rounded-[6px] px-3 py-2 text-sm focus:outline-none focus:border-blue resize-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">
+                    District
+                  </label>
+                  <select
+                    value={district}
+                    onChange={(e) => setDistrict(e.target.value)}
+                    required
+                    className="w-full border border-gray-200 rounded-[6px] px-3 py-2 text-sm bg-white focus:outline-none focus:border-blue"
+                  >
+                    <option value="">Select district…</option>
+                    {districts.map((d) => (
+                      <option key={d.id} value={d.name}>
+                        {d.name}
+                        {d.deliveryFee > 0 ? ` — delivery ${formatPrice(d.deliveryFee)}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {hasSavedAddress && (
+                  <div className="rounded-[6px] border border-gray-200 p-3 space-y-2">
+                    {([
+                      ["order", "Use for this order only"],
+                      ["profile", "Save as shop's new address"],
+                    ] as const).map(([mode, label]) => (
+                      <label key={mode} className="flex items-center gap-2 text-sm text-ink cursor-pointer">
+                        <input
+                          type="radio"
+                          name="saveMode"
+                          className="accent-blue"
+                          checked={saveMode === mode}
+                          onChange={() => setSaveMode(mode)}
+                        />
+                        {label}
+                      </label>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditing(false);
+                        setAddress(buyer.address ?? "");
+                        setDistrict(buyer.district ?? "");
+                      }}
+                      className="text-xs text-gray-400 hover:text-blue underline transition-colors"
+                    >
+                      Cancel — keep saved address
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
             <div>
               <span className="text-xs font-medium text-gray-600 block mb-1.5">Payment</span>
               <div className="grid grid-cols-2 gap-2">
@@ -241,9 +367,17 @@ export default function SalesCheckoutPage() {
               <span>VAT (13%)</span>
               <span className="font-grotesk font-medium">{formatPrice(vat)}</span>
             </div>
+            <div className="flex justify-between text-gray-600">
+              <span>Delivery{district ? ` (${district})` : ""}</span>
+              {deliveryFee > 0 ? (
+                <span className="font-grotesk font-medium">{formatPrice(deliveryFee)}</span>
+              ) : (
+                <span className="font-grotesk font-medium text-green">Free</span>
+              )}
+            </div>
             <div className="flex justify-between font-grotesk font-bold text-base text-ink border-t border-gray-200 pt-2">
               <span>Total</span>
-              <span className="text-blue">{formatPrice(sub + vat)}</span>
+              <span className="text-blue">{formatPrice(sub + vat + deliveryFee)}</span>
             </div>
           </div>
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogOut, X } from "lucide-react";
+import { LogOut, MapPin, X } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { useSalesStore } from "@/store/salesStore";
 
@@ -48,6 +48,15 @@ export default function SalesShell({ children }: { children: React.ReactNode }) 
               <span className="font-semibold">{buyer.storeName ?? buyer.phone}</span>
               {buyer.district ? <span className="opacity-75"> · {buyer.district}</span> : null}
             </p>
+            {buyer.latitude == null && (
+              <button
+                onClick={() => router.push("/sales/location")}
+                className="shrink-0 inline-flex items-center gap-1 text-[11px] font-medium bg-white/15 hover:bg-white/25 rounded-full px-2 py-0.5 transition-colors"
+              >
+                <MapPin size={11} />
+                Set location
+              </button>
+            )}
             <button
               onClick={() => {
                 clearBuyer();

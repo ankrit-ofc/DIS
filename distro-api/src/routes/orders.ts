@@ -66,7 +66,7 @@ router.post(
   async (req: Request, res: Response): Promise<void> => {
     const operator = (req as any).profile as {
       id: string; role: string; phone: string; email?: string | null;
-      storeName?: string | null;
+      storeName?: string | null; address?: string | null; district?: string | null;
     };
 
     const {
@@ -105,11 +105,12 @@ router.post(
     // against the BUYER's profile — the rep is just the operator.
     let buyer: {
       id: string; phone: string; email?: string | null; storeName?: string | null;
+      address?: string | null;
     };
     if (onBehalf) {
       const target = await prisma.profile.findUnique({
         where: { id: buyerId },
-        select: { id: true, phone: true, email: true, storeName: true, role: true, status: true },
+        select: { id: true, phone: true, email: true, storeName: true, address: true, role: true, status: true },
       });
       if (!target || target.role !== 'BUYER') {
         res.status(400).json({ error: 'buyerId must reference a buyer account' });
@@ -339,7 +340,20 @@ router.post(
       return;
     }
 
-    // ── After transaction commits — fire-and-forget notifications ────────────
+    // ── After transaction commits ─────────────────────────────────────────────
+    // Legacy accounts with no saved address: the first successful order's
+    // delivery details become the profile's saved address, so the next
+    // checkout pre-fills instead of re-asking. Best-effort — never fails the order.
+    if (!buyer.address?.trim()) {
+      void prisma.profile
+        .update({
+          where: { id: buyer.id },
+          data: { address: deliveryAddress, district: deliveryDistrict },
+        })
+        .catch((e) => console.error('[ORDER] Address backfill failed:', e));
+    }
+
+    // Fire-and-forget notifications
     void sendNotification(buyer.phone, orderConfirmMessage(createdOrder.orderNumber, createdOrder.total));
 
     const emailItems = (createdOrder.items ?? []).map((row: { name: string; qty: number; price: number; total?: number }) => ({

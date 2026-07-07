@@ -15,6 +15,7 @@ import { WelcomeEmail } from '../emails/WelcomeEmail';
 import { OtpEmail } from '../emails/OtpEmail';
 import { PasswordResetEmail } from '../emails/PasswordResetEmail';
 import { requireAuth } from '../middleware/auth';
+import { validateCoords } from '../lib/geo';
 import {
   authLimiter,
   otpLimiter,
@@ -454,13 +455,15 @@ router.post('/google', authLimiter, async (req: Request, res: Response): Promise
 // ─── PATCH /api/auth/me — update own profile ────────────────────────────────
 router.patch('/me', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const authProfile = (req as any).profile as { id: string };
-  const { storeName, ownerName, district, address, companyName, panNumber } = req.body as {
+  const { storeName, ownerName, district, address, companyName, panNumber, latitude, longitude } = req.body as {
     storeName?: string;
     ownerName?: string;
     district?: string;
     address?: string;
     companyName?: string;
     panNumber?: string;
+    latitude?: number;
+    longitude?: number;
   };
 
   if (panNumber && !/^\d{9}$/.test(panNumber)) {
@@ -485,6 +488,15 @@ router.patch('/me', requireAuth, async (req: Request, res: Response): Promise<vo
   if (address     !== undefined) data.address     = address;
   if (companyName !== undefined) data.companyName = companyName || null;
   if (panNumber   !== undefined) data.panNumber   = panNumber   || null;
+  if (latitude !== undefined || longitude !== undefined) {
+    const coordError = validateCoords(latitude, longitude);
+    if (coordError) {
+      res.status(400).json({ error: coordError });
+      return;
+    }
+    data.latitude  = latitude;
+    data.longitude = longitude;
+  }
 
   const updated = await prisma.profile.update({ where: { id: authProfile.id }, data });
   const { passwordHash, otpCode, otpExpiry, ...safeProfile } = updated;

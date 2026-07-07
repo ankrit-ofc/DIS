@@ -29,6 +29,9 @@ interface Profile {
   storeName?: string;
   district?: string | null;
   address?: string | null;
+  /** Prisma Decimal — arrives as a string over JSON. */
+  latitude?: string | number | null;
+  longitude?: string | number | null;
   creditLimit?: number;
   creditUsed?: number;
 }
@@ -39,6 +42,8 @@ interface AuthState {
   isLoading: boolean;
   loadToken: () => Promise<void>;
   setAuth: (token: string, profile: Profile) => Promise<void>;
+  /** Refresh the cached profile after PATCH /auth/me (token unchanged). */
+  setProfile: (profile: Profile) => void;
   logout: () => Promise<void>;
 }
 
@@ -82,6 +87,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ token, profile });
     syncPushToken();
   },
+
+  setProfile: (profile) => set({ profile }),
 
   logout: async () => {
     const token = get().token;

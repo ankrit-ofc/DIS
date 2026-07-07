@@ -62,7 +62,7 @@ router.get(
       where: { status: { in: ['CONFIRMED', 'PROCESSING', 'DISPATCHED'] } },
       orderBy: { createdAt: 'asc' },
       include: {
-        buyer: { select: { ownerName: true, storeName: true, phone: true } },
+        buyer: { select: { ownerName: true, storeName: true, phone: true, latitude: true, longitude: true } },
         items: { select: { qty: true, unit: true } },
       },
     });
@@ -75,6 +75,10 @@ router.get(
       customerPhone: o.buyer.phone,
       deliveryAddress: o.deliveryAddress ?? '',
       deliveryDistrict: o.deliveryDistrict ?? '',
+      // Precise pin for turn-by-turn: the order's own pin wins, else the
+      // shop's saved profile location. Null when neither exists.
+      lat: o.deliveryLat != null ? Number(o.deliveryLat) : o.buyer.latitude != null ? Number(o.buyer.latitude) : null,
+      lng: o.deliveryLng != null ? Number(o.deliveryLng) : o.buyer.longitude != null ? Number(o.buyer.longitude) : null,
       // Piece-mode items are loose units, not cartons — count them separately.
       totalCartons: o.items.reduce((sum, i) => sum + (i.unit === 'CARTON' ? i.qty : 0), 0),
       totalPieces: o.items.reduce((sum, i) => sum + (i.unit === 'PIECE' ? i.qty : 0), 0),

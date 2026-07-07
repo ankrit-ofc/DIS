@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -22,21 +22,49 @@ import { LocationPicker, LocationPickerValue } from "../../components/LocationPi
 // DISTRO currently delivers only within the Kathmandu Valley.
 const VALLEY_DISTRICTS = ["Kathmandu", "Lalitpur", "Bhaktapur"] as const;
 
+interface DistrictFee {
+  id: string;
+  name: string;
+  deliveryFee: number;
+}
+
 export function CheckoutScreen({ navigation }: any) {
   const { items, totalAmount, clearCart } = useCartStore();
-  const { profile } = useAuthStore();
-  // Prefill from the buyer's saved profile (single-address autofill — Part 3C).
+  const { profile, setProfile } = useAuthStore();
+
+  // Saved shop address → read-only summary card, zero fields (Part A).
+  const hasSavedAddress = !!(profile?.address?.trim() && profile?.district);
+
+  // Prefill from the buyer's saved profile (single-address autofill).
+  // With a saved address the card path submits the district as-is; the valley
+  // filter only applies when the buyer will pick from the chips.
   const [district, setDistrict] = useState<string>(
-    profile?.district && (VALLEY_DISTRICTS as readonly string[]).includes(profile.district)
+    profile?.district &&
+      (hasSavedAddress || (VALLEY_DISTRICTS as readonly string[]).includes(profile.district))
       ? profile.district
       : ""
   );
   const [address, setAddress] = useState(profile?.address ?? "");
+  // "Change" flow on the saved-address card.
+  const [editing, setEditing] = useState(false);
+  const [saveMode, setSaveMode] = useState<"order" | "profile">("order");
   // COD is the only supported method for now; sent verbatim to the backend.
   const paymentMethod = "COD";
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [location, setLocation] = useState<LocationPickerValue | null>(null);
+  const [districtFees, setDistrictFees] = useState<DistrictFee[]>([]);
+
+  // District fees mirror the server's District-table lookup so the total we
+  // show is the total the order will actually cost.
+  useEffect(() => {
+    api
+      .get("/districts?active=true")
+      .then((r) => setDistrictFees(r.data?.districts ?? []))
+      .catch(() => {});
+  }, []);
+
+  const showForm = !hasSavedAddress || editing;
 
   const handleLocationChange = (v: LocationPickerValue) => {
     setLocation(v);
@@ -50,26 +78,51 @@ export function CheckoutScreen({ navigation }: any) {
   };
 
   const MIN_ORDER = 10000;
-  const total = totalAmount();
-  const belowMin = total < MIN_ORDER;
-  const needed = Math.max(0, MIN_ORDER - total);
+  const VAT_RATE = 0.13;
+  const sub = totalAmount();
+  const vat = Math.round(sub * VAT_RATE * 100) / 100;
+  const deliveryFee = districtFees.find((d) => d.name === district)?.deliveryFee ?? 0;
+  const grandTotal = sub + vat + deliveryFee;
+  const belowMin = sub < MIN_ORDER;
+  const needed = Math.max(0, MIN_ORDER - sub);
 
   const handlePlaceOrder = async () => {
     if (belowMin) { setError(`Minimum order is Rs ${MIN_ORDER.toLocaleString("en-IN")}`); return; }
     if (!district) { setError("Please select your delivery district."); return; }
     if (!address.trim()) { setError("Please enter your delivery address."); return; }
-    if (!location) { setError("Please pin your delivery location on the map."); return; }
+    // A map pin is required when typing a fresh address; the saved-address
+    // happy path reuses the profile's stored location (when it has one).
+    if (showForm && !location) { setError("Please pin your delivery location on the map."); return; }
     setError("");
     setLoading(true);
+
+    const lat =
+      location?.latitude ??
+      (profile?.latitude != null ? Number(profile.latitude) : null);
+    const lng =
+      location?.longitude ??
+      (profile?.longitude != null ? Number(profile.longitude) : null);
+
     try {
       const res = await api.post("/orders", {
         items: items.map((i) => ({ productId: i.productId, qty: i.qty })),
         paymentMethod,
         deliveryDistrict: district,
         deliveryAddress: address.trim(),
-        deliveryLat: location?.latitude ?? null,
-        deliveryLng: location?.longitude ?? null,
+        deliveryLat: lat,
+        deliveryLng: lng,
       });
+
+      // "Save as my new address" — persist after the order is safely in.
+      if (editing && saveMode === "profile") {
+        try {
+          const upd = await api.patch("/auth/me", { address: address.trim(), district });
+          setProfile(upd.data);
+        } catch {
+          // best-effort — order already placed
+        }
+      }
+
       clearCart();
       const orderId = res.data.order?.id ?? res.data.id;
       const orderNumber = res.data.order?.orderNumber ?? res.data.orderNumber ?? `ORD-${orderId}`;
@@ -92,6 +145,14 @@ export function CheckoutScreen({ navigation }: any) {
     }
   };
 
+  const cancelEditing = () => {
+    setEditing(false);
+    setAddress(profile?.address ?? "");
+    setDistrict(profile?.district ?? "");
+    setLocation(null);
+    setSaveMode("order");
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -101,51 +162,104 @@ export function CheckoutScreen({ navigation }: any) {
       </TouchableOpacity>
       <Text style={styles.heading}>Checkout</Text>
 
-      {/* Delivery district */}
-      <View style={[styles.section, shadow.sm]}>
-        <Text style={styles.sectionTitle}>Delivery district</Text>
-        <View style={styles.districtRow}>
-          {VALLEY_DISTRICTS.map((d) => {
-            const active = district === d;
-            return (
-              <TouchableOpacity
-                key={d}
-                style={[styles.districtChip, active && styles.districtChipActive]}
-                onPress={() => setDistrict(d)}
-                activeOpacity={0.85}
-              >
-                <Text style={[styles.districtChipText, active && styles.districtChipTextActive]}>{d}</Text>
-              </TouchableOpacity>
-            );
-          })}
+      {!showForm ? (
+        /* Saved address — compact summary card */
+        <View style={[styles.section, shadow.sm]}>
+          <Text style={styles.sectionTitle}>Deliver to</Text>
+          <View style={styles.savedCard}>
+            <View style={styles.savedIcon}>
+              <Ionicons name="storefront-outline" size={18} color={colors.blue} />
+            </View>
+            <View style={styles.savedBody}>
+              <Text style={styles.savedStore} numberOfLines={1}>
+                {profile?.storeName || "My shop"}
+              </Text>
+              <Text style={styles.savedAddress}>{profile?.address}</Text>
+              <Text style={styles.savedDistrict}>
+                {profile?.district}
+                {deliveryFee > 0 ? ` · delivery ${fmtRs(deliveryFee)}` : " · free delivery"}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => { setEditing(true); setSaveMode("order"); }}>
+              <Text style={styles.changeText}>Change</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-        <Text style={styles.comingSoon}>We currently deliver within the Kathmandu Valley area</Text>
-      </View>
+      ) : (
+        <>
+          {/* Delivery district */}
+          <View style={[styles.section, shadow.sm]}>
+            <Text style={styles.sectionTitle}>Delivery district</Text>
+            <View style={styles.districtRow}>
+              {VALLEY_DISTRICTS.map((d) => {
+                const active = district === d;
+                return (
+                  <TouchableOpacity
+                    key={d}
+                    style={[styles.districtChip, active && styles.districtChipActive]}
+                    onPress={() => setDistrict(d)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.districtChipText, active && styles.districtChipTextActive]}>{d}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <Text style={styles.comingSoon}>We currently deliver within the Kathmandu Valley area</Text>
+          </View>
 
-      {/* Address */}
-      <View style={[styles.section, shadow.sm]}>
-        <Text style={styles.sectionTitle}>Delivery address</Text>
-        <TextInput
-          style={styles.addressInput}
-          value={address}
-          onChangeText={setAddress}
-          placeholder="Street, ward, landmark…"
-          placeholderTextColor={colors.gray400}
-          multiline
-          numberOfLines={2}
-        />
-        <Text style={styles.comingSoon}>Pin your location below and we'll fill this in — edit as needed.</Text>
-      </View>
+          {/* Address */}
+          <View style={[styles.section, shadow.sm]}>
+            <Text style={styles.sectionTitle}>Delivery address</Text>
+            <TextInput
+              style={styles.addressInput}
+              value={address}
+              onChangeText={setAddress}
+              placeholder="Street, ward, landmark…"
+              placeholderTextColor={colors.gray400}
+              multiline
+              numberOfLines={2}
+            />
+            <Text style={styles.comingSoon}>Pin your location below and we'll fill this in — edit as needed.</Text>
+          </View>
 
-      {/* Map */}
-      <View style={[styles.section, shadow.sm]}>
-        <LocationPicker
-          value={location}
-          onChange={handleLocationChange}
-          label="Pin your store location"
-          helperText="Search, drag the marker, or use your current location."
-        />
-      </View>
+          {/* Map */}
+          <View style={[styles.section, shadow.sm]}>
+            <LocationPicker
+              value={location}
+              onChange={handleLocationChange}
+              label="Pin your store location"
+              helperText="Search, drag the marker, or use your current location."
+            />
+          </View>
+
+          {/* Save options — only when editing a saved address; a first-time
+              address is saved to the profile automatically. */}
+          {hasSavedAddress && (
+            <View style={[styles.section, shadow.sm]}>
+              {([
+                ["order", "Use for this order only"],
+                ["profile", "Save as my new address"],
+              ] as const).map(([mode, label]) => (
+                <TouchableOpacity
+                  key={mode}
+                  style={styles.saveModeRow}
+                  onPress={() => setSaveMode(mode)}
+                  activeOpacity={0.8}
+                >
+                  <View style={[styles.radioOuter, saveMode === mode && styles.radioOuterActive]}>
+                    {saveMode === mode && <View style={styles.radioInner} />}
+                  </View>
+                  <Text style={styles.saveModeLabel}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity onPress={cancelEditing}>
+                <Text style={styles.cancelEditText}>Cancel — keep my saved address</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </>
+      )}
 
       {/* Payment */}
       <View style={[styles.section, shadow.sm]}>
@@ -170,16 +284,24 @@ export function CheckoutScreen({ navigation }: any) {
         <View style={styles.divider} />
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>Subtotal</Text>
-          <Text style={styles.summaryAmt}>{fmtRs(totalAmount())}</Text>
+          <Text style={styles.summaryAmt}>{fmtRs(sub)}</Text>
         </View>
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Delivery</Text>
-          <Text style={[styles.summaryAmt, { color: colors.green }]}>Free</Text>
+          <Text style={styles.summaryLabel}>VAT (13%)</Text>
+          <Text style={styles.summaryAmt}>{fmtRs(vat)}</Text>
+        </View>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Delivery{district ? ` (${district})` : ""}</Text>
+          {deliveryFee > 0 ? (
+            <Text style={styles.summaryAmt}>{fmtRs(deliveryFee)}</Text>
+          ) : (
+            <Text style={[styles.summaryAmt, { color: colors.green }]}>Free</Text>
+          )}
         </View>
         <View style={styles.divider} />
         <View style={styles.summaryRow}>
           <Text style={styles.totalLabel}>Total</Text>
-          <Text style={styles.totalAmt}>{fmtRs(total)}</Text>
+          <Text style={styles.totalAmt}>{fmtRs(grandTotal)}</Text>
         </View>
       </View>
 
@@ -202,7 +324,7 @@ export function CheckoutScreen({ navigation }: any) {
         {loading ? (
           <ActivityIndicator color={colors.white} />
         ) : (
-          <Text style={styles.orderBtnText}>Place order — {fmtRs(total)}</Text>
+          <Text style={styles.orderBtnText}>Place order — {fmtRs(grandTotal)}</Text>
         )}
       </TouchableOpacity>
 
@@ -241,6 +363,58 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   sectionTitle: { fontSize: 15, fontWeight: "700", color: colors.ink, marginBottom: spacing.xs },
+  savedCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+    backgroundColor: colors.offWhite,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
+  savedIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.blueLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  savedBody: { flex: 1, minWidth: 0 },
+  savedStore: { fontSize: 14, fontWeight: "700", color: colors.ink },
+  savedAddress: { fontSize: 13, color: colors.gray600, marginTop: 2 },
+  savedDistrict: { fontSize: 12, color: colors.gray400, marginTop: 2 },
+  changeText: { color: colors.blue, fontSize: 13, fontWeight: "700" },
+  saveModeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: 6,
+  },
+  radioOuter: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: colors.gray200,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  radioOuterActive: { borderColor: colors.blue },
+  radioInner: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.blue,
+  },
+  saveModeLabel: { fontSize: 14, color: colors.ink, fontWeight: "500" },
+  cancelEditText: {
+    fontSize: 12,
+    color: colors.gray400,
+    textDecorationLine: "underline",
+    marginTop: 4,
+  },
   addressInput: {
     borderWidth: 1.5,
     borderColor: colors.gray200,

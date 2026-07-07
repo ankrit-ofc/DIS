@@ -9,6 +9,9 @@ export interface SalesBuyer {
   phone: string;
   district: string | null;
   address: string | null;
+  /** Prisma Decimal — arrives as a string over JSON. */
+  latitude: string | number | null;
+  longitude: string | number | null;
   creditLimit: number;
   creditUsed: number;
 }
