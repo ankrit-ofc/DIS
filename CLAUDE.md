@@ -32,3 +32,4 @@ Mobile: cd distro-app && npx expo start
 - Never bind API to 0.0.0.0 (127.0.0.1 only)
 - Never commit .env files
 - Never skip withTransaction() for order/payment/stock writes
+- All raw SQL and migration SQL must use exact PascalCase table names (e.g. `Product`, `OrderItem`, `Message`) — production MySQL on Railway is case-sensitive; dev XAMPP on Windows is not, so casing bugs pass locally and fail only in production.
