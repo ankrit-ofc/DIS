@@ -24,6 +24,8 @@ export function OTPScreen({ navigation, route }: Props) {
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(60);
   const [resending, setResending] = useState(false);
+  const [channel, setChannel] = useState<"sms" | "email">(route.params.channel ?? "email");
+  const [maskedTo, setMaskedTo] = useState<string | undefined>(route.params.maskedTo);
   const inputs = useRef<Array<TextInput | null>>([]);
 
   useEffect(() => {
@@ -59,20 +61,32 @@ export function OTPScreen({ navigation, route }: Props) {
     }
   };
 
-  const handleResend = async () => {
+  // The register flow's identifier is the email — verify-otp resolves the same
+  // profile no matter which channel delivered the code.
+  const requestOtp = async (forceChannel?: "email") => {
     setResending(true);
     try {
-      await api.post("/auth/request-otp", { email });
+      const res = await api.post("/auth/request-otp", forceChannel ? { email, forceChannel } : { email });
+      setChannel(res.data?.channel === "sms" ? "sms" : "email");
+      setMaskedTo(res.data?.maskedTo);
       setCountdown(60);
       setDigits(Array(OTP_LENGTH).fill(""));
       setError("");
       inputs.current[0]?.focus();
     } catch (err: any) {
-      setError(err?.response?.data?.error ?? err.message ?? "Failed to resend OTP.");
+      const raw = err?.response?.data?.error;
+      setError(
+        raw === "otp_delivery_failed"
+          ? "We couldn't deliver your code right now. Please try again."
+          : raw ?? err.message ?? "Failed to resend OTP."
+      );
     } finally {
       setResending(false);
     }
   };
+
+  const handleResend = () => requestOtp();
+  const handleResendViaEmail = () => requestOtp("email");
 
   return (
     <SafeAreaView style={st.root} edges={['top', 'left', 'right']}>
@@ -88,10 +102,10 @@ export function OTPScreen({ navigation, route }: Props) {
           resizeMode="contain"
         />
 
-        <Text style={st.title}>Verify your email</Text>
+        <Text style={st.title}>{channel === "sms" ? "Verify your phone" : "Verify your email"}</Text>
         <Text style={st.subtitle}>
-          Enter the 6-digit code sent to{"\n"}
-          <Text style={st.phone}>{email}</Text>
+          {channel === "sms" ? "Enter the 6-digit code sent via SMS to" : "Enter the 6-digit code sent to"}{"\n"}
+          <Text style={st.phone}>{maskedTo ?? email}</Text>
         </Text>
 
         <View style={st.otpRow}>
@@ -134,6 +148,11 @@ export function OTPScreen({ navigation, route }: Props) {
               <Text style={st.resendText}>{resending ? "Sending…" : "Resend code"}</Text>
             </TouchableOpacity>
           )}
+          {channel === "sms" && countdown <= 0 && (
+            <TouchableOpacity onPress={handleResendViaEmail} disabled={resending} style={st.resendEmailBtn}>
+              <Text style={st.resendText}>Resend via email instead</Text>
+            </TouchableOpacity>
+          )}
         </View>
         </View>
       </KeyboardAvoidingView>
@@ -165,4 +184,5 @@ const st = StyleSheet.create({
   countdownText: { color: 'rgba(255,255,255,0.65)', fontFamily: typography.body, fontSize: 14 },
   countdownNum:  { fontFamily: typography.bodySemiBold, color: colors.white },
   resendText:    { color: colors.white, fontFamily: typography.bodySemiBold, fontSize: 14 },
+  resendEmailBtn: { marginTop: spacing.sm },
 });

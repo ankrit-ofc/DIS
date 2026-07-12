@@ -10,7 +10,7 @@ import { NewPasswordScreen } from "../screens/auth/NewPasswordScreen";
 export type AuthStackParamList = {
   Login: undefined;
   Register: undefined;
-  OTP: { email: string };
+  OTP: { email: string; channel?: "sms" | "email"; maskedTo?: string };
   RegisterStep2: { email: string; otpToken: string };
   ForgotPassword: undefined;
   ResetOtp: { email: string };

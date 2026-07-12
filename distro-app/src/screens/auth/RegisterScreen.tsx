@@ -38,9 +38,13 @@ export function RegisterScreen({ navigation }: Props) {
     setLoading(true);
     btnScale.value = withSpring(0.97, { damping: 20, stiffness: 300 });
     try {
-      await api.post("/auth/request-otp", { email });
+      const res = await api.post("/auth/request-otp", { email });
       btnScale.value = withSpring(1);
-      navigation.navigate("OTP", { email });
+      navigation.navigate("OTP", {
+        email,
+        channel: res.data?.channel === "sms" ? "sms" : "email",
+        maskedTo: res.data?.maskedTo,
+      });
     } catch (err: any) {
       setError(err?.response?.data?.error ?? err.message ?? "Failed to send OTP.");
       btnScale.value = withSpring(1);
