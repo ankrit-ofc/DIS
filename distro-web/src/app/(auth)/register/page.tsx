@@ -16,15 +16,26 @@ const MapLocationPicker = dynamic(
 
 const STEPS = ["Contact", "Verify OTP", "Business", "Password"];
 
-const DISTRICTS = [
-  "Kathmandu", "Lalitpur", "Bhaktapur", "Pokhara", "Chitwan",
-  "Biratnagar", "Butwal", "Dharan", "Hetauda", "Nepalgunj",
-];
+// Served districts come from the API (active only) — never hardcode them.
+const FALLBACK_DISTRICTS = ["Kathmandu", "Lalitpur", "Bhaktapur"];
 
 export default function RegisterPage() {
   const router = useRouter();
   const { setAuth } = useAuthStore();
   const [step, setStep] = useState(0);
+
+  const [districts, setDistricts] = useState<string[]>(FALLBACK_DISTRICTS);
+  useEffect(() => {
+    api
+      .get("/districts")
+      .then((r) => {
+        const list = (r.data?.districts ?? [])
+          .map((d: { name?: string }) => d.name)
+          .filter(Boolean);
+        if (list.length > 0) setDistricts(list);
+      })
+      .catch(() => {});
+  }, []);
 
   // Step 1
   const [email, setEmail] = useState("");
@@ -38,6 +49,8 @@ export default function RegisterPage() {
   const [canResend, setCanResend] = useState(false);
   const [step2Loading, setStep2Loading] = useState(false);
   const [step2Error, setStep2Error] = useState<string | null>(null);
+  const [otpChannel, setOtpChannel] = useState<"sms" | "email">("email");
+  const [otpMaskedTo, setOtpMaskedTo] = useState<string | null>(null);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   // Step 3
@@ -88,12 +101,17 @@ export default function RegisterPage() {
     setStep1Loading(true);
     setStep1Error(null);
     try {
-      await api.post("/auth/request-otp", { email });
+      const res = await api.post("/auth/request-otp", { email, phone });
+      setOtpChannel(res.data?.channel === "sms" ? "sms" : "email");
+      setOtpMaskedTo(res.data?.maskedTo ?? null);
       setCountdown(60);
       setCanResend(false);
       setStep(1);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || "Failed to send OTP.";
+      const raw = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      const msg = raw === "otp_delivery_failed"
+        ? "We couldn't deliver your code right now. Please try again."
+        : raw || "Failed to send OTP.";
       setStep1Error(msg);
       toast.error(msg);
     } finally {
@@ -138,7 +156,22 @@ export default function RegisterPage() {
   async function handleResend() {
     setCanResend(false);
     setCountdown(60);
-    try { await api.post("/auth/request-otp", { email }); } catch { setCanResend(true); }
+    try {
+      const res = await api.post("/auth/request-otp", { email, phone });
+      setOtpChannel(res.data?.channel === "sms" ? "sms" : "email");
+      setOtpMaskedTo(res.data?.maskedTo ?? null);
+    } catch { setCanResend(true); }
+  }
+
+  async function handleResendViaEmail() {
+    setCanResend(false);
+    setCountdown(60);
+    try {
+      const res = await api.post("/auth/request-otp", { email, forceChannel: "email" });
+      setOtpChannel("email");
+      setOtpMaskedTo(res.data?.maskedTo ?? null);
+      toast.success("Code sent to your email.");
+    } catch { setCanResend(true); }
   }
 
   function handleStep3Next(e: React.FormEvent) {
@@ -236,8 +269,14 @@ export default function RegisterPage() {
           {step === 1 && (
             <form onSubmit={handleVerifyOtp} className="space-y-5">
               <div>
-                <h2 className="font-grotesk font-semibold text-lg text-ink">Verify your email</h2>
-                <p className="text-sm text-gray-400 mt-1">Enter the 6-digit code sent to <span className="font-medium text-ink">{email}</span>.</p>
+                <h2 className="font-grotesk font-semibold text-lg text-ink">
+                  {otpChannel === "sms" ? "Verify your phone" : "Verify your email"}
+                </h2>
+                <p className="text-sm text-gray-400 mt-1">
+                  {otpChannel === "sms"
+                    ? <>Code sent via SMS to <span className="font-medium text-ink">{otpMaskedTo ?? phone}</span>.</>
+                    : <>Code sent to <span className="font-medium text-ink">{otpMaskedTo ?? email}</span>.</>}
+                </p>
               </div>
               <div className="flex gap-2 justify-center" onPaste={handleOtpPaste}>
                 {otp.map((digit, i) => (
@@ -258,6 +297,12 @@ export default function RegisterPage() {
                   <span>Resend in <span className="font-grotesk font-semibold text-ink">{countdown}s</span></span>
                 )}
               </div>
+              {otpChannel === "sms" && (
+                <button type="button" onClick={handleResendViaEmail} disabled={!canResend}
+                  className="w-full text-sm text-blue font-medium hover:underline disabled:text-gray-300 disabled:no-underline">
+                  Resend via email instead
+                </button>
+              )}
               <button type="button" onClick={() => setStep(0)} className="w-full text-sm text-gray-400 hover:text-ink">← Change email</button>
             </form>
           )}
@@ -292,7 +337,7 @@ export default function RegisterPage() {
                 <select value={district} onChange={(e) => setDistrict(e.target.value)} required
                   className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue bg-white">
                   <option value="">Select district</option>
-                  {DISTRICTS.map((d) => <option key={d} value={d}>{d}</option>)}
+                  {districts.map((d) => <option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
               <div>
