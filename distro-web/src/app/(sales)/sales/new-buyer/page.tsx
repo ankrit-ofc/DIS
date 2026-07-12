@@ -10,7 +10,7 @@ import { useSalesStore, type SalesBuyer } from "@/store/salesStore";
 import SalesShell from "@/components/sales/SalesShell";
 import type { LatLng } from "@/components/sales/LocationCapture";
 
-// Leaflet is sales-route-only — never in the buyer bundle.
+// Maps JS is sales-route-only — never in the buyer bundle.
 const LocationCapture = dynamic(() => import("@/components/sales/LocationCapture"), {
   ssr: false,
   loading: () => <div className="h-64 bg-blue-light/40 rounded-[8px] animate-pulse" />,

@@ -82,6 +82,17 @@ export default function AccountPage() {
     queryFn: () => api.get("/auth/me").then((r) => r.data),
   });
 
+  // Served districts only; the server rejects anything else on save.
+  const { data: districtOptions = [] } = useQuery<string[]>({
+    queryKey: ["districts-active"],
+    queryFn: () =>
+      api.get("/districts").then((r) =>
+        ((r.data?.districts ?? []) as { name?: string }[])
+          .map((d) => d.name)
+          .filter((n): n is string => Boolean(n))
+      ),
+  });
+
   useEffect(() => {
     if (profile) {
       setStoreName(profile.storeName || "");
@@ -289,16 +300,27 @@ export default function AccountPage() {
             </div>
             <div>
               <label className="text-xs font-medium text-gray-600 block mb-1">
-                Location (District)
+                District
               </label>
               <div className="relative">
-                <MapPin size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
+                <MapPin size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <select
                   value={locationArea}
                   onChange={(e) => setLocationArea(e.target.value)}
-                  placeholder="e.g. Balaju, Kathmandu"
-                  className="w-full border border-gray-200 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-blue"
-                />
+                  className="w-full border border-gray-200 rounded-xl pl-10 pr-4 py-2.5 text-sm bg-white focus:outline-none focus:border-blue"
+                >
+                  <option value="">Select district</option>
+                  {/* Grandfathered: a saved district we no longer serve stays
+                      selectable until the buyer picks a valley district. */}
+                  {locationArea && !districtOptions.includes(locationArea) && (
+                    <option value={locationArea}>
+                      {locationArea} (no longer served)
+                    </option>
+                  )}
+                  {districtOptions.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
               </div>
             </div>
             <div>

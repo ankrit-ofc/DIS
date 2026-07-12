@@ -8,14 +8,25 @@ import toast from "react-hot-toast";
 import api from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 
-const DISTRICTS = [
-  "Kathmandu", "Lalitpur", "Bhaktapur", "Pokhara", "Chitwan",
-  "Biratnagar", "Butwal", "Dharan", "Hetauda", "Nepalgunj",
-];
+// Served districts come from the API (active only) — never hardcode them.
+const FALLBACK_DISTRICTS = ["Kathmandu", "Lalitpur", "Bhaktapur"];
 
 export default function OnboardingPage() {
   const router = useRouter();
   const { token, user, setAuth } = useAuthStore();
+
+  const [districts, setDistricts] = useState<string[]>(FALLBACK_DISTRICTS);
+  useEffect(() => {
+    api
+      .get("/districts")
+      .then((r) => {
+        const list = (r.data?.districts ?? [])
+          .map((d: { name?: string }) => d.name)
+          .filter(Boolean);
+        if (list.length > 0) setDistricts(list);
+      })
+      .catch(() => {});
+  }, []);
 
   const [phone, setPhone] = useState("");
   const [storeName, setStoreName] = useState("");
@@ -93,7 +104,7 @@ export default function OnboardingPage() {
             <select value={district} onChange={(e) => setDistrict(e.target.value)} required
               className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue bg-white">
               <option value="">Select district</option>
-              {DISTRICTS.map((d) => <option key={d} value={d}>{d}</option>)}
+              {districts.map((d) => <option key={d} value={d}>{d}</option>)}
             </select>
           </div>
           <div>
