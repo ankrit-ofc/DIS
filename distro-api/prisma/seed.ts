@@ -3,20 +3,17 @@ import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+// We only serve the Kathmandu Valley for now — everything else stays in the
+// District table (inactive) so old orders/profiles keep their references and
+// expansion later is a flag flip, not a data migration.
 const ACTIVE_DISTRICTS = [
   { name: 'Kathmandu',  deliveryFee: 0,   active: true,  estimatedDays: 1 },
   { name: 'Lalitpur',   deliveryFee: 0,   active: true,  estimatedDays: 1 },
   { name: 'Bhaktapur',  deliveryFee: 0,   active: true,  estimatedDays: 1 },
-  { name: 'Pokhara',    deliveryFee: 500, active: true,  estimatedDays: 2 },
-  { name: 'Chitwan',    deliveryFee: 600, active: true,  estimatedDays: 2 },
-  { name: 'Butwal',     deliveryFee: 700, active: true,  estimatedDays: 3 },
-  { name: 'Biratnagar', deliveryFee: 800, active: true,  estimatedDays: 3 },
-  { name: 'Birgunj',    deliveryFee: 700, active: true,  estimatedDays: 3 },
-  { name: 'Dharan',     deliveryFee: 850, active: true,  estimatedDays: 3 },
-  { name: 'Hetauda',    deliveryFee: 650, active: true,  estimatedDays: 2 },
 ];
 
 const INACTIVE_DISTRICTS = [
+  'Pokhara', 'Chitwan', 'Butwal', 'Biratnagar', 'Birgunj', 'Dharan', 'Hetauda',
   'Achham', 'Arghakhanchi', 'Baglung', 'Baitadi', 'Bajhang', 'Bajura',
   'Banke', 'Bara', 'Bardiya', 'Bhojpur', 'Dailekh', 'Dang', 'Darchula',
   'Dhading', 'Dhankuta', 'Dhanusa', 'Dolakha', 'Dolpa', 'Doti', 'Gorkha',

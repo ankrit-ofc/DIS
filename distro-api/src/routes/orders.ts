@@ -13,6 +13,7 @@ import { InvoiceEmail } from '../emails/InvoiceEmail';
 import { NewOrderAdminEmail } from '../emails/NewOrderAdminEmail';
 import { generateInvoicePdf } from '../services/invoice';
 import { maxOrderQty, moqUnits, piecesPerSellUnit, stockStatus, unitLabel, unitPrice } from '../lib/stock';
+import { validateActiveDistrict } from '../lib/districts';
 
 const router = Router();
 
@@ -131,6 +132,13 @@ router.post(
     }
     if (!deliveryDistrict || !deliveryAddress) {
       res.status(400).json({ error: 'deliveryDistrict and deliveryAddress are required' });
+      return;
+    }
+    // Orders must ship to a served (active) district — client dropdowns filter
+    // to these already, so a failure here means a stale or hand-crafted request.
+    const districtError = await validateActiveDistrict(deliveryDistrict);
+    if (districtError) {
+      res.status(400).json({ error: districtError });
       return;
     }
     // CREDIT (pay-on-account) is only available in the field flow, where a

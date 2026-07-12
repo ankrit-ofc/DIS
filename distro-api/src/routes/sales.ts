@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { hashPassword } from '../lib/auth';
 import { requireAuth, isAdmin, requireRole } from '../middleware/auth';
 import { validateCoords } from '../lib/geo';
+import { validateActiveDistrict } from '../lib/districts';
 
 /** Fields the sales portal needs about a buyer (search, create, update). */
 const BUYER_SELECT = {
@@ -249,9 +250,9 @@ router.post('/buyers', requireAuth, requireRole('SALES', 'ADMIN'), async (req: R
     }
   }
 
-  const districtRow = await prisma.district.findUnique({ where: { name: district } });
-  if (!districtRow) {
-    res.status(400).json({ error: 'Unknown district' });
+  const districtError = await validateActiveDistrict(district);
+  if (districtError) {
+    res.status(400).json({ error: districtError });
     return;
   }
 
@@ -298,9 +299,9 @@ router.patch('/buyers/:id', requireAuth, requireRole('SALES', 'ADMIN'), async (r
 
   const data: Record<string, unknown> = {};
   if (district !== undefined) {
-    const districtRow = await prisma.district.findUnique({ where: { name: district } });
-    if (!districtRow) {
-      res.status(400).json({ error: 'Unknown district' });
+    const districtError = await validateActiveDistrict(district);
+    if (districtError) {
+      res.status(400).json({ error: districtError });
       return;
     }
     data.district = district;
