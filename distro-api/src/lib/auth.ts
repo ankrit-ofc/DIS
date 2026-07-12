@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { prisma } from './prisma';
 
@@ -6,7 +7,7 @@ export const hashPassword = (p: string) => bcrypt.hash(p, 12);
 export const verifyPassword = (p: string, h: string) => bcrypt.compare(p, h);
 
 export function generateOTP(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
 }
 
 export async function createSession(profileId: string): Promise<string> {

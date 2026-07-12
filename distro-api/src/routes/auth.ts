@@ -16,6 +16,7 @@ import { OtpEmail } from '../emails/OtpEmail';
 import { PasswordResetEmail } from '../emails/PasswordResetEmail';
 import { requireAuth } from '../middleware/auth';
 import { validateCoords } from '../lib/geo';
+import { validateActiveDistrict } from '../lib/districts';
 import {
   authLimiter,
   otpLimiter,
@@ -27,6 +28,15 @@ const router = Router();
 
 const MAX_OTP_ATTEMPTS = 5;
 const MAX_LIVE_OTP_CODES = 2;
+
+const NEPAL_PHONE = /^9[6-8]\d{8}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const maskPhone = (p: string) => `${p.slice(0, 2)}******${p.slice(-2)}`;
+const maskEmail = (e: string) => {
+  const [local, domain] = e.split('@');
+  return `${local.slice(0, 2)}***@${domain}`;
+};
 
 /** Create a fresh OTP code for a profile, keeping at most MAX_LIVE_OTP_CODES live. */
 async function issueOtpCode(profileId: string): Promise<string> {
@@ -53,62 +63,111 @@ async function issueOtpCode(profileId: string): Promise<string> {
 }
 
 // ─── POST /api/auth/request-otp ──────────────────────────────────────────────
-// Accepts { email } OR { phone }. Email → Resend. Phone → Sparrow (stubbed).
+// Accepts { email } and/or { phone }, plus optional forceChannel ("sms"|"email").
+// Delivery priority: SMS first whenever a phone is available (from the request
+// or stored on the Profile), email (Resend) as fallback. ONE code is issued and
+// is valid regardless of which channel delivered it.
 router.post('/request-otp', authIpBackstopLimiter, otpLimiter, async (req: Request, res: Response): Promise<void> => {
-  const { email, phone } = req.body as { email?: string; phone?: string };
+  const { email, phone, forceChannel } = req.body as {
+    email?: string;
+    phone?: string;
+    forceChannel?: string;
+  };
 
   if (!email && !phone) {
     res.status(400).json({ error: 'email or phone is required' });
     return;
   }
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (email && !EMAIL_RE.test(email)) {
     res.status(400).json({ error: 'Valid email address required' });
     return;
   }
-  if (phone && !/^9[6-8]\d{8}$/.test(phone)) {
+  if (phone && !NEPAL_PHONE.test(phone)) {
     res.status(400).json({ error: 'Valid Nepal phone number required (98XXXXXXXX)' });
     return;
   }
-
-  if (email) {
-    let profile = await prisma.profile.findUnique({ where: { email } });
-    if (!profile) {
-      const tempPhone = `PENDING_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      profile = await prisma.profile.create({
-        data: { email, phone: tempPhone, passwordHash: '', status: 'PENDING' },
-      });
-    }
-    const otp = await issueOtpCode(profile.id);
-
-    void (async () => {
-      try {
-        const html = await render(OtpEmail({ otp, email }));
-        await sendEmail(email, 'Your DISTRO verification code', html, 'otp');
-      } catch (e) {
-        console.error('[EMAIL] OTP pipeline failed:', e);
-      }
-    })();
-
-    res.json({ message: 'OTP sent', method: 'email' });
+  if (forceChannel !== undefined && forceChannel !== 'sms' && forceChannel !== 'email') {
+    res.status(400).json({ error: 'forceChannel must be "sms" or "email"' });
     return;
   }
 
-  // phone branch
-  let profile = await prisma.profile.findUnique({ where: { phone: phone! } });
+  // Find or create the profile — email is the primary identifier when both are sent.
+  let profile = email
+    ? await prisma.profile.findUnique({ where: { email } })
+    : await prisma.profile.findUnique({ where: { phone: phone! } });
   if (!profile) {
-    profile = await prisma.profile.create({
-      data: { phone: phone!, passwordHash: '', status: 'PENDING' },
-    });
+    // Real phone binding happens at /register with a uniqueness check, so an
+    // email-first profile gets a placeholder phone even if one was supplied.
+    profile = email
+      ? await prisma.profile.create({
+          data: {
+            email,
+            phone: `PENDING_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            passwordHash: '',
+            status: 'PENDING',
+          },
+        })
+      : await prisma.profile.create({
+          data: { phone: phone!, passwordHash: '', status: 'PENDING' },
+        });
   }
+
+  // Deliverable addresses: request values win, stored profile values fill gaps.
+  // Placeholder phones (PENDING_/DELETED_) never pass the Nepal-format check.
+  const smsPhone = phone ?? (NEPAL_PHONE.test(profile.phone) ? profile.phone : undefined);
+  const emailTo = email ?? profile.email ?? undefined;
+
+  if (forceChannel === 'sms' && !smsPhone) {
+    res.status(400).json({ error: 'No phone number available for SMS delivery' });
+    return;
+  }
+  if (forceChannel === 'email' && !emailTo) {
+    res.status(400).json({ error: 'No email address available for email delivery' });
+    return;
+  }
+
   const otp = await issueOtpCode(profile.id);
 
-  const smsResult = await sendSMS(phone!, otpMessage(otp));
-  if (!smsResult.ok && process.env.SMS_ENABLED !== 'false') {
-    res.status(502).json({ error: 'Could not send OTP. Please try again.' });
+  const sendOtpEmail = async (): Promise<boolean> => {
+    if (!emailTo) return false;
+    try {
+      const html = await render(OtpEmail({ otp, email: emailTo }));
+      const result = await sendEmail(emailTo, 'Your DISTRO verification code', html, 'otp');
+      return result.ok;
+    } catch (e) {
+      console.error('[OTP] email delivery failed:', e instanceof Error ? e.message : e);
+      return false;
+    }
+  };
+
+  // Primary channel: SMS (unless the caller forced email).
+  let smsFailure: string | undefined;
+  if (forceChannel !== 'email' && smsPhone) {
+    const sms = await sendSMS(smsPhone, otpMessage(otp));
+    if (sms.ok) {
+      res.json({ sent: true, channel: 'sms', maskedTo: maskPhone(smsPhone), message: 'OTP sent', method: 'phone' });
+      return;
+    }
+    smsFailure = sms.error ?? 'unknown';
+    if (forceChannel === 'sms') {
+      console.warn(`[OTP] channel_attempted=sms channel_used=none reason="${smsFailure}"`);
+      res.status(502).json({ error: 'otp_delivery_failed' });
+      return;
+    }
+  }
+
+  // Fallback channel: email.
+  const emailOk = await sendOtpEmail();
+  if (smsFailure !== undefined) {
+    // Fallback telemetry for monitoring SMS failure rates. Never log the OTP.
+    console.warn(`[OTP] channel_attempted=sms channel_used=${emailOk ? 'email' : 'none'} reason="${smsFailure}"`);
+  }
+  if (emailOk) {
+    res.json({ sent: true, channel: 'email', maskedTo: maskEmail(emailTo!), message: 'OTP sent', method: 'email' });
     return;
   }
 
-  res.json({ message: 'OTP sent', method: 'phone' });
+  res.status(502).json({ error: 'otp_delivery_failed' });
 });
 
 // ─── POST /api/auth/verify-otp ───────────────────────────────────────────────
@@ -217,6 +276,13 @@ router.post('/register', authLimiter, async (req: Request, res: Response): Promi
   if (panNumber && !/^\d{9}$/.test(panNumber)) {
     res.status(400).json({ error: 'PAN number must be exactly 9 digits' });
     return;
+  }
+  if (district) {
+    const districtError = await validateActiveDistrict(district);
+    if (districtError) {
+      res.status(400).json({ error: districtError });
+      return;
+    }
   }
 
   const profile = await prisma.profile.findUnique({ where: { email } });
@@ -481,6 +547,22 @@ router.patch('/me', requireAuth, async (req: Request, res: Response): Promise<vo
     }
   }
 
+  // Grandfathering: profiles keeping their existing (possibly now-inactive)
+  // district pass through untouched; only an actual CHANGE must be an active one.
+  if (district !== undefined && district !== '') {
+    const current = await prisma.profile.findUnique({
+      where: { id: authProfile.id },
+      select: { district: true },
+    });
+    if (district !== current?.district) {
+      const districtError = await validateActiveDistrict(district);
+      if (districtError) {
+        res.status(400).json({ error: districtError });
+        return;
+      }
+    }
+  }
+
   const data: Record<string, any> = {};
   if (storeName   !== undefined) data.storeName   = storeName;
   if (ownerName   !== undefined) data.ownerName   = ownerName;
@@ -627,6 +709,11 @@ router.post('/complete-onboarding', requireAuth, async (req: Request, res: Respo
   }
   if (panNumber && !/^\d{9}$/.test(panNumber)) {
     res.status(400).json({ error: 'PAN number must be exactly 9 digits' });
+    return;
+  }
+  const districtError = await validateActiveDistrict(district);
+  if (districtError) {
+    res.status(400).json({ error: districtError });
     return;
   }
 
