@@ -17,6 +17,7 @@ import {
   Truck,
   TrendingUp,
 } from "lucide-react";
+import api from "@/lib/api";
 import { useCartStore } from "@/store/cartStore";
 import { AnimatedTestimonials } from "@/components/ui/animated-testimonials";
 import { DISTRO_ANIMATED_TESTIMONIALS } from "@/data/distro-testimonials";
@@ -60,18 +61,6 @@ interface Props {
   districtsCount: number;
 }
 
-const BRAND_PILLS = [
-  "All",
-  "Gorkha",
-  "Barahsinghe",
-  "Tuborg",
-  "Carlsberg",
-  "8848 Vodka",
-  "Signature",
-  "Red Bull",
-  "Mustang",
-  "Max Tiger",
-];
 
 function categoryColor(name: string): { bg: string; stroke: string } {
   const n = name.toLowerCase();
@@ -353,14 +342,49 @@ export default function HomeClient({
   useReveal();
   const router = useRouter();
   const addItem = useCartStore((s) => s.addItem);
-  const [activeBrand, setActiveBrand] = useState("All");
+
+  // Featured-section category filter: "All" shows the server-rendered list;
+  // picking a category fetches its products so the filter always has real data
+  // (the 12 products passed as props are just the newest ones).
+  const [activeCategory, setActiveCategory] = useState<Category | null>(null);
+  const [categoryProducts, setCategoryProducts] = useState<Product[] | null>(null);
+  const [categoryLoading, setCategoryLoading] = useState(false);
+
+  useEffect(() => {
+    if (!activeCategory) {
+      setCategoryProducts(null);
+      return;
+    }
+    let cancelled = false;
+    setCategoryLoading(true);
+    api
+      .get(`/products?category=${encodeURIComponent(String(activeCategory.id))}&limit=12&sort=newest`)
+      .then((r) => {
+        if (!cancelled) setCategoryProducts(r.data?.products ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setCategoryProducts([]);
+      })
+      .finally(() => {
+        if (!cancelled) setCategoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCategory]);
 
   const filtered = useMemo(() => {
-    const list = activeBrand === "All"
-      ? products
-      : products.filter((p) => (p.brand ?? "").toLowerCase() === activeBrand.toLowerCase());
+    const list = activeCategory ? categoryProducts ?? [] : products;
     return list.slice(0, 8);
-  }, [products, activeBrand]);
+  }, [products, activeCategory, categoryProducts]);
+
+  const featuredChips = useMemo(
+    () =>
+      categories.filter(
+        (c) => (c.productCount ?? c._count?.products ?? 0) > 0,
+      ),
+    [categories],
+  );
 
   function addToCart(product: Product) {
     if (product.stockStatus === "OUT_OF_STOCK") {
@@ -1146,29 +1170,45 @@ export default function HomeClient({
               variants={fadeUp}
               className="flex gap-2.5 mb-8 flex-wrap"
             >
-              {BRAND_PILLS.map((b) => {
-                const active = activeBrand === b;
+              {[null, ...featuredChips].map((cat) => {
+                const active = (activeCategory?.id ?? null) === (cat?.id ?? null);
+                const label = cat ? `${cat.emoji ? `${cat.emoji} ` : ""}${cat.name}` : "All";
                 return (
                   <motion.button
-                    key={b}
+                    key={cat?.id ?? "all"}
                     type="button"
                     whileHover={{ y: -2 }}
                     whileTap={{ scale: 0.96 }}
                     transition={{ type: "spring", stiffness: 380, damping: 24 }}
-                    onClick={() => setActiveBrand(b)}
+                    onClick={() => setActiveCategory(cat)}
                     className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors duration-200 ${active
-                      ? "bg-blue text-white shadow-lg shadow-blue/25"
+                      ? "bg-blue-light text-blue"
                       : "bg-white text-gray-700 border border-gray-200 hover:border-gray-300 hover:shadow-md"
                       }`}
                   >
-                    {b}
+                    {label}
                   </motion.button>
                 );
               })}
             </motion.div>
 
-            <motion.div variants={fadeUp} key={activeBrand}>
-              <ProductRibbon products={filtered} onAdd={addToCart} />
+            <motion.div variants={fadeUp} key={activeCategory?.id ?? "all"}>
+              {activeCategory && !categoryLoading && filtered.length === 0 ? (
+                <div className="text-center py-16 text-gray-400 bg-white rounded-2xl border border-gray-100">
+                  <p className="text-base font-medium">
+                    No products in {activeCategory.name}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveCategory(null)}
+                    className="mt-4 text-sm font-medium text-blue border border-blue rounded-xl px-4 py-2 hover:bg-blue-light transition-colors"
+                  >
+                    Show all products
+                  </button>
+                </div>
+              ) : (
+                <ProductRibbon products={filtered} onAdd={addToCart} />
+              )}
             </motion.div>
 
             <motion.div

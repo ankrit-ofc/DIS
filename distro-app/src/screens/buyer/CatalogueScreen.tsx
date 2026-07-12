@@ -122,6 +122,15 @@ export function CatalogueScreen({ navigation, route }: any) {
     return () => { if (timer.current) clearTimeout(timer.current); };
   }, [search]);
 
+  // Home's category tiles navigate here with params — but the tab stays
+  // mounted, so the initial useState value goes stale. Sync on every navigate
+  // (params object identity changes each time, even for the same category).
+  useEffect(() => {
+    if (route?.params?.categoryId !== undefined) {
+      setSelectedCat(route.params.categoryId || undefined);
+    }
+  }, [route?.params]);
+
   useEffect(() => {
     api.get("/categories").then(r => setCategories(r.data.categories ?? r.data ?? [])).catch(() => {});
   }, []);
@@ -158,6 +167,12 @@ export function CatalogueScreen({ navigation, route }: any) {
             style={s.searchInput} value={search} onChangeText={setSearch}
             placeholder="Search products…" placeholderTextColor={colors.gray300}
             clearButtonMode="while-editing"
+            returnKeyType="search"
+            onSubmitEditing={() => {
+              // Keyboard search key = run the full search now, skip the debounce.
+              if (timer.current) clearTimeout(timer.current);
+              setDebounced(search);
+            }}
           />
           {search.length > 0 && (
             <TouchableOpacity onPress={() => setSearch("")}>
@@ -201,7 +216,21 @@ export function CatalogueScreen({ navigation, route }: any) {
           ListEmptyComponent={
             <View style={s.empty}>
               <Ionicons name="search-outline" size={40} color={colors.gray200} />
-              <Text style={s.emptyText}>No products found</Text>
+              <Text style={s.emptyText}>
+                {debouncedSearch
+                  ? `No products matching “${debouncedSearch}”`
+                  : selectedCat
+                    ? `No products in ${categories.find(c => c.id === selectedCat)?.name ?? "this category"}`
+                    : "No products found"}
+              </Text>
+              {(debouncedSearch || selectedCat) && (
+                <TouchableOpacity
+                  style={s.clearBtn}
+                  onPress={() => { setSearch(""); setDebounced(""); setSelectedCat(undefined); }}
+                >
+                  <Text style={s.clearBtnText}>Clear filters</Text>
+                </TouchableOpacity>
+              )}
             </View>
           }
           ListFooterComponent={
@@ -224,14 +253,16 @@ const s = StyleSheet.create({
   searchInput:   { flex: 1, fontSize: 14, color: colors.ink, fontFamily: typography.body, padding: 0 },
   chips:         { gap: spacing.sm, paddingBottom: spacing.xs },
   chip:          { borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 7, borderWidth: 1, borderColor: colors.gray200, backgroundColor: colors.white },
-  chipActive:    { backgroundColor: colors.blue, borderColor: colors.blue },
+  chipActive:    { backgroundColor: colors.blueLight, borderColor: colors.blue },
   chipText:      { fontSize: 13, fontFamily: typography.bodyMedium, color: colors.ink },
-  chipTextActive:{ fontSize: 13, fontFamily: typography.bodyMedium, color: colors.white },
+  chipTextActive:{ fontSize: 13, fontFamily: typography.bodySemiBold, color: colors.blue },
   skeletonGrid:  { flexDirection: "row", flexWrap: "wrap", padding: spacing.lg, gap: spacing.sm },
   listContent:   { padding: spacing.lg, paddingBottom: 120 },
   row:           { gap: spacing.sm, marginBottom: spacing.sm },
-  empty:         { alignItems: "center", paddingVertical: 80, gap: spacing.md },
-  emptyText:     { fontSize: 15, color: colors.gray400, fontFamily: typography.body },
+  empty:         { alignItems: "center", paddingVertical: 80, gap: spacing.md, paddingHorizontal: spacing.lg },
+  emptyText:     { fontSize: 15, color: colors.gray400, fontFamily: typography.body, textAlign: "center" },
+  clearBtn:      { borderWidth: 1.5, borderColor: colors.blue, borderRadius: radius.lg, paddingHorizontal: spacing.lg, paddingVertical: 10, backgroundColor: colors.blueLight },
+  clearBtnText:  { fontSize: 14, fontFamily: typography.bodySemiBold, color: colors.blue },
   loadMore:      { marginHorizontal: spacing.lg, marginVertical: spacing.lg, paddingVertical: 14, borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.blue, alignItems: "center" },
   loadMoreText:  { fontSize: 14, fontFamily: typography.bodySemiBold, color: colors.blue },
 });

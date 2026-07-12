@@ -24,9 +24,19 @@ export function NavbarSearch({ variant, onMobileClose }: NavbarSearchProps) {
   const router = useRouter();
   const listId = useId();
   const [q, setQ] = useState("");
+
+  // Deep links like /catalogue?q=beer keep the query visible in the box.
+  // Runs after hydration so server and client first paint match.
+  useEffect(() => {
+    const term = new URLSearchParams(window.location.search).get("q");
+    if (term) setQ(term);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<ProductLite[]>([]);
+  // Arrow-key highlight; -1 = nothing highlighted → Enter runs the full search.
+  const [highlight, setHighlight] = useState(-1);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -47,6 +57,7 @@ export function NavbarSearch({ variant, onMobileClose }: NavbarSearchProps) {
           const body = res.data;
           const list = Array.isArray(body) ? body : body?.products ?? [];
           setItems(list);
+          setHighlight(-1);
         } catch {
           setItems([]);
         } finally {
@@ -75,6 +86,34 @@ export function NavbarSearch({ variant, onMobileClose }: NavbarSearchProps) {
     router.push(`/catalogue?q=${encodeURIComponent(term)}`);
   }
 
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Escape") {
+      setOpen(false);
+      setHighlight(-1);
+      return;
+    }
+    const showing = open && q.trim().length >= 2 && items.length > 0;
+    if (e.key === "ArrowDown" && showing) {
+      e.preventDefault();
+      setHighlight((h) => (h + 1) % items.length);
+      return;
+    }
+    if (e.key === "ArrowUp" && showing) {
+      e.preventDefault();
+      setHighlight((h) => (h <= 0 ? items.length - 1 : h - 1));
+      return;
+    }
+    // Enter with a suggestion actively highlighted jumps to that product;
+    // plain Enter falls through to the form submit = full search.
+    if (e.key === "Enter" && showing && highlight >= 0 && items[highlight]) {
+      e.preventDefault();
+      setOpen(false);
+      setHighlight(-1);
+      onMobileClose?.();
+      router.push(`/product/${items[highlight].id}`);
+    }
+  }
+
   const showDropdown = open && q.trim().length >= 2;
   const formClass =
     variant === "desktop" ? "nav-search-wrap" : "nav-mobile-search";
@@ -91,11 +130,10 @@ export function NavbarSearch({ variant, onMobileClose }: NavbarSearchProps) {
           onChange={(e) => {
             setQ(e.target.value);
             setOpen(true);
+            setHighlight(-1);
           }}
           onFocus={() => setOpen(true)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setOpen(false);
-          }}
+          onKeyDown={handleKeyDown}
           autoComplete="off"
           aria-expanded={showDropdown}
           aria-controls={listId}
@@ -121,12 +159,15 @@ export function NavbarSearch({ variant, onMobileClose }: NavbarSearchProps) {
             <div className="nav-search-dropdown-status">No products found</div>
           )}
           {!loading &&
-            items.map((p) => (
+            items.map((p, i) => (
               <Link
                 key={p.id}
                 href={`/product/${p.id}`}
                 role="option"
+                aria-selected={i === highlight}
                 className="nav-search-dropdown-item"
+                style={i === highlight ? { backgroundColor: "#E8EFFE" } : undefined}
+                onMouseEnter={() => setHighlight(i)}
                 onClick={() => {
                   setOpen(false);
                   onMobileClose?.();

@@ -85,7 +85,17 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   // Only admins may see inactive products or raw stock numbers.
   const admin = await isAdminRequest(req);
   const where: Record<string, any> = admin && all === '1' ? {} : { active: true };
-  if (categoryId) where.categoryId = categoryId;
+  if (categoryId) {
+    // Accept a category id OR a human-readable name/slug (?category=beer) —
+    // MySQL's ci collation makes the name lookup case-insensitive.
+    const byId = await prisma.category.findUnique({ where: { id: categoryId }, select: { id: true } });
+    const cat = byId ?? await prisma.category.findFirst({
+      where: { name: categoryId },
+      select: { id: true },
+    });
+    // Unknown category → empty result set rather than silently unfiltered.
+    where.categoryId = cat?.id ?? '__no_such_category__';
+  }
   if (brandList.length === 1) where.brand = { contains: brandList[0] };
   else if (brandList.length > 1) where.brand = { in: brandList };
   if (inStock === 'true' || inStock === '1') where.stockQty = { gt: 0 };
@@ -97,8 +107,9 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   }
   if (searchTerm) {
     where.OR = [
-      { name:  { contains: searchTerm } },
-      { brand: { contains: searchTerm } },
+      { name:     { contains: searchTerm } },
+      { brand:    { contains: searchTerm } },
+      { category: { is: { name: { contains: searchTerm } } } },
     ];
   }
 
@@ -107,24 +118,36 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   else if (sort === 'price_desc') orderBy = { price: 'desc' };
   else if (sort === 'name_asc')   orderBy = { name: 'asc' };
 
-  const [products, total] = await Promise.all([
-    prisma.product.findMany({
-      where,
-      orderBy,
-      skip,
-      take: limitNum,
-      select: {
-        id: true, name: true, brand: true, sellUnit: true, price: true, mrp: true,
-        unit: true, moq: true, piecesPerCarton: true, pricePerCarton: true,
-        stockQty: true, imageUrl: true, active: true,
-        category: { select: { id: true, name: true, emoji: true } },
-      },
-    }),
-    prisma.product.count({ where }),
-  ]);
+  const select = {
+    id: true, name: true, brand: true, sellUnit: true, price: true, mrp: true,
+    unit: true, moq: true, piecesPerCarton: true, pricePerCarton: true,
+    stockQty: true, imageUrl: true, active: true,
+    category: { select: { id: true, name: true, emoji: true } },
+  } as const;
+
+  let products;
+  let total;
+  const explicitSort = sort === 'price_asc' || sort === 'price_desc' || sort === 'name_asc';
+  if (searchTerm && !explicitSort) {
+    // Relevance order: name matches first, then brand/category matches.
+    // Catalog is small (LIKE-scale), so fetch all matches and page in memory.
+    const matches = await prisma.product.findMany({ where, orderBy, select });
+    const needle = searchTerm.toLowerCase();
+    const nameHits  = matches.filter((p) => p.name.toLowerCase().includes(needle));
+    const restHits  = matches.filter((p) => !p.name.toLowerCase().includes(needle));
+    const ranked = [...nameHits, ...restHits];
+    total = ranked.length;
+    products = ranked.slice(skip, skip + limitNum);
+  } else {
+    [products, total] = await Promise.all([
+      prisma.product.findMany({ where, orderBy, skip, take: limitNum, select }),
+      prisma.product.count({ where }),
+    ]);
+  }
 
   const payload = admin ? products : products.map(toBuyerProduct);
-  res.json({ products: payload, total, page: pageNum, pages: Math.ceil(total / limitNum) });
+  const pages = Math.ceil(total / limitNum);
+  res.json({ products: payload, total, page: pageNum, pages, totalPages: pages });
 });
 
 // ─── POST /api/products/bulk-price — ADMIN ────────────────────────────────────

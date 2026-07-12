@@ -24,6 +24,8 @@ interface ProductsResponse {
   total: number;
   page: number;
   totalPages: number;
+  /** Older API shape — kept as a fallback for totalPages. */
+  pages?: number;
 }
 
 const SORT_OPTIONS = [
@@ -60,6 +62,13 @@ function CatalogueContent() {
 
   const [searchInput, setSearchInput] = useState(q);
 
+  // Keep the input in sync when the q param changes from outside this page
+  // (navbar search submit while already on /catalogue, back/forward, links).
+  useEffect(() => {
+    setSearchInput(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q]);
+
   const setParam = useCallback(
     (key: string, value: string | string[] | null) => {
       const params = new URLSearchParams(searchParams.toString());
@@ -82,7 +91,11 @@ function CatalogueContent() {
   );
 
   useEffect(() => {
-    debouncedSearch(searchInput);
+    // Only push typed changes into the URL. Without this guard, a stale
+    // searchInput would overwrite a q param that arrived via navigation —
+    // which is exactly the "search does nothing" bug.
+    if (searchInput !== q) debouncedSearch(searchInput);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput, debouncedSearch]);
 
   const { data: categories = [] } = useQuery<Category[]>({
@@ -134,7 +147,11 @@ function CatalogueContent() {
   });
 
   const products = data?.products || [];
-  const totalPages = data?.totalPages || 1;
+  const totalPages = data?.totalPages || data?.pages || 1;
+
+  const activeCategoryNames = categories
+    .filter((c) => selectedCategories.includes(String(c.id)))
+    .map((c) => c.name);
 
   function toggleCategory(id: string) {
     const next = selectedCategories.includes(id)
@@ -262,33 +279,35 @@ function CatalogueContent() {
       <h1 className="font-grotesk font-bold text-2xl text-ink mb-6">Catalogue</h1>
 
       {/* Search + Sort bar */}
-      <div className="flex gap-3 mb-6">
-        {!q && (
-          <div className="flex-1 relative">
-            <Search
-              size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-            />
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search products…"
-              className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue bg-white"
-            />
-            {searchInput && (
-              <button
-                onClick={() => {
-                  setSearchInput("");
-                  setParam("q", null);
-                }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-ink"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
-        )}
+      <div className="flex gap-3 mb-4">
+        <div className="flex-1 relative">
+          <Search
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+          />
+          <input
+            type="text"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={(e) => {
+              // Enter = run the full search immediately (skip the debounce).
+              if (e.key === "Enter") setParam("q", searchInput.trim() || null);
+            }}
+            placeholder="Search products…"
+            className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-blue bg-white"
+          />
+          {searchInput && (
+            <button
+              onClick={() => {
+                setSearchInput("");
+                setParam("q", null);
+              }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-ink"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
 
         <select
           value={sort}
@@ -310,6 +329,52 @@ function CatalogueContent() {
           Filters
         </button>
       </div>
+
+      {/* Category chips — quick single-select; the sidebar still allows multi */}
+      {categories.length > 0 && (
+        <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
+          <button
+            onClick={() => setParam("category", null)}
+            className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              selectedCategories.length === 0
+                ? "bg-blue-light text-blue"
+                : "bg-white text-gray-600 border border-gray-200 hover:border-gray-300"
+            }`}
+          >
+            All
+          </button>
+          {categories.map((cat) => {
+            const active =
+              selectedCategories.length === 1 &&
+              selectedCategories.includes(String(cat.id));
+            return (
+              <button
+                key={cat.id}
+                onClick={() =>
+                  setParam("category", active ? null : [String(cat.id)])
+                }
+                className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  active
+                    ? "bg-blue-light text-blue"
+                    : "bg-white text-gray-600 border border-gray-200 hover:border-gray-300"
+                }`}
+              >
+                {cat.emoji} {cat.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Search results header */}
+      {q && !isLoading && (
+        <p className="text-sm text-gray-600 mb-4">
+          Results for{" "}
+          <span className="font-semibold text-ink">&ldquo;{q}&rdquo;</span>
+          {" — "}
+          {data?.total ?? 0} {data?.total === 1 ? "product" : "products"}
+        </p>
+      )}
 
       <div className="flex gap-6">
         {/* Desktop sidebar */}
@@ -349,8 +414,35 @@ function CatalogueContent() {
             </div>
           ) : products.length === 0 ? (
             <div className="text-center py-24 text-gray-400">
-              <p className="text-lg font-medium">No products found</p>
+              <p className="text-lg font-medium">
+                {q
+                  ? `No products matching “${q}”`
+                  : activeCategoryNames.length > 0
+                    ? `No products in ${activeCategoryNames.join(", ")}`
+                    : "No products found"}
+              </p>
               <p className="text-sm mt-2">Try adjusting your filters</p>
+              <div className="mt-5 flex items-center justify-center gap-3">
+                {q && (
+                  <button
+                    onClick={() => {
+                      setSearchInput("");
+                      setParam("q", null);
+                    }}
+                    className="text-sm font-medium text-blue border border-blue rounded-xl px-4 py-2 hover:bg-blue-light transition-colors"
+                  >
+                    Clear search
+                  </button>
+                )}
+                {selectedCategories.length > 0 && (
+                  <button
+                    onClick={() => setParam("category", null)}
+                    className="text-sm font-medium text-blue border border-blue rounded-xl px-4 py-2 hover:bg-blue-light transition-colors"
+                  >
+                    Show all categories
+                  </button>
+                )}
+              </div>
             </div>
           ) : (
             <>
