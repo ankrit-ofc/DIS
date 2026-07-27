@@ -10,14 +10,13 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
-  Alert,
   TextInput as TI,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { api } from "../../lib/api";
-import { useAuthStore } from "../../store/authStore";
+import { acceptMobileSession } from "../../lib/session";
 import { colors, spacing, radius, typography, shadow } from "../../lib/theme";
 import { AuthStackParamList } from "../../navigation/AuthStack";
 
@@ -31,31 +30,7 @@ export function LoginScreen({ navigation }: Props) {
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { setAuth } = useAuthStore();
   const passwordRef = useRef<TI>(null);
-
-  // Mobile is buyer-only. Reject ADMIN/anything else and clear the issued session.
-  const acceptOrReject = async (token: string, profile: any) => {
-    if (profile?.role !== "BUYER") {
-      try {
-        await api.post(
-          "/auth/logout",
-          {},
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-      } catch {
-        // best effort — token will expire on its own
-      }
-      Alert.alert(
-        "Admin access not available",
-        "Admin access is on distronepal.com",
-        [{ text: "OK" }],
-      );
-      return false;
-    }
-    await setAuth(token, profile);
-    return true;
-  };
 
   const handleLogin = async () => {
     if (!identifier.trim() || !password.trim()) {
@@ -70,7 +45,7 @@ export function LoginScreen({ navigation }: Props) {
         email: identifier.trim(),
         password,
       });
-      await acceptOrReject(res.data.token, res.data.profile ?? res.data.user);
+      await acceptMobileSession(res.data.token, res.data.profile ?? res.data.user);
     } catch (err: any) {
       setError(err?.message ?? "Login failed. Try again.");
     } finally {
@@ -102,7 +77,8 @@ export function LoginScreen({ navigation }: Props) {
 
           <View style={s.card}>
             <Text style={s.title}>Welcome back</Text>
-            <Text style={s.subtitle}>Sign in to manage your store</Text>
+            {/* Shared by shopkeepers and DISTRO sales reps — keep it role-neutral. */}
+            <Text style={s.subtitle}>Sign in to your DISTRO account</Text>
 
             <View style={s.field}>
               <Text style={s.label}>Email or phone</Text>
@@ -192,6 +168,23 @@ export function LoginScreen({ navigation }: Props) {
               )}
             </TouchableOpacity>
 
+            <View style={s.dividerRow}>
+              <View style={s.dividerLine} />
+              <Text style={s.dividerText}>or</Text>
+              <View style={s.dividerLine} />
+            </View>
+
+            {/* Passwordless entry — the only way in for buyers created by the
+                sales team, who have no password set. */}
+            <TouchableOpacity
+              style={s.secondaryBtn}
+              onPress={() => navigation.navigate("LoginOtp")}
+              disabled={loading}
+              activeOpacity={0.88}
+            >
+              <Ionicons name="chatbox-ellipses-outline" size={18} color={BRAND_BLUE} />
+              <Text style={s.secondaryBtnText}>Login with OTP</Text>
+            </TouchableOpacity>
           </View>
 
           <TouchableOpacity
@@ -311,6 +304,27 @@ const s = StyleSheet.create({
     fontSize: 16,
     fontFamily: typography.bodySemiBold,
     letterSpacing: 0.4,
+  },
+
+  dividerRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.xs },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.gray200 },
+  dividerText: { fontSize: 12, color: colors.gray400, fontFamily: typography.body },
+
+  secondaryBtn: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1.5,
+    borderColor: BRAND_BLUE,
+    borderRadius: radius.md,
+    paddingVertical: 14,
+  },
+  secondaryBtnText: {
+    color: BRAND_BLUE,
+    fontSize: 15,
+    fontFamily: typography.bodySemiBold,
+    letterSpacing: 0.3,
   },
 
   forgotRow: { alignSelf: "flex-end", paddingVertical: 4 },

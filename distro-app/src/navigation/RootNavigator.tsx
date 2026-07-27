@@ -3,9 +3,10 @@ import { NavigationContainer } from "@react-navigation/native";
 import { navigationRef } from "./navigationRef";
 import * as ExpoSplashScreen from "expo-splash-screen";
 import * as SecureStore from "expo-secure-store";
-import { useAuthStore } from "../store/authStore";
+import { useAuthStore, useUserRole } from "../store/authStore";
 import { AuthStack } from "./AuthStack";
 import { BuyerTabs } from "./BuyerTabs";
+import { SalesStack } from "./SalesStack";
 import { OnboardingScreen } from "../screens/auth/OnboardingScreen";
 import { SplashScreen } from "../screens/SplashScreen";
 
@@ -15,6 +16,7 @@ type Phase = "loading" | "splash" | "onboarding" | "app";
 
 export function RootNavigator() {
   const { isLoading, token, loadToken } = useAuthStore();
+  const role = useUserRole();
   const [phase, setPhase] = useState<Phase>("loading");
   const [onboardingDone, setOnboardingDone] = useState(false);
   const [authInitial, setAuthInitial] = useState<"Login" | "Register">("Login");
@@ -30,16 +32,28 @@ export function RootNavigator() {
   }, []);
 
   const handleSplashFinish = useCallback(() => {
-    if (!onboardingDone) {
+    // Onboarding is written for shopkeepers ("Register your store") — a rep
+    // must never land in it.
+    if (!onboardingDone && role !== "SALES") {
       setPhase("onboarding");
     } else {
       setPhase("app");
     }
-  }, [onboardingDone]);
+  }, [onboardingDone, role]);
 
   const markOnboardingDone = useCallback(async () => {
     await SecureStore.setItemAsync(ONBOARDING_KEY, "true").catch(() => { });
   }, []);
+
+  // Retire the shopkeeper onboarding as soon as we know the signed-in user is a
+  // rep, so it can't surface on a later launch (e.g. a rep who signed in from
+  // the onboarding screen on a fresh install).
+  useEffect(() => {
+    if (role === "SALES" && !onboardingDone) {
+      setOnboardingDone(true);
+      void markOnboardingDone();
+    }
+  }, [role, onboardingDone, markOnboardingDone]);
 
   const handleOnboardingDone = useCallback(async () => {
     await markOnboardingDone();
@@ -74,9 +88,11 @@ export function RootNavigator() {
     );
   }
 
-  // Phase: app — mobile is buyer-only (admin lives on the web).
+  // Phase: app — route by role (admin lives on the web; loadToken and
+  // acceptMobileSession have already rejected any role we can't host).
   const getNavigator = () => {
     if (!token) return <AuthStack initialScreen={authInitial} />;
+    if (role === "SALES") return <SalesStack />;
     return <BuyerTabs />;
   };
 

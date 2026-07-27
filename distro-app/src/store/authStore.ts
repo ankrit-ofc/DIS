@@ -4,6 +4,7 @@ import { Platform } from "react-native";
 import { api } from "../lib/api";
 import { useCartStore } from "./cartStore";
 import { registerForPushNotificationsAsync } from "../lib/notifications";
+import { isMobileRole, MobileRole } from "../lib/roles";
 
 // NEVER import AsyncStorage. Use SecureStore only.
 
@@ -23,7 +24,8 @@ function syncPushToken(): void {
 interface Profile {
   id: string;
   phone: string;
-  role: "ADMIN" | "BUYER";
+  /** Only roles the app can host reach the store — see lib/roles.ts. */
+  role: MobileRole;
   /** Canonical field returned by the API (`/auth/me`, `PATCH /auth/me`). */
   ownerName?: string | null;
   storeName?: string;
@@ -47,6 +49,14 @@ interface AuthState {
   logout: () => Promise<void>;
 }
 
+/**
+ * Role of the signed-in user, or null when signed out. Navigation branches on
+ * this. Derived rather than stored separately so it can never desync from the
+ * profile.
+ */
+export const useUserRole = (): MobileRole | null =>
+  useAuthStore((s) => s.profile?.role ?? null);
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   token: null,
   profile: null,
@@ -59,9 +69,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         const res = await api.get("/auth/me", {
           headers: { Authorization: `Bearer ${token}` },
         });
-        // Mobile is buyer-only — purge any non-buyer session that survived from a
-        // prior install or admin login attempt.
-        if (res.data?.role !== "BUYER") {
+        // Purge any session whose role the app can't host (ADMIN/DRIVER) that
+        // survived from a prior install or a login attempt.
+        if (!isMobileRole(res.data?.role)) {
           await SecureStore.deleteItemAsync(TOKEN_KEY);
           useCartStore.getState().clearCart();
           set({ token: null, profile: null, isLoading: false });
