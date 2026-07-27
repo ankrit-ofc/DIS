@@ -1,35 +1,38 @@
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { StackNavigationProp } from "@react-navigation/stack";
 import { useAuthStore } from "../../store/authStore";
 import { colors, spacing, radius, typography, shadow } from "../../lib/theme";
+import { SalesStackParamList } from "../../navigation/SalesStack";
 
 const BRAND_BLUE = "#1A4BDB";
 
 /**
- * Placeholder rep home (Phase 1 — auth + routing only).
- *
- * The tiles below name the field-rep capabilities being ported from the web
- * sales module and are intentionally inert until their phase lands:
- *   Phase 2 — new buyer, location pin
- *   Phase 3 — catalogue, checkout on behalf
- *   Phase 4 — today's orders, buyer search
+ * Rep home. Tiles name the field-rep capabilities being ported from the web
+ * sales module; those without a `screen` are inert and render as "Soon" until
+ * the screen exists (catalogue and checkout-on-behalf, then today's orders and
+ * buyer search).
  */
 type Tool = {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
+  /** Set once the screen exists; undefined tiles render as "Soon". */
+  screen?: keyof SalesStackParamList;
 };
 
 const TOOLS: Tool[] = [
-  { icon: "person-add-outline", label: "New buyer" },
-  { icon: "location-outline", label: "Pin shop location" },
+  { icon: "person-add-outline", label: "New buyer", screen: "NewBuyer" },
+  { icon: "location-outline", label: "Pin shop location", screen: "PinLocation" },
   { icon: "grid-outline", label: "Catalogue" },
   { icon: "cart-outline", label: "Order for a shop" },
   { icon: "receipt-outline", label: "Today's orders" },
   { icon: "search-outline", label: "Find a shop" },
 ];
 
-export function SalesHomeScreen() {
+type Props = { navigation: StackNavigationProp<SalesStackParamList, "SalesHome"> };
+
+export function SalesHomeScreen({ navigation }: Props) {
   const { profile, logout } = useAuthStore();
 
   const handleLogout = () => {
@@ -60,20 +63,32 @@ export function SalesHomeScreen() {
         <View style={s.card}>
           <Text style={s.cardTitle}>Field tools</Text>
           <Text style={s.cardSubtitle}>
-            Rep tools are rolling out to mobile. They're not active yet — use the web app
-            at distronepal.com in the meantime.
+            Register a shop and pin its location from here. The remaining tools are still
+            rolling out — use distronepal.com for those.
           </Text>
 
           <View style={s.grid}>
-            {TOOLS.map((tool) => (
-              <View key={tool.label} style={s.tile}>
-                <Ionicons name={tool.icon} size={22} color={colors.gray400} />
-                <Text style={s.tileLabel}>{tool.label}</Text>
-                <View style={s.soonPill}>
-                  <Text style={s.soonText}>Soon</Text>
+            {TOOLS.map((tool) =>
+              tool.screen ? (
+                <TouchableOpacity
+                  key={tool.label}
+                  style={[s.tile, s.tileActive]}
+                  onPress={() => navigation.navigate(tool.screen as any)}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name={tool.icon} size={22} color={BRAND_BLUE} />
+                  <Text style={[s.tileLabel, s.tileLabelActive]}>{tool.label}</Text>
+                </TouchableOpacity>
+              ) : (
+                <View key={tool.label} style={s.tile}>
+                  <Ionicons name={tool.icon} size={22} color={colors.gray400} />
+                  <Text style={s.tileLabel}>{tool.label}</Text>
+                  <View style={s.soonPill}>
+                    <Text style={s.soonText}>Soon</Text>
+                  </View>
                 </View>
-              </View>
-            ))}
+              ),
+            )}
           </View>
         </View>
 
@@ -147,12 +162,14 @@ const s = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
+  tileActive: { backgroundColor: colors.white, borderColor: BRAND_BLUE },
   tileLabel: {
     fontSize: 13,
     color: colors.gray500,
     fontFamily: typography.bodyMedium,
     textAlign: "center",
   },
+  tileLabelActive: { color: colors.ink, fontFamily: typography.bodySemiBold },
   soonPill: {
     backgroundColor: colors.gray200,
     borderRadius: radius.full,

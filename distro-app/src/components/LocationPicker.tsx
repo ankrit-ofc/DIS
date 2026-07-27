@@ -6,7 +6,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  FlatList,
   Alert,
   Platform,
 } from "react-native";
@@ -26,6 +25,12 @@ interface Props {
   onChange: (v: LocationPickerValue) => void;
   label?: string;
   helperText?: string;
+  /**
+   * Ask for a GPS fix as soon as the picker mounts (only when no pin is set
+   * yet). Used by the sales rep flow, where the rep is standing at the shop —
+   * buyer-facing screens leave this off and wait for an explicit tap.
+   */
+  autoLocate?: boolean;
 }
 
 interface Prediction {
@@ -94,13 +99,17 @@ export function LocationPicker({
   onChange,
   label = "Pin your store location",
   helperText = "Search, drag the marker, or use your current location.",
+  autoLocate = false,
 }: Props) {
   const mapRef = useRef<MapView>(null);
+  /** Set when we write `query` ourselves, so the search effect skips that pass. */
+  const programmaticQuery = useRef(false);
   const [query, setQuery] = useState(value?.address ?? "");
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [searching, setSearching] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [gpsNotice, setGpsNotice] = useState<string | null>(null);
   const [region, setRegion] = useState<Region>(() =>
     value
       ? {
@@ -129,6 +138,12 @@ export function LocationPicker({
       return;
     }
     if (query === value?.address) return;
+    // The query was filled in by us (reverse geocode / prediction pick), not
+    // typed — searching it would pop the dropdown back open over the map.
+    if (programmaticQuery.current) {
+      programmaticQuery.current = false;
+      return;
+    }
 
     const ctrl = new AbortController();
     setSearching(true);
@@ -182,6 +197,7 @@ export function LocationPicker({
     onChange({ latitude, longitude, address: value?.address });
     const addr = await reverseGeocode(latitude, longitude);
     if (addr) {
+      programmaticQuery.current = true;
       setQuery(addr);
       onChange({ latitude, longitude, address: addr });
     }
@@ -189,6 +205,7 @@ export function LocationPicker({
 
   const handleSelectPrediction = async (p: Prediction) => {
     setShowDropdown(false);
+    programmaticQuery.current = true;
     setQuery(p.description);
     try {
       const d = await fetchPlaceDetails(p.place_id);
@@ -200,12 +217,18 @@ export function LocationPicker({
     }
   };
 
+  // GPS is best-effort: on denial or no fix we surface an inline notice and
+  // leave the map fully usable (tap / drag / search) rather than blocking on an
+  // alert. The manual path is always the fallback.
   const handleUseMyLocation = async () => {
     setLocating(true);
+    setGpsNotice(null);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Permission denied", "Enable location in device settings.");
+        setGpsNotice(
+          "Location permission denied — set the pin by tapping the map or searching."
+        );
         return;
       }
       const loc = await Location.getCurrentPositionAsync({
@@ -215,11 +238,20 @@ export function LocationPicker({
       pan(latitude, longitude);
       await commitPin(latitude, longitude);
     } catch {
-      Alert.alert("Error", "Could not get your location. Try again.");
+      setGpsNotice(
+        "Couldn't get a GPS fix — set the pin by tapping the map or searching."
+      );
     } finally {
       setLocating(false);
     }
   };
+
+  // Rep flow: try for a fix immediately, but only when there's no pin yet so we
+  // never overwrite a location that's already been set.
+  useEffect(() => {
+    if (autoLocate && !value) void handleUseMyLocation();
+    // Mount-only on purpose — re-running would fight the rep's manual edits.
+  }, []);
 
   const handleMarkerDrag = (e: any) => {
     const { latitude, longitude } = e.nativeEvent.coordinate;
@@ -301,32 +333,38 @@ export function LocationPicker({
           ) : null}
         </View>
 
+        {/* Plain views, not a FlatList: this sits inside a ScrollView on every
+            caller, and a nested VirtualizedList breaks scrolling. The list is
+            capped at 6 predictions, so there is nothing to virtualize. */}
         {showDropdown && predictions.length > 0 && (
           <View style={s.dropdown}>
-            <FlatList
-              data={predictions}
-              keyExtractor={(p) => p.place_id}
-              keyboardShouldPersistTaps="handled"
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={s.predictionRow}
-                  onPress={() => handleSelectPrediction(item)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons
-                    name="location-outline"
-                    size={16}
-                    color={colors.blue}
-                  />
-                  <Text style={s.predictionText} numberOfLines={2}>
-                    {item.description}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            />
+            {predictions.map((item) => (
+              <TouchableOpacity
+                key={item.place_id}
+                style={s.predictionRow}
+                onPress={() => handleSelectPrediction(item)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="location-outline" size={16} color={colors.blue} />
+                <Text style={s.predictionText} numberOfLines={2}>
+                  {item.description}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
         )}
       </View>
+
+      {/* GPS fallback notice — the map below stays fully usable */}
+      {gpsNotice && (
+        <View style={s.gpsNoticeBox}>
+          <Ionicons name="information-circle-outline" size={16} color={colors.amberDark} />
+          <Text style={s.gpsNoticeText}>{gpsNotice}</Text>
+          <TouchableOpacity onPress={handleUseMyLocation} disabled={locating} hitSlop={6}>
+            <Text style={s.gpsRetry}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Map */}
       <View style={s.mapWrap}>
@@ -450,6 +488,17 @@ const s = StyleSheet.create({
   coordsText: { fontSize: 12, color: colors.gray700 },
   coordsNum: { fontWeight: "700", color: colors.ink },
   noPin: { fontSize: 12, color: colors.gray400 },
+  gpsNoticeBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: colors.amberLight,
+    borderRadius: radius.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  gpsNoticeText: { flex: 1, fontSize: 12, color: colors.amberDark },
+  gpsRetry: { fontSize: 12, fontWeight: "700", color: colors.amberDark },
   helper: { fontSize: 11, color: colors.gray400 },
   configBox: {
     flexDirection: "row",
