@@ -70,7 +70,11 @@ goto fail
 :execute
 @rem Setup the command line
 
-set CLASSPATH=
+@rem Point at the wrapper jar rather than leaving this empty: cmd collapses the
+@rem empty "%CLASSPATH%" argument, so java sees a dangling -classpath and exits
+@rem with "-classpath requires class path specification". -jar takes precedence
+@rem over the classpath anyway, so this is inert other than fixing the launch.
+set CLASSPATH=%APP_HOME%\gradle\wrapper\gradle-wrapper.jar
 
 
 @rem Execute Gradle
