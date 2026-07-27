@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 import { useCartStore } from "./cartStore";
 import { registerForPushNotificationsAsync } from "../lib/notifications";
 import { isMobileRole, MobileRole } from "../lib/roles";
+import { setUnauthorizedHandler } from "../lib/authEvents";
 
 // NEVER import AsyncStorage. Use SecureStore only.
 
@@ -46,6 +47,8 @@ interface AuthState {
   setAuth: (token: string, profile: Profile) => Promise<void>;
   /** Refresh the cached profile after PATCH /auth/me (token unchanged). */
   setProfile: (profile: Profile) => void;
+  /** Drop the local session without calling the server (used on 401). */
+  clearSession: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -100,6 +103,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   setProfile: (profile) => set({ profile }),
 
+  clearSession: async () => {
+    await SecureStore.deleteItemAsync(TOKEN_KEY);
+    useCartStore.getState().clearCart();
+    set({ token: null, profile: null });
+  },
+
   logout: async () => {
     const token = get().token;
     if (token) {
@@ -109,8 +118,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         // best effort — token will still expire via JWT exp
       }
     }
-    await SecureStore.deleteItemAsync(TOKEN_KEY);
-    useCartStore.getState().clearCart();
-    set({ token: null, profile: null });
+    await get().clearSession();
   },
 }));
+
+// A 401 means the token is already dead, so tear the session down locally —
+// calling logout() here would POST /auth/logout with that token, get another
+// 401, and re-enter this handler.
+setUnauthorizedHandler(() => useAuthStore.getState().clearSession());

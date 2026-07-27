@@ -1,6 +1,6 @@
 import axios from "axios";
 import * as SecureStore from "expo-secure-store";
-import { useAuthStore } from "../store/authStore";
+import { emitUnauthorized } from "./authEvents";
 import { API_URL } from "./config";
 
 export const api = axios.create({
@@ -23,10 +23,10 @@ api.interceptors.response.use(
   (res) => res,
   async (err) => {
     if (err.response?.status === 401) {
-      // Clear SecureStore + reset Zustand auth state in one call.
-      // RootNavigator observes `token` and will automatically switch
-      // to AuthStack (Login screen) when it becomes null.
-      await useAuthStore.getState().logout();
+      // Clears SecureStore + resets Zustand auth state (handler registered by
+      // the auth store). RootNavigator observes `token` and will automatically
+      // switch to AuthStack (Login screen) when it becomes null.
+      emitUnauthorized();
     }
 
     const message =
