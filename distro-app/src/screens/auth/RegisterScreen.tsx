@@ -3,14 +3,20 @@ import { View, Text, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollVie
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, withSequence } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { RouteProp } from "@react-navigation/native";
 import { api } from "../../lib/api";
 import { spacing } from "../../lib/theme";
 import { AuthStackParamList } from "../../navigation/AuthStack";
 import { AuthBrand, StepIndicator, InputField, AuthError, s } from "./_shared";
 
-type Props = { navigation: StackNavigationProp<AuthStackParamList, "Register"> };
+type Props = {
+  navigation: StackNavigationProp<AuthStackParamList, "Register">;
+  route: RouteProp<AuthStackParamList, "Register">;
+};
 
-export function RegisterScreen({ navigation }: Props) {
+export function RegisterScreen({ navigation, route }: Props) {
+  // Set when an OTP login found no account for this number — carried to step 2.
+  const prefillPhone = route.params?.prefillPhone;
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -44,6 +50,7 @@ export function RegisterScreen({ navigation }: Props) {
         email,
         channel: res.data?.channel === "sms" ? "sms" : "email",
         maskedTo: res.data?.maskedTo,
+        prefillPhone,
       });
     } catch (err: any) {
       setError(err?.response?.data?.error ?? err.message ?? "Failed to send OTP.");
@@ -68,7 +75,11 @@ export function RegisterScreen({ navigation }: Props) {
           <StepIndicator current={1} total={2} />
           <View style={s.cardHeader}>
             <Text style={s.cardTitle}>Email address</Text>
-            <Text style={s.cardSubtitle}>We'll send a one-time code to verify your email.</Text>
+            <Text style={s.cardSubtitle}>
+              {prefillPhone
+                ? `No DISTRO account found for ${prefillPhone}. Add your email to create one — we'll send a code to verify it.`
+                : "We'll send a one-time code to verify your email."}
+            </Text>
           </View>
           <InputField label="Email address" value={email} onChangeText={setEmail}
             placeholder="yourshop@gmail.com" keyboardType="email-address" autoCapitalize="none" autoFocus />

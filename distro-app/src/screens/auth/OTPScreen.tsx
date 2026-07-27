@@ -7,6 +7,7 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { RouteProp } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../lib/api";
+import { acceptMobileSession } from "../../lib/session";
 import { colors, spacing, radius, typography } from "../../lib/theme";
 import { AuthStackParamList } from "../../navigation/AuthStack";
 
@@ -18,13 +19,17 @@ type Props = {
 const OTP_LENGTH = 6;
 
 export function OTPScreen({ navigation, route }: Props) {
-  const { email } = route.params;
+  const { email, phone } = route.params;
+  // Phone identifies the passwordless login flow; email the registration flow.
+  const identifier = phone ? { phone } : { email: email! };
   const [digits, setDigits] = useState<string[]>(Array(OTP_LENGTH).fill(""));
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(60);
   const [resending, setResending] = useState(false);
-  const [channel, setChannel] = useState<"sms" | "email">(route.params.channel ?? "email");
+  const [channel, setChannel] = useState<"sms" | "email">(
+    route.params.channel ?? (phone ? "sms" : "email"),
+  );
   const [maskedTo, setMaskedTo] = useState<string | undefined>(route.params.maskedTo);
   const inputs = useRef<Array<TextInput | null>>([]);
 
@@ -52,21 +57,48 @@ export function OTPScreen({ navigation, route }: Props) {
     setError("");
     setLoading(true);
     try {
-      const res = await api.post("/auth/verify-otp", { email, otp });
-      navigation.navigate("RegisterStep2", { email, otpToken: res.data.otpToken ?? "" });
+      const res = await api.post("/auth/verify-otp", { ...identifier, otp });
+
+      // An ACTIVE profile gets a session back — OTP doubles as passwordless
+      // login. This is the only way in for sales-created buyers (passwordHash '').
+      if (res.data?.token) {
+        const accepted = await acceptMobileSession(
+          res.data.token,
+          res.data.profile ?? res.data.user,
+        );
+        // Rejected role: the session is already revoked, stay put.
+        if (!accepted) setDigits(Array(OTP_LENGTH).fill(""));
+        return;
+      }
+
+      // Verified but no account yet. The phone flow has no email to register
+      // with, so send them to step 1 with the number carried over.
+      if (phone) {
+        navigation.navigate("Register", { prefillPhone: phone });
+        return;
+      }
+
+      navigation.navigate("RegisterStep2", {
+        email: email!,
+        otpToken: res.data.otpToken ?? "",
+        prefillPhone: route.params.prefillPhone,
+      });
     } catch (err: any) {
-      setError(err?.response?.data?.error ?? err.message ?? "Invalid OTP.");
+      setError(err?.message ?? "Invalid OTP.");
     } finally {
       setLoading(false);
     }
   };
 
-  // The register flow's identifier is the email — verify-otp resolves the same
-  // profile no matter which channel delivered the code.
+  // verify-otp resolves the same profile no matter which channel delivered the
+  // code, so resending only has to repeat whichever identifier we started with.
   const requestOtp = async (forceChannel?: "email") => {
     setResending(true);
     try {
-      const res = await api.post("/auth/request-otp", forceChannel ? { email, forceChannel } : { email });
+      const res = await api.post(
+        "/auth/request-otp",
+        forceChannel ? { ...identifier, forceChannel } : identifier,
+      );
       setChannel(res.data?.channel === "sms" ? "sms" : "email");
       setMaskedTo(res.data?.maskedTo);
       setCountdown(60);
@@ -76,7 +108,7 @@ export function OTPScreen({ navigation, route }: Props) {
     } catch (err: any) {
       const raw = err?.response?.data?.error;
       setError(
-        raw === "otp_delivery_failed"
+        raw === "otp_delivery_failed" || err?.message === "otp_delivery_failed"
           ? "We couldn't deliver your code right now. Please try again."
           : raw ?? err.message ?? "Failed to resend OTP."
       );
@@ -105,7 +137,7 @@ export function OTPScreen({ navigation, route }: Props) {
         <Text style={st.title}>{channel === "sms" ? "Verify your phone" : "Verify your email"}</Text>
         <Text style={st.subtitle}>
           {channel === "sms" ? "Enter the 6-digit code sent via SMS to" : "Enter the 6-digit code sent to"}{"\n"}
-          <Text style={st.phone}>{maskedTo ?? email}</Text>
+          <Text style={st.phone}>{maskedTo ?? phone ?? email}</Text>
         </Text>
 
         <View style={st.otpRow}>
@@ -148,7 +180,9 @@ export function OTPScreen({ navigation, route }: Props) {
               <Text style={st.resendText}>{resending ? "Sending…" : "Resend code"}</Text>
             </TouchableOpacity>
           )}
-          {channel === "sms" && countdown <= 0 && (
+          {/* Phone-only profiles may have no email on file, so this fallback is
+              offered only when we know the email that identified the profile. */}
+          {!phone && channel === "sms" && countdown <= 0 && (
             <TouchableOpacity onPress={handleResendViaEmail} disabled={resending} style={st.resendEmailBtn}>
               <Text style={st.resendText}>Resend via email instead</Text>
             </TouchableOpacity>

@@ -66,7 +66,7 @@ const p = StyleSheet.create({
 });
 
 export function RegisterStep2Screen({ navigation, route }: Props) {
-  const { email, otpToken } = route.params;
+  const { email, otpToken, prefillPhone } = route.params;
   const [storeName, setStoreName] = useState("");
   const [ownerName, setOwnerName] = useState("");
   const [companyName, setCompanyName] = useState("");
@@ -74,7 +74,7 @@ export function RegisterStep2Screen({ navigation, route }: Props) {
   const [district, setDistrict] = useState("");
   const [address, setAddress] = useState("");
   const [location, setLocation] = useState<LocationPickerValue | null>(null);
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState(prefillPhone ?? "");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [agreeTerms, setAgreeTerms] = useState(false);
