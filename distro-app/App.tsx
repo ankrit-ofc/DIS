@@ -1,5 +1,5 @@
 import "react-native-gesture-handler";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SplashScreen from "expo-splash-screen";
@@ -32,13 +32,23 @@ async function loadFonts() {
 }
 
 export default function App() {
+  const [fontsLoaded, setFontsLoaded] = useState(false);
+
   useEffect(() => {
     setupNotifications().catch(() => { });
-    loadFonts();
     clearLegacyCart();
     const cleanupRouting = initNotificationRouting();
+    // Rendering text before the custom fonts are registered leaves Text nodes
+    // measured against the fallback face — the widths stick and labels clip
+    // ("New buyer" → "New"). loadFonts never rejects, so `finally` also covers
+    // the fonts-unavailable path and we fall back to system fonts as before.
+    loadFonts().finally(() => setFontsLoaded(true));
     return cleanupRouting;
   }, []);
+
+  // Nothing rendered yet — the native splash is still up (preventAutoHideAsync
+  // above); RootNavigator hides it once it has finished its own startup.
+  if (!fontsLoaded) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
