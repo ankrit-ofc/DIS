@@ -1,4 +1,3 @@
-import { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,19 +8,15 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { StackNavigationProp } from "@react-navigation/stack";
-import { api } from "../../lib/api";
 import { SalesBuyer, buyerLabel } from "../../lib/sales";
 import { useSalesBuyerStore } from "../../store/salesBuyerStore";
+import { useBuyerSearch } from "../../hooks/useBuyerSearch";
 import { colors, spacing, radius, typography, shadow } from "../../lib/theme";
 import { SalesStackParamList } from "../../navigation/SalesStack";
 
 const BRAND_BLUE = "#1A4BDB";
-
-// Matches the API: GET /sales/buyers ignores anything shorter.
-const MIN_SEARCH = 2;
 
 type Props = { navigation: StackNavigationProp<SalesStackParamList, "SelectBuyer"> };
 
@@ -34,61 +29,8 @@ type Props = { navigation: StackNavigationProp<SalesStackParamList, "SelectBuyer
  */
 export function SelectBuyerScreen({ navigation }: Props) {
   const setBuyer = useSalesBuyerStore((s) => s.setBuyer);
-
-  const [search, setSearch] = useState("");
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SalesBuyer[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [recent, setRecent] = useState<SalesBuyer[]>([]);
-  const [error, setError] = useState("");
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => setQuery(search), 300);
-    return () => {
-      if (timer.current) clearTimeout(timer.current);
-    };
-  }, [search]);
-
-  // Refetched on focus: coming back from a fresh registration (or a placed
-  // order) should show the shop that was just visited.
-  useFocusEffect(
-    useCallback(() => {
-      api
-        .get("/sales/recent-buyers")
-        .then((r) => setRecent(r.data?.buyers ?? []))
-        .catch(() => {
-          // Non-fatal — search still works.
-        });
-    }, []),
-  );
-
-  useEffect(() => {
-    const q = query.trim();
-    if (q.length < MIN_SEARCH) {
-      setResults([]);
-      setSearching(false);
-      return;
-    }
-    let cancelled = false;
-    setSearching(true);
-    setError("");
-    api
-      .get("/sales/buyers", { params: { search: q } })
-      .then((r) => {
-        if (!cancelled) setResults(r.data?.buyers ?? []);
-      })
-      .catch((err: any) => {
-        if (!cancelled) setError(err?.message ?? "Could not search shops.");
-      })
-      .finally(() => {
-        if (!cancelled) setSearching(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [query]);
+  const { search, setSearch, query, searchNow, results, searching, recent, error, searched } =
+    useBuyerSearch();
 
   const pick = (buyer: SalesBuyer) => {
     // Switching shops discards the previous shop's cart — see salesBuyerStore.
@@ -104,8 +46,6 @@ export function SelectBuyerScreen({ navigation }: Props) {
       initialName: search.trim() || undefined,
     });
   };
-
-  const searched = query.trim().length >= MIN_SEARCH;
 
   return (
     <SafeAreaView style={s.safe} edges={["top", "left", "right"]}>
@@ -140,10 +80,7 @@ export function SelectBuyerScreen({ navigation }: Props) {
               placeholderTextColor={colors.gray300}
               autoCorrect={false}
               returnKeyType="search"
-              onSubmitEditing={() => {
-                if (timer.current) clearTimeout(timer.current);
-                setQuery(search);
-              }}
+              onSubmitEditing={searchNow}
             />
             {search.length > 0 && (
               <TouchableOpacity onPress={() => setSearch("")} hitSlop={8}>

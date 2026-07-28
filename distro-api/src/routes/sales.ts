@@ -345,6 +345,9 @@ router.get('/orders', requireAuth, requireRole('SALES'), async (req: Request, re
     orderBy: { createdAt: 'desc' },
     select: {
       id: true, orderNumber: true, status: true, total: true, createdAt: true,
+      // paymentMethod matters in the field: a rep settling up at the door needs
+      // to tell a cash drop from one booked against the shop's credit.
+      paymentMethod: true,
       buyer: { select: { storeName: true, phone: true } },
     },
   });

@@ -11,16 +11,14 @@ import { SalesStackParamList } from "../../navigation/SalesStack";
 const BRAND_BLUE = "#1A4BDB";
 
 /**
- * Rep home. Tiles name the field-rep capabilities being ported from the web
- * sales module; those without a `screen` are inert and render as "Soon" until
- * the screen exists (catalogue and checkout-on-behalf, then today's orders and
- * buyer search).
+ * Rep home. The tiles are the field-rep capabilities ported from the web sales
+ * module — as of Phase 4 all six are live, so there is no longer an inert
+ * "Soon" state.
  */
 type Tool = {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
-  /** Set once the screen exists; undefined tiles render as "Soon". */
-  screen?: keyof SalesStackParamList;
+  screen: keyof SalesStackParamList;
   /**
    * Continue the order already in progress instead of opening `screen`, when a
    * shop is selected. Only "Catalogue" does this — "Order for a shop" always
@@ -34,8 +32,8 @@ const TOOLS: Tool[] = [
   { icon: "location-outline", label: "Pin shop location", screen: "PinLocation" },
   { icon: "grid-outline", label: "Catalogue", screen: "SelectBuyer", resumesOrder: true },
   { icon: "cart-outline", label: "Order for a shop", screen: "SelectBuyer" },
-  { icon: "receipt-outline", label: "Today's orders" },
-  { icon: "search-outline", label: "Find a shop" },
+  { icon: "receipt-outline", label: "Today's orders", screen: "TodaysOrders" },
+  { icon: "search-outline", label: "Find a shop", screen: "FindShop" },
 ];
 
 type Props = { navigation: StackNavigationProp<SalesStackParamList, "SalesHome"> };
@@ -80,9 +78,8 @@ export function SalesHomeScreen({ navigation }: Props) {
         <View style={s.card}>
           <Text style={s.cardTitle}>Field tools</Text>
           <Text style={s.cardSubtitle}>
-            Register a shop, pin its location, and place orders on a shop's behalf from
-            here. Today's orders and shop lookup are still rolling out — use
-            distronepal.com for those.
+            Register a shop, pin its location, place orders on a shop's behalf, and
+            check the day's round — all from here.
           </Text>
 
           {selectedBuyer && (
@@ -100,27 +97,17 @@ export function SalesHomeScreen({ navigation }: Props) {
           )}
 
           <View style={s.grid}>
-            {TOOLS.map((tool) =>
-              tool.screen ? (
-                <TouchableOpacity
-                  key={tool.label}
-                  style={[s.tile, s.tileActive]}
-                  onPress={() => openTool(tool)}
-                  activeOpacity={0.85}
-                >
-                  <Ionicons name={tool.icon} size={22} color={BRAND_BLUE} />
-                  <Text style={[s.tileLabel, s.tileLabelActive]}>{tool.label}</Text>
-                </TouchableOpacity>
-              ) : (
-                <View key={tool.label} style={s.tile}>
-                  <Ionicons name={tool.icon} size={22} color={colors.gray400} />
-                  <Text style={s.tileLabel}>{tool.label}</Text>
-                  <View style={s.soonPill}>
-                    <Text style={s.soonText}>Soon</Text>
-                  </View>
-                </View>
-              ),
-            )}
+            {TOOLS.map((tool) => (
+              <TouchableOpacity
+                key={tool.label}
+                style={s.tile}
+                onPress={() => openTool(tool)}
+                activeOpacity={0.85}
+              >
+                <Ionicons name={tool.icon} size={22} color={BRAND_BLUE} />
+                <Text style={s.tileLabel}>{tool.label}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
 
@@ -199,34 +186,20 @@ const s = StyleSheet.create({
   tile: {
     width: "47%",
     flexGrow: 1,
-    backgroundColor: colors.gray50,
+    backgroundColor: colors.white,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.gray100,
+    borderColor: BRAND_BLUE,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.sm,
     alignItems: "center",
     gap: 6,
   },
-  tileActive: { backgroundColor: colors.white, borderColor: BRAND_BLUE },
   tileLabel: {
     fontSize: 13,
-    color: colors.gray500,
-    fontFamily: typography.bodyMedium,
-    textAlign: "center",
-  },
-  tileLabelActive: { color: colors.ink, fontFamily: typography.bodySemiBold },
-  soonPill: {
-    backgroundColor: colors.gray200,
-    borderRadius: radius.full,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  soonText: {
-    fontSize: 10,
-    color: colors.gray600,
+    color: colors.ink,
     fontFamily: typography.bodySemiBold,
-    letterSpacing: 0.4,
+    textAlign: "center",
   },
 
   logoutRow: { alignItems: "center", paddingVertical: spacing.xl },
