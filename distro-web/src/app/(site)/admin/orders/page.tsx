@@ -19,6 +19,44 @@ const MapView = dynamic(() => import("@/components/admin/OrderMapView"), {
   ),
 });
 
+/**
+ * An order PATCH /orders/bulk-status refused to act on, with the status that
+ * disqualified it. Only cancellation skips anything today: delivered orders
+ * need a return rather than a cancellation, and an already-cancelled order has
+ * nothing to undo.
+ */
+interface SkippedOrder {
+  orderNumber: string;
+  status: string;
+}
+
+/** Why an order in `skipped` was left alone, in words an admin can act on. */
+function skipReason(status: string): string {
+  if (status === "DELIVERED") return "already delivered (process a return instead)";
+  if (status === "CANCELLED") return "already cancelled";
+  return `status is ${status}`;
+}
+
+/** "ORD-123 (already delivered — …)" lines, grouped so repeats collapse. */
+function listSkipped(skipped: SkippedOrder[]): string {
+  const byReason = new Map<string, string[]>();
+  for (const s of skipped) {
+    const reason = skipReason(s.status);
+    byReason.set(reason, [...(byReason.get(reason) ?? []), s.orderNumber]);
+  }
+  return Array.from(byReason.entries())
+    .map(([reason, numbers]) => `• ${numbers.join(", ")} — ${reason}`)
+    .join("\n");
+}
+
+function describeSkipped(updated: number, skipped: SkippedOrder[], status: string): string {
+  const head =
+    updated === 0
+      ? `No orders updated — all ${skipped.length} were skipped.`
+      : `${updated} updated → ${status}. ${skipped.length} skipped:`;
+  return `${head}\n${listSkipped(skipped)}`;
+}
+
 interface Order {
   id: number;
   orderNumber: string;
@@ -202,14 +240,37 @@ function OrdersContent() {
     mutationFn: ({ ids, status }: { ids: number[]; status: string }) =>
       api.patch(`/orders/bulk-status`, { ids, status }),
     onSuccess: (res, vars) => {
-      toast.success(`Updated ${res.data?.updated ?? vars.ids.length} orders → ${vars.status}`);
+      const updated: number = res.data?.updated ?? vars.ids.length;
+      const skipped: SkippedOrder[] = res.data?.skipped ?? [];
+
+      // The API refuses to cancel orders that are already delivered or
+      // cancelled, and reports them rather than silently dropping them. Saying
+      // only "Updated 2 orders" after an admin selected 5 leaves them to work
+      // out the difference themselves.
+      if (skipped.length > 0) {
+        toast(describeSkipped(updated, skipped, vars.status), {
+          icon: "⚠️",
+          duration: 8000,
+          style: { whiteSpace: "pre-line", maxWidth: 460 },
+        });
+      } else {
+        toast.success(`Updated ${updated} order${updated === 1 ? "" : "s"} → ${vars.status}`);
+      }
+
       setSelectedIds(new Set());
       qc.invalidateQueries({ queryKey: ["admin-orders"] });
       qc.invalidateQueries({ queryKey: ["admin-stats"] });
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || "Bulk update failed";
-      toast.error(msg);
+      const data = (err as { response?: { data?: { error?: string; skipped?: SkippedOrder[] } } })?.response?.data;
+      const skipped = data?.skipped ?? [];
+      const msg = data?.error || "Bulk update failed";
+      // A batch where nothing was eligible comes back as a 400, so it already
+      // reads as a failure — but name the orders so it is actionable.
+      toast.error(skipped.length > 0 ? `${msg}\n\n${listSkipped(skipped)}` : msg, {
+        duration: 8000,
+        style: { whiteSpace: "pre-line", maxWidth: 460 },
+      });
     },
   });
 
