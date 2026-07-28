@@ -3,6 +3,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useAuthStore } from "../../store/authStore";
+import { useSalesBuyerStore } from "../../store/salesBuyerStore";
+import { buyerLabel } from "../../lib/sales";
 import { colors, spacing, radius, typography, shadow } from "../../lib/theme";
 import { SalesStackParamList } from "../../navigation/SalesStack";
 
@@ -19,13 +21,19 @@ type Tool = {
   label: string;
   /** Set once the screen exists; undefined tiles render as "Soon". */
   screen?: keyof SalesStackParamList;
+  /**
+   * Continue the order already in progress instead of opening `screen`, when a
+   * shop is selected. Only "Catalogue" does this — "Order for a shop" always
+   * starts from the picker so switching shops is one deliberate tap.
+   */
+  resumesOrder?: boolean;
 };
 
 const TOOLS: Tool[] = [
   { icon: "person-add-outline", label: "New buyer", screen: "NewBuyer" },
   { icon: "location-outline", label: "Pin shop location", screen: "PinLocation" },
-  { icon: "grid-outline", label: "Catalogue" },
-  { icon: "cart-outline", label: "Order for a shop" },
+  { icon: "grid-outline", label: "Catalogue", screen: "SelectBuyer", resumesOrder: true },
+  { icon: "cart-outline", label: "Order for a shop", screen: "SelectBuyer" },
   { icon: "receipt-outline", label: "Today's orders" },
   { icon: "search-outline", label: "Find a shop" },
 ];
@@ -34,6 +42,15 @@ type Props = { navigation: StackNavigationProp<SalesStackParamList, "SalesHome">
 
 export function SalesHomeScreen({ navigation }: Props) {
   const { profile, logout } = useAuthStore();
+  const selectedBuyer = useSalesBuyerStore((s) => s.buyer);
+
+  const openTool = (tool: Tool) => {
+    if (tool.resumesOrder && selectedBuyer) {
+      navigation.navigate("SalesCatalogue");
+      return;
+    }
+    navigation.navigate(tool.screen as any);
+  };
 
   const handleLogout = () => {
     Alert.alert("Log out", "Sign out of your rep account?", [
@@ -63,9 +80,24 @@ export function SalesHomeScreen({ navigation }: Props) {
         <View style={s.card}>
           <Text style={s.cardTitle}>Field tools</Text>
           <Text style={s.cardSubtitle}>
-            Register a shop and pin its location from here. The remaining tools are still
-            rolling out — use distronepal.com for those.
+            Register a shop, pin its location, and place orders on a shop's behalf from
+            here. Today's orders and shop lookup are still rolling out — use
+            distronepal.com for those.
           </Text>
+
+          {selectedBuyer && (
+            <TouchableOpacity
+              style={s.resumeRow}
+              onPress={() => navigation.navigate("SalesCatalogue")}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="cart-outline" size={16} color={BRAND_BLUE} />
+              <Text style={s.resumeText} numberOfLines={1}>
+                Order in progress for {buyerLabel(selectedBuyer)}
+              </Text>
+              <Ionicons name="chevron-forward" size={15} color={BRAND_BLUE} />
+            </TouchableOpacity>
+          )}
 
           <View style={s.grid}>
             {TOOLS.map((tool) =>
@@ -73,7 +105,7 @@ export function SalesHomeScreen({ navigation }: Props) {
                 <TouchableOpacity
                   key={tool.label}
                   style={[s.tile, s.tileActive]}
-                  onPress={() => navigation.navigate(tool.screen as any)}
+                  onPress={() => openTool(tool)}
                   activeOpacity={0.85}
                 >
                   <Ionicons name={tool.icon} size={22} color={BRAND_BLUE} />
@@ -148,6 +180,20 @@ const s = StyleSheet.create({
     lineHeight: 19,
     marginBottom: spacing.sm,
   },
+
+  resumeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: colors.blueLight,
+    borderWidth: 1,
+    borderColor: BRAND_BLUE,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    marginBottom: spacing.sm,
+  },
+  resumeText: { flex: 1, fontSize: 13, color: BRAND_BLUE, fontFamily: typography.bodySemiBold },
 
   grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   tile: {

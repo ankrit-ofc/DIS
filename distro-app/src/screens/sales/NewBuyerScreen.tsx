@@ -15,8 +15,10 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { RouteProp } from "@react-navigation/native";
 import { api } from "../../lib/api";
 import { SalesBuyer, buyerLabel } from "../../lib/sales";
+import { useSalesBuyerStore } from "../../store/salesBuyerStore";
 import { colors, spacing, radius, typography, shadow } from "../../lib/theme";
 import { SalesStackParamList } from "../../navigation/SalesStack";
 
@@ -25,7 +27,10 @@ const BRAND_BLUE = "#1A4BDB";
 // Mirrors the API's NEPAL_PHONE (sales.ts) so a typo fails before the round-trip.
 const NEPAL_PHONE = /^9[6-8]\d{8}$/;
 
-type Props = { navigation: StackNavigationProp<SalesStackParamList, "NewBuyer"> };
+type Props = {
+  navigation: StackNavigationProp<SalesStackParamList, "NewBuyer">;
+  route: RouteProp<SalesStackParamList, "NewBuyer">;
+};
 
 interface District {
   id: string;
@@ -41,8 +46,14 @@ interface District {
  * Unlike web, the map is not inline here — after creating the shop we offer the
  * dedicated GPS pin screen, which is the real field sequence.
  */
-export function NewBuyerScreen({ navigation }: Props) {
-  const [storeName, setStoreName] = useState("");
+export function NewBuyerScreen({ navigation, route }: Props) {
+  // Reached from the buyer picker ("no shop found — register it"): the rep is
+  // mid-order, so hand the new shop straight to the catalogue instead of
+  // dropping them back on the home screen to search for what they just typed.
+  const selectOnCreate = route.params?.selectOnCreate ?? false;
+  const setSelectedBuyer = useSalesBuyerStore((s) => s.setBuyer);
+
+  const [storeName, setStoreName] = useState(route.params?.initialName ?? "");
   const [ownerName, setOwnerName] = useState("");
   const [phone, setPhone] = useState("");
   const [district, setDistrict] = useState("");
@@ -91,6 +102,26 @@ export function NewBuyerScreen({ navigation }: Props) {
         address: address.trim() || undefined,
       });
       const buyer: SalesBuyer = res.data.buyer;
+
+      if (selectOnCreate) {
+        // Registering a shop mid-order — the rep already intends to sell to it.
+        setSelectedBuyer(buyer);
+        Alert.alert(
+          "Shop created",
+          `${buyerLabel(buyer)} is registered and selected. Pin its location before you start the order?`,
+          [
+            {
+              text: "Start order",
+              onPress: () => navigation.replace("SalesCatalogue"),
+            },
+            {
+              text: "Pin location",
+              onPress: () => navigation.replace("PinLocation", { buyer }),
+            },
+          ],
+        );
+        return;
+      }
 
       // The real field sequence: register the shop, then drop the pin while
       // still standing there.

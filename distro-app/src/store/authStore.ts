@@ -3,6 +3,7 @@ import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import { api } from "../lib/api";
 import { useCartStore } from "./cartStore";
+import { useSalesBuyerStore } from "./salesBuyerStore";
 import { registerForPushNotificationsAsync } from "../lib/notifications";
 import { isMobileRole, MobileRole } from "../lib/roles";
 import { setUnauthorizedHandler } from "../lib/authEvents";
@@ -20,6 +21,15 @@ function syncPushToken(): void {
     .catch(() => {
       // ignore — push is non-critical (no permission, simulator, offline, etc.)
     });
+}
+
+/**
+ * Wipe everything tied to the signed-in user's in-progress order. The rep's
+ * selected shop and the cart must die together — see salesBuyerStore.
+ */
+function resetOrderState(): void {
+  useCartStore.getState().clearCart();
+  useSalesBuyerStore.getState().clearBuyer();
 }
 
 interface Profile {
@@ -76,7 +86,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         // survived from a prior install or a login attempt.
         if (!isMobileRole(res.data?.role)) {
           await SecureStore.deleteItemAsync(TOKEN_KEY);
-          useCartStore.getState().clearCart();
+          resetOrderState();
           set({ token: null, profile: null, isLoading: false });
           return;
         }
@@ -86,7 +96,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
     } catch {
       await SecureStore.deleteItemAsync(TOKEN_KEY);
-      useCartStore.getState().clearCart();
+      resetOrderState();
     }
     set({ token: null, profile: null, isLoading: false });
   },
@@ -94,7 +104,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setAuth: async (token, profile) => {
     const prev = get().profile;
     if (prev && prev.id !== profile.id) {
-      useCartStore.getState().clearCart();
+      resetOrderState();
     }
     await SecureStore.setItemAsync(TOKEN_KEY, token);
     set({ token, profile });
@@ -105,7 +115,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   clearSession: async () => {
     await SecureStore.deleteItemAsync(TOKEN_KEY);
-    useCartStore.getState().clearCart();
+    resetOrderState();
     set({ token: null, profile: null });
   },
 
