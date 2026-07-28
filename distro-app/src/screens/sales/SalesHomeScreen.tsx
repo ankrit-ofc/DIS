@@ -19,18 +19,15 @@ type Tool = {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   screen: keyof SalesStackParamList;
-  /**
-   * Continue the order already in progress instead of opening `screen`, when a
-   * shop is selected. Only "Catalogue" does this — "Order for a shop" always
-   * starts from the picker so switching shops is one deliberate tap.
-   */
-  resumesOrder?: boolean;
 };
 
 const TOOLS: Tool[] = [
   { icon: "person-add-outline", label: "New buyer", screen: "NewBuyer" },
   { icon: "location-outline", label: "Pin shop location", screen: "PinLocation" },
-  { icon: "grid-outline", label: "Catalogue", screen: "SelectBuyer", resumesOrder: true },
+  // Both catalogue tiles start at the picker. Resuming an order in progress is
+  // the "Order in progress" row below — an explicit, labelled choice, rather
+  // than a tile that silently reopens whichever shop was last selected.
+  { icon: "grid-outline", label: "Catalogue", screen: "SelectBuyer" },
   { icon: "cart-outline", label: "Order for a shop", screen: "SelectBuyer" },
   { icon: "receipt-outline", label: "Today's orders", screen: "TodaysOrders" },
   { icon: "search-outline", label: "Find a shop", screen: "FindShop" },
@@ -42,13 +39,7 @@ export function SalesHomeScreen({ navigation }: Props) {
   const { profile, logout } = useAuthStore();
   const selectedBuyer = useSalesBuyerStore((s) => s.buyer);
 
-  const openTool = (tool: Tool) => {
-    if (tool.resumesOrder && selectedBuyer) {
-      navigation.navigate("SalesCatalogue");
-      return;
-    }
-    navigation.navigate(tool.screen as any);
-  };
+  const openTool = (tool: Tool) => navigation.navigate(tool.screen as any);
 
   const handleLogout = () => {
     Alert.alert("Log out", "Sign out of your rep account?", [

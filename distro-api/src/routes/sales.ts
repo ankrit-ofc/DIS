@@ -199,29 +199,60 @@ router.get('/summary', requireAuth, requireRole('SALES'), async (req: Request, r
   res.json({ today: { orders: agg._count._all, value: agg._sum.total ?? 0 } });
 });
 
-// ─── GET /api/sales/buyers?search= — find shops by name or phone ─────────────
+// ─── GET /api/sales/buyers?search=&page=&limit= — browse or search shops ─────
+// With no (or too short) a search term this browses every active buyer rather
+// than returning nothing: a rep standing in a shop must be able to find it
+// without already knowing its name, and previously an empty term produced an
+// empty picker with no way forward.
+//
+// Deliberately NOT scoped to the rep's own shops or districts. The search has
+// always been global for any SALES/ADMIN session, and there is no rep-territory
+// model in the schema — scoping browse while search stayed global would just be
+// incoherent. Reps also cover for each other.
+const BUYER_PAGE_DEFAULT = 20;
+const BUYER_PAGE_MAX = 50;
+
 router.get('/buyers', requireAuth, requireRole('SALES', 'ADMIN'), async (req: Request, res: Response): Promise<void> => {
   const search = qs(req.query.search as string | string[] | undefined)?.trim();
-  if (!search || search.length < 2) {
-    res.json({ buyers: [] });
-    return;
-  }
+  const page = Math.max(1, Number(qs(req.query.page as string | string[] | undefined)) || 1);
+  const limit = Math.min(
+    BUYER_PAGE_MAX,
+    Math.max(1, Number(qs(req.query.limit as string | string[] | undefined)) || BUYER_PAGE_DEFAULT),
+  );
 
-  const buyers = await prisma.profile.findMany({
-    where: {
-      role: 'BUYER',
-      status: 'ACTIVE',
-      OR: [
-        { storeName: { contains: search } },
-        { ownerName: { contains: search } },
-        { phone:     { contains: search } },
-      ],
-    },
-    orderBy: { storeName: 'asc' },
-    take: 20,
-    select: BUYER_SELECT,
-  });
-  res.json({ buyers });
+  // Short terms fall through to browse rather than returning nothing — a
+  // one-character query is a rep who has started typing, not a request for an
+  // empty screen.
+  const filtering = !!search && search.length >= 2;
+  const where = {
+    role: 'BUYER' as const,
+    status: 'ACTIVE' as const,
+    ...(filtering
+      ? {
+          OR: [
+            { storeName: { contains: search } },
+            { ownerName: { contains: search } },
+            { phone:     { contains: search } },
+            // Reps often know where a shop is, not what it is called.
+            { address:   { contains: search } },
+            { district:  { contains: search } },
+          ],
+        }
+      : {}),
+  };
+
+  const [buyers, total] = await Promise.all([
+    prisma.profile.findMany({
+      where,
+      orderBy: { storeName: 'asc' },
+      skip: (page - 1) * limit,
+      take: limit,
+      select: BUYER_SELECT,
+    }),
+    prisma.profile.count({ where }),
+  ]);
+
+  res.json({ buyers, total, page, hasMore: page * limit < total });
 });
 
 // ─── POST /api/sales/buyers — quick-create a buyer at the shop door ──────────

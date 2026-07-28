@@ -3,25 +3,35 @@ import { useFocusEffect } from "@react-navigation/native";
 import { api } from "../lib/api";
 import type { SalesBuyer } from "../lib/sales";
 
-/** Matches the API: GET /sales/buyers returns [] for anything shorter. */
+/** Below this the server browses instead of filtering — see GET /sales/buyers. */
 export const MIN_BUYER_SEARCH = 2;
 
+const PAGE_SIZE = 20;
+
 /**
- * Debounced shop lookup for the rep-facing screens (the order-flow buyer
- * picker and the find-a-shop directory), plus the rep's recent shops.
+ * Shop lookup for the rep-facing screens (the order-flow buyer picker and the
+ * find-a-shop directory).
  *
- * Recent shops double as the browse surface: /sales/buyers needs a query, so
- * with an empty field there is nothing else to show. They are refetched on
- * focus, since placing an order changes the list.
+ * With an empty field this browses every active buyer rather than showing
+ * nothing: a rep standing in a shop needs to find it without already knowing
+ * its name. Recent shops are fetched separately so the picker can pin the
+ * rep's usual stops above the full list.
  */
 export function useBuyerSearch() {
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SalesBuyer[]>([]);
-  const [searching, setSearching] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  /** True only for a first page — a "load more" must not blank the list. */
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [recent, setRecent] = useState<SalesBuyer[]>([]);
   const [error, setError] = useState("");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Guards against a slow early response overwriting a newer one. */
+  const requestId = useRef(0);
 
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -36,43 +46,60 @@ export function useBuyerSearch() {
       .get("/sales/recent-buyers")
       .then((r) => setRecent(r.data?.buyers ?? []))
       .catch(() => {
-        // Non-fatal — search still works.
+        // Non-fatal — the full list below is the primary surface.
       });
   }, []);
 
   useFocusEffect(loadRecent);
 
-  useEffect(() => {
-    const q = query.trim();
-    if (q.length < MIN_BUYER_SEARCH) {
-      setResults([]);
-      setSearching(false);
-      return;
+  const fetchPage = useCallback(async (q: string, p: number) => {
+    const id = ++requestId.current;
+    p === 1 ? setLoading(true) : setLoadingMore(true);
+    try {
+      const params: Record<string, any> = { page: p, limit: PAGE_SIZE };
+      if (q.trim().length >= MIN_BUYER_SEARCH) params.search = q.trim();
+      const res = await api.get("/sales/buyers", { params });
+      if (id !== requestId.current) return; // superseded
+      const list: SalesBuyer[] = res.data?.buyers ?? [];
+      setResults((prev) => (p === 1 ? list : [...prev, ...list]));
+      setTotal(res.data?.total ?? list.length);
+      setHasMore(!!res.data?.hasMore);
+      setError("");
+    } catch (err: any) {
+      if (id !== requestId.current) return;
+      setError(err?.message ?? "Could not load shops.");
+      if (p === 1) setResults([]);
+    } finally {
+      if (id === requestId.current) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
-    let cancelled = false;
-    setSearching(true);
-    setError("");
-    api
-      .get("/sales/buyers", { params: { search: q } })
-      .then((r) => {
-        if (!cancelled) setResults(r.data?.buyers ?? []);
-      })
-      .catch((err: any) => {
-        if (!cancelled) setError(err?.message ?? "Could not search shops.");
-      })
-      .finally(() => {
-        if (!cancelled) setSearching(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [query]);
+  }, []);
+
+  useEffect(() => {
+    setPage(1);
+    void fetchPage(query, 1);
+  }, [query, fetchPage]);
+
+  const loadMore = useCallback(() => {
+    if (!hasMore || loadingMore || loading) return;
+    const next = page + 1;
+    setPage(next);
+    void fetchPage(query, next);
+  }, [hasMore, loadingMore, loading, page, query, fetchPage]);
 
   /** Skip the debounce — for the keyboard's search key. */
   const searchNow = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
     setQuery(search);
   }, [search]);
+
+  const refresh = useCallback(() => {
+    loadRecent();
+    setPage(1);
+    void fetchPage(query, 1);
+  }, [loadRecent, query, fetchPage]);
 
   return {
     search,
@@ -81,18 +108,15 @@ export function useBuyerSearch() {
     query,
     searchNow,
     results,
-    searching,
+    total,
+    hasMore,
+    loadMore,
+    loading,
+    loadingMore,
     recent,
-    /** Replace one shop in the cached lists after it is updated (e.g. pinned). */
-    replaceBuyer: useCallback((updated: SalesBuyer) => {
-      const swap = (list: SalesBuyer[]) =>
-        list.map((b) => (b.id === updated.id ? updated : b));
-      setResults(swap);
-      setRecent(swap);
-    }, []),
-    refreshRecent: loadRecent,
+    refresh,
     error,
-    /** True once the query is long enough for the server to answer it. */
-    searched: query.trim().length >= MIN_BUYER_SEARCH,
+    /** True when the server is filtering rather than browsing. */
+    filtering: query.trim().length >= MIN_BUYER_SEARCH,
   };
 }

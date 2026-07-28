@@ -61,7 +61,12 @@ const qb = StyleSheet.create({
 });
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
-export function ProductScreen({ navigation, route }: any) {
+/**
+ * `embedded` suppresses the status-bar spacer: the sales flow renders this
+ * screen under a shop banner that has already consumed the top inset, and a
+ * second spacer leaves a white seam between the two.
+ */
+export function ProductScreen({ navigation, route, embedded = false }: any) {
   const { productId } = route.params;
   const insets = useSafeAreaInsets();
   const [product, setProduct] = useState<Product | null>(null);
@@ -103,8 +108,8 @@ export function ProductScreen({ navigation, route }: any) {
     <View style={s.flex}>
       <ScrollView style={s.bg} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 + insets.bottom }}>
 
-        {/* Status-bar safe spacer */}
-        <View style={{ height: insets.top, backgroundColor: colors.white }} />
+        {/* Status-bar safe spacer — the embedding screen owns it when embedded. */}
+        {!embedded && <View style={{ height: insets.top, backgroundColor: colors.white }} />}
 
         {/* Hero image — fixed square aspect, contained, never overflows */}
         <View style={s.hero}>

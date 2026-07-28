@@ -6,6 +6,36 @@ scratch. Each was found while fixing the admin-cancellation reversal bug
 
 ---
 
+## 0. `POST /orders` has no idempotency key — retries create duplicate orders
+
+**Next piece of work.** Agreed 2026-07-28 to fix separately rather than bundle
+into the sales-picker change, because it is an API contract change that needs
+its own tests.
+
+`POST /orders` has no client-supplied request id, so the server cannot tell a
+retry from a new order. If the order commits but the response is lost, the
+client's cart and shop selection are deliberately preserved (correct for a
+genuine failure) and the rep retries — producing a second real order against
+the shop's credit.
+
+**Why it matters more here than in most systems:** field reps work on patchy
+mobile data in shops, so "committed, response lost, retry" is a routine
+condition rather than an edge case. The cost is a duplicate order against a
+real shop's credit line, which then has to be cancelled and reconciled — and
+until the admin-cancel fix (`lib/orderReversal.ts`) that reconciliation was
+itself broken.
+
+**Fix shape:** accept an `Idempotency-Key` header (or `clientRequestId` in the
+body) generated once per checkout attempt on the client and reused across
+retries. Store it on `Order` with a unique index; on a repeat, return the
+existing order with 200 instead of creating another. That is a schema change —
+one nullable unique column — so it needs a migration.
+
+Client side, the key must be generated when the cart is finalised, **not** per
+request, or every retry gets a fresh key and the guard does nothing.
+
+---
+
 ## 1. No order status state machine — un-cancelling is broken in both directions
 
 `PATCH /orders/:id/status` and `PATCH /orders/bulk-status` accept any value in

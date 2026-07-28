@@ -29,8 +29,11 @@ type Props = { navigation: StackNavigationProp<SalesStackParamList, "SelectBuyer
  */
 export function SelectBuyerScreen({ navigation }: Props) {
   const setBuyer = useSalesBuyerStore((s) => s.setBuyer);
-  const { search, setSearch, query, searchNow, results, searching, recent, error, searched } =
-    useBuyerSearch();
+  const {
+    search, setSearch, query, searchNow,
+    results, total, hasMore, loadMore, loading, loadingMore,
+    recent, error, filtering,
+  } = useBuyerSearch();
 
   const pick = (buyer: SalesBuyer) => {
     // Switching shops discards the previous shop's cart — see salesBuyerStore.
@@ -76,7 +79,7 @@ export function SelectBuyerScreen({ navigation }: Props) {
               style={s.searchInput}
               value={search}
               onChangeText={setSearch}
-              placeholder="Shop name or phone…"
+              placeholder="Name, phone, owner or address…"
               placeholderTextColor={colors.gray300}
               autoCorrect={false}
               returnKeyType="search"
@@ -95,32 +98,12 @@ export function SelectBuyerScreen({ navigation }: Props) {
               <Text style={s.errorText}>{error}</Text>
             </View>
           )}
-
-          {searched && (
-            <View style={s.results}>
-              {searching && results.length === 0 ? (
-                <View style={s.searchingRow}>
-                  <ActivityIndicator size="small" color={BRAND_BLUE} />
-                  <Text style={s.mutedText}>Searching…</Text>
-                </View>
-              ) : results.length === 0 ? (
-                <View style={s.emptyResults}>
-                  <Text style={s.mutedText}>No shop found for “{query.trim()}”.</Text>
-                  <TouchableOpacity style={s.registerBtn} onPress={registerNew} activeOpacity={0.85}>
-                    <Ionicons name="add-circle-outline" size={16} color={BRAND_BLUE} />
-                    <Text style={s.registerBtnText} numberOfLines={1}>
-                      Register “{query.trim()}” as a new shop
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                results.map((b) => <BuyerRow key={b.id} buyer={b} onPress={() => pick(b)} />)
-              )}
-            </View>
-          )}
         </View>
 
-        {recent.length > 0 && (
+        {/* Recent shops stay pinned above the full list — a rep's usual stops
+            should be one tap away without scrolling or typing. Hidden while
+            filtering, where the results are the answer. */}
+        {!filtering && recent.length > 0 && (
           <View style={s.card}>
             <Text style={s.sectionLabel}>Recent shops</Text>
             <View style={s.chipWrap}>
@@ -140,6 +123,56 @@ export function SelectBuyerScreen({ navigation }: Props) {
             </View>
           </View>
         )}
+
+        {/* The full list. This screen must never render as blank: it is either
+            loading, showing shops, or explaining that there are none. */}
+        <View style={s.card}>
+          <Text style={s.sectionLabel}>
+            {filtering ? `Results for “${query.trim()}”` : "All shops"}
+            {!loading && results.length > 0 ? `  ·  ${total}` : ""}
+          </Text>
+
+          {loading ? (
+            <View style={s.searchingRow}>
+              <ActivityIndicator size="small" color={BRAND_BLUE} />
+              <Text style={s.mutedText}>{filtering ? "Searching…" : "Loading shops…"}</Text>
+            </View>
+          ) : results.length === 0 ? (
+            <View style={s.emptyResults}>
+              <Text style={s.mutedText}>
+                {filtering
+                  ? `No shop found for “${query.trim()}”.`
+                  : "No shops registered yet."}
+              </Text>
+              <TouchableOpacity style={s.registerBtn} onPress={registerNew} activeOpacity={0.85}>
+                <Ionicons name="add-circle-outline" size={16} color={BRAND_BLUE} />
+                <Text style={s.registerBtnText} numberOfLines={1}>
+                  {filtering
+                    ? `Register “${query.trim()}” as a new shop`
+                    : "Register a new shop"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              {results.map((b) => (
+                <BuyerRow key={b.id} buyer={b} onPress={() => pick(b)} />
+              ))}
+              {hasMore && (
+                <TouchableOpacity
+                  style={[s.loadMore, loadingMore && { opacity: 0.5 }]}
+                  onPress={loadMore}
+                  disabled={loadingMore}
+                  activeOpacity={0.85}
+                >
+                  <Text style={s.loadMoreText}>
+                    {loadingMore ? "Loading…" : `Load more (${results.length} of ${total})`}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -212,8 +245,16 @@ const s = StyleSheet.create({
     padding: 0,
   },
 
-  results: { marginTop: spacing.xs },
   searchingRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm },
+  loadMore: {
+    marginTop: spacing.sm,
+    paddingVertical: 12,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: BRAND_BLUE,
+    alignItems: "center",
+  },
+  loadMoreText: { fontSize: 14, color: BRAND_BLUE, fontFamily: typography.bodySemiBold },
   emptyResults: { gap: spacing.sm, paddingVertical: spacing.sm },
   mutedText: { fontSize: 13, color: colors.gray400, fontFamily: typography.body },
   registerBtn: {

@@ -13,7 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { SalesBuyer, buyerLabel, buyerCoords } from "../../lib/sales";
 import { useSalesBuyerStore } from "../../store/salesBuyerStore";
-import { useBuyerSearch, MIN_BUYER_SEARCH } from "../../hooks/useBuyerSearch";
+import { useBuyerSearch } from "../../hooks/useBuyerSearch";
 import { colors, spacing, radius, typography, shadow } from "../../lib/theme";
 import { SalesStackParamList } from "../../navigation/SalesStack";
 
@@ -33,8 +33,11 @@ type Props = { navigation: StackNavigationProp<SalesStackParamList, "FindShop"> 
  */
 export function FindShopScreen({ navigation }: Props) {
   const setBuyer = useSalesBuyerStore((s) => s.setBuyer);
-  const { search, setSearch, query, searchNow, results, searching, recent, error, searched } =
-    useBuyerSearch();
+  const {
+    search, setSearch, query, searchNow,
+    results, total, hasMore, loadMore, loading, loadingMore,
+    recent, error, filtering,
+  } = useBuyerSearch();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const startOrder = (buyer: SalesBuyer) => {
@@ -42,8 +45,6 @@ export function FindShopScreen({ navigation }: Props) {
     setBuyer(buyer);
     navigation.navigate("SalesCatalogue");
   };
-
-  const list = searched ? results : recent;
 
   return (
     <SafeAreaView style={s.safe} edges={["top", "left", "right"]}>
@@ -61,7 +62,10 @@ export function FindShopScreen({ navigation }: Props) {
       >
         <View style={s.card}>
           <View style={s.cardHead}>
-            <Text style={s.cardTitle}>{searched ? "Results" : "Recent shops"}</Text>
+            <Text style={s.cardTitle}>
+              {filtering ? "Results" : "All shops"}
+              {!loading && results.length > 0 ? `  ·  ${total}` : ""}
+            </Text>
             <TouchableOpacity
               onPress={() => navigation.navigate("NewBuyer")}
               hitSlop={6}
@@ -78,7 +82,7 @@ export function FindShopScreen({ navigation }: Props) {
               style={s.searchInput}
               value={search}
               onChangeText={setSearch}
-              placeholder="Shop name or phone…"
+              placeholder="Name, phone, owner or address…"
               placeholderTextColor={colors.gray300}
               autoCorrect={false}
               returnKeyType="search"
@@ -98,36 +102,36 @@ export function FindShopScreen({ navigation }: Props) {
             </View>
           )}
 
-          {searched && searching && results.length === 0 ? (
+          {loading ? (
             <View style={s.searchingRow}>
               <ActivityIndicator size="small" color={BRAND_BLUE} />
-              <Text style={s.mutedText}>Searching…</Text>
+              <Text style={s.mutedText}>{filtering ? "Searching…" : "Loading shops…"}</Text>
             </View>
-          ) : list.length === 0 ? (
+          ) : results.length === 0 ? (
             <View style={s.emptyBox}>
               <Text style={s.mutedText}>
-                {searched
+                {filtering
                   ? `No shop found for “${query.trim()}”.`
-                  : "No shops visited yet."}
+                  : "No shops registered yet."}
               </Text>
               <TouchableOpacity
                 style={s.registerBtn}
                 onPress={() =>
                   navigation.navigate("NewBuyer", {
-                    initialName: searched ? query.trim() : undefined,
+                    initialName: filtering ? query.trim() : undefined,
                   })
                 }
                 activeOpacity={0.85}
               >
                 <Ionicons name="add-circle-outline" size={16} color={BRAND_BLUE} />
                 <Text style={s.registerBtnText} numberOfLines={1}>
-                  {searched ? `Register “${query.trim()}”` : "Register a shop"}
+                  {filtering ? `Register “${query.trim()}”` : "Register a shop"}
                 </Text>
               </TouchableOpacity>
             </View>
           ) : (
             <View>
-              {list.map((buyer) => (
+              {results.map((buyer) => (
                 <ShopRow
                   key={buyer.id}
                   buyer={buyer}
@@ -137,13 +141,19 @@ export function FindShopScreen({ navigation }: Props) {
                   onOrder={() => startOrder(buyer)}
                 />
               ))}
+              {hasMore && (
+                <TouchableOpacity
+                  style={[s.loadMore, loadingMore && { opacity: 0.5 }]}
+                  onPress={loadMore}
+                  disabled={loadingMore}
+                  activeOpacity={0.85}
+                >
+                  <Text style={s.loadMoreText}>
+                    {loadingMore ? "Loading…" : `Load more (${results.length} of ${total})`}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
-          )}
-
-          {!searched && (
-            <Text style={s.hint}>
-              Type {MIN_BUYER_SEARCH}+ characters to search every shop.
-            </Text>
           )}
         </View>
       </ScrollView>
@@ -260,7 +270,15 @@ const s = StyleSheet.create({
   searchingRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm },
   emptyBox: { gap: spacing.sm, paddingVertical: spacing.sm },
   mutedText: { fontSize: 13, color: colors.gray400, fontFamily: typography.body },
-  hint: { fontSize: 12, color: colors.gray400, fontFamily: typography.body },
+  loadMore: {
+    marginTop: spacing.sm,
+    paddingVertical: 12,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: BRAND_BLUE,
+    alignItems: "center",
+  },
+  loadMoreText: { fontSize: 14, color: BRAND_BLUE, fontFamily: typography.bodySemiBold },
   registerBtn: {
     flexDirection: "row",
     alignItems: "center",

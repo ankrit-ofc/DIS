@@ -7,7 +7,7 @@ import { SalesCatalogueScreen } from "../screens/sales/SalesCatalogueScreen";
 import { SalesCheckoutScreen } from "../screens/sales/SalesCheckoutScreen";
 import { TodaysOrdersScreen } from "../screens/sales/TodaysOrdersScreen";
 import { FindShopScreen } from "../screens/sales/FindShopScreen";
-import { ProductScreen } from "../screens/buyer/ProductScreen";
+import { SalesProductScreen } from "../screens/sales/SalesProductScreen";
 import { SalesBuyer } from "../lib/sales";
 
 /**
@@ -25,7 +25,7 @@ export type SalesStackParamList = {
   SelectBuyer: undefined;
   SalesCatalogue: undefined;
   SalesCheckout: undefined;
-  /** The buyer product detail screen, reused verbatim — it has no buyer-only state. */
+  /** The buyer product detail screen, wrapped with the shop banner. */
   SalesProduct: { productId: string };
   TodaysOrders: undefined;
   FindShop: undefined;
@@ -42,7 +42,7 @@ export function SalesStack() {
       <Stack.Screen name="SelectBuyer" component={SelectBuyerScreen} />
       <Stack.Screen name="SalesCatalogue" component={SalesCatalogueScreen} />
       <Stack.Screen name="SalesCheckout" component={SalesCheckoutScreen} />
-      <Stack.Screen name="SalesProduct" component={ProductScreen} />
+      <Stack.Screen name="SalesProduct" component={SalesProductScreen} />
       <Stack.Screen name="TodaysOrders" component={TodaysOrdersScreen} />
       <Stack.Screen name="FindShop" component={FindShopScreen} />
     </Stack.Navigator>

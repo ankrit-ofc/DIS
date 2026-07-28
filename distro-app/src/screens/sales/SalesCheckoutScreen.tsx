@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  BackHandler,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -553,8 +554,24 @@ function SalesOrderPlaced({
   onNextShop: () => void;
   onSameShop: () => void;
 }) {
+  // Hardware back on this screen would otherwise pop to the catalogue of a shop
+  // whose order is already placed, with an emptied cart — a confusing dead
+  // half-state. An explicit close does the same thing as "Next shop".
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      onNextShop();
+      return true;
+    });
+    return () => sub.remove();
+  }, [onNextShop]);
+
   return (
     <SafeAreaView style={s.doneSafe} edges={["top", "left", "right", "bottom"]}>
+      <View style={s.doneHeader}>
+        <TouchableOpacity onPress={onNextShop} hitSlop={10} style={s.doneClose}>
+          <Ionicons name="close" size={24} color={colors.gray400} />
+        </TouchableOpacity>
+      </View>
       <View style={s.doneBody}>
         <Ionicons name="checkmark-circle" size={56} color={colors.green} />
         <Text style={s.doneTitle}>Order placed</Text>
@@ -850,6 +867,8 @@ const s = StyleSheet.create({
   secondaryBtnText: { color: colors.ink, fontSize: 14, fontFamily: typography.bodySemiBold },
 
   doneSafe: { flex: 1, backgroundColor: colors.offWhite },
+  doneHeader: { flexDirection: "row", justifyContent: "flex-end", padding: spacing.md },
+  doneClose: { padding: 4 },
   doneBody: {
     flex: 1,
     alignItems: "center",
