@@ -5,6 +5,7 @@ import PDFDocument from 'pdfkit';
 import { prisma } from '../lib/prisma';
 import { requireAuth, isAdmin, requireRole } from '../middleware/auth';
 import { withTransaction } from '../lib/transaction';
+import { reverseOrderEffects, canAdminCancel, refundOwedNote } from '../lib/orderReversal';
 import { sendEmail, render } from '../lib/email';
 import { sendNotification, orderConfirmMessage, statusUpdateMessage, sendExpoPush, orderStatusPush } from '../lib/notifications';
 import { OrderConfirmEmail } from '../emails/OrderConfirmEmail';
@@ -517,9 +518,22 @@ router.patch(
       return;
     }
 
-    const order = await prisma.order.findUnique({ where: { id } });
+    const order = await prisma.order.findUnique({ where: { id }, include: { items: true } });
     if (!order) {
       res.status(404).json({ error: 'Order not found' });
+      return;
+    }
+
+    // Cancelling has to undo the order's stock and credit effects, so it is not
+    // an ordinary status write — see the transaction below. DELIVERED is out of
+    // scope for cancellation: the goods are already at the shop.
+    if (status === 'CANCELLED' && !canAdminCancel(order.status)) {
+      res.status(400).json({
+        error:
+          order.status === 'DELIVERED'
+            ? 'Delivered orders cannot be cancelled — process a return instead'
+            : `Cannot cancel an order with status ${order.status}`,
+      });
       return;
     }
 
@@ -529,12 +543,42 @@ router.patch(
       select: { phone: true, email: true, storeName: true },
     });
 
-    const [updated] = await Promise.all([
-      prisma.order.update({ where: { id }, data: { status: status as any } }),
-      prisma.orderActivity.create({
-        data: { orderId: id, status: status as any, note: note ?? null },
-      }),
-    ]);
+    let updated;
+    if (status === 'CANCELLED') {
+      // A settled order's credit was already released by the payment webhook,
+      // so reversing it again would drive creditUsed negative. Stock still
+      // comes back, and the refund owed is recorded on the activity trail.
+      const reverseCredit = order.paymentStatus !== 'PAID';
+
+      updated = await withTransaction(async (tx) => {
+        const upd = await tx.order.update({
+          where: { id },
+          data: { status: 'CANCELLED' },
+        });
+        const result = await reverseOrderEffects(tx, order, { reverseCredit });
+
+        await tx.orderActivity.create({
+          data: { orderId: id, status: 'CANCELLED', note: note ?? 'Cancelled by admin' },
+        });
+        if (result.refundOwed !== null) {
+          await tx.orderActivity.create({
+            data: {
+              orderId: id,
+              status: 'CANCELLED',
+              note: refundOwedNote(result.refundOwed),
+            },
+          });
+        }
+        return upd;
+      });
+    } else {
+      [updated] = await Promise.all([
+        prisma.order.update({ where: { id }, data: { status: status as any } }),
+        prisma.orderActivity.create({
+          data: { orderId: id, status: status as any, note: note ?? null },
+        }),
+      ]);
+    }
 
     // Non-blocking notifications
     if (buyer) {
@@ -645,27 +689,72 @@ router.patch(
       return;
     }
 
-    const orders = await prisma.order.findMany({
+    const found = await prisma.order.findMany({
       where:   { id: { in: ids } },
-      include: { buyer: { select: { phone: true, email: true, storeName: true } } },
+      include: {
+        items: true,
+        buyer: { select: { phone: true, email: true, storeName: true } },
+      },
     });
 
-    if (orders.length === 0) {
+    if (found.length === 0) {
       res.status(404).json({ error: 'No matching orders found' });
       return;
     }
 
-    await prisma.$transaction([
-      prisma.order.updateMany({
-        where: { id: { in: orders.map((o) => o.id) } },
-        data:  { status: status as any },
-      }),
-      ...orders.map((o) =>
-        prisma.orderActivity.create({
-          data: { orderId: o.id, status: status as any, note: note ?? null },
+    // Bulk-cancelling stale orders is routine admin work, and it used to leak
+    // stock and credit for every order in the batch — this was the likelier
+    // source of historical damage than the single-order route.
+    let orders = found;
+    let skipped: Array<{ orderNumber: string; status: string }> = [];
+    if (status === 'CANCELLED') {
+      orders = found.filter((o) => canAdminCancel(o.status));
+      skipped = found
+        .filter((o) => !canAdminCancel(o.status))
+        .map((o) => ({ orderNumber: o.orderNumber, status: o.status }));
+
+      if (orders.length === 0) {
+        res.status(400).json({
+          error: 'None of the selected orders can be cancelled',
+          skipped,
+        });
+        return;
+      }
+    }
+
+    if (status === 'CANCELLED') {
+      // One transaction per order rather than one for the batch: a single
+      // un-reversible order must not roll back the rest, and each reversal
+      // takes a row lock on its own buyer.
+      for (const o of orders) {
+        const reverseCredit = o.paymentStatus !== 'PAID';
+        await withTransaction(async (tx) => {
+          await tx.order.update({ where: { id: o.id }, data: { status: 'CANCELLED' } });
+          const result = await reverseOrderEffects(tx, o, { reverseCredit });
+
+          await tx.orderActivity.create({
+            data: { orderId: o.id, status: 'CANCELLED', note: note ?? 'Cancelled by admin (bulk)' },
+          });
+          if (result.refundOwed !== null) {
+            await tx.orderActivity.create({
+              data: { orderId: o.id, status: 'CANCELLED', note: refundOwedNote(result.refundOwed) },
+            });
+          }
+        });
+      }
+    } else {
+      await prisma.$transaction([
+        prisma.order.updateMany({
+          where: { id: { in: orders.map((o) => o.id) } },
+          data:  { status: status as any },
         }),
-      ),
-    ]);
+        ...orders.map((o) =>
+          prisma.orderActivity.create({
+            data: { orderId: o.id, status: status as any, note: note ?? null },
+          }),
+        ),
+      ]);
+    }
 
     // Fire-and-forget notifications for every buyer
     for (const o of orders) {
@@ -687,7 +776,13 @@ router.patch(
       }
     }
 
-    res.json({ updated: orders.length, ids: orders.map((o) => o.id) });
+    // `skipped` is only ever non-empty for CANCELLED — tell the admin which
+    // orders were left alone rather than silently reporting a smaller count.
+    res.json({
+      updated: orders.length,
+      ids: orders.map((o) => o.id),
+      ...(skipped.length > 0 ? { skipped } : {}),
+    });
   },
 );
 
@@ -982,63 +1077,14 @@ router.patch(
     let cancelled: any;
     try {
       cancelled = await withTransaction(async (tx) => {
-        // Lock the buyer's profile row — serializes ledger + credit writes.
-        await tx.$queryRaw`SELECT id FROM Profile WHERE id = ${profile.id} FOR UPDATE`;
+        // Status change and reversal share one transaction — a partial
+        // reversal is worse than none.
+        await tx.order.update({ where: { id }, data: { status: 'CANCELLED' } });
 
-        // a. Update order status
-        const upd = await tx.order.update({
-          where: { id },
-          data: { status: 'CANCELLED' },
-        });
+        // PAID orders never reach here (guarded above), so the credit always
+        // needs reversing on this path.
+        await reverseOrderEffects(tx, order, { reverseCredit: true });
 
-        // b. Restore stockQty (in pieces) for each item; the unit snapshot on
-        // the item decides whether qty was pieces or cartons.
-        for (const item of order.items) {
-          let piecesReturned = item.qty;
-          if (item.unit === 'CARTON') {
-            const product = await tx.product.findUnique({ where: { id: item.productId } });
-            const piecesPerCarton =
-              item.piecesPerCarton ?? product?.piecesPerCarton ?? 1;
-            piecesReturned = item.qty * piecesPerCarton;
-          }
-          await tx.product.update({
-            where: { id: item.productId },
-            data: { stockQty: { increment: piecesReturned } },
-          });
-          await tx.stockMovement.create({
-            data: {
-              productId: item.productId,
-              type:      'IN',
-              qty:       piecesReturned,
-              reason:    `Cancel ${order.orderNumber}`,
-            },
-          });
-        }
-
-        // c. Create Ledger CREDIT entry (reverse the debit) — locking read so we
-        // see the latest committed balance, not this transaction's snapshot.
-        const lastRows = await tx.$queryRaw<Array<{ balance: number }>>`
-          SELECT balance FROM Ledger WHERE buyerId = ${profile.id}
-          ORDER BY createdAt DESC, id DESC LIMIT 1 FOR UPDATE`;
-        const newBalance = Number(lastRows[0]?.balance ?? 0) - order.total;
-        await tx.ledger.create({
-          data: {
-            buyerId: profile.id,
-            type: 'CREDIT',
-            amount: order.total,
-            balance: newBalance,
-            note: `Cancel ${order.orderNumber}`,
-            orderId: order.id,
-          },
-        });
-
-        // d. Update Profile.creditUsed
-        await tx.profile.update({
-          where: { id: profile.id },
-          data: { creditUsed: { decrement: order.total } },
-        });
-
-        // e. OrderActivity
         await tx.orderActivity.create({
           data: { orderId: id, status: 'CANCELLED', note: 'Cancelled by buyer' },
         });
