@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { hashPassword } from '../lib/auth';
 import { requireAuth, isAdmin, requireRole } from '../middleware/auth';
@@ -9,7 +10,7 @@ import { validateActiveDistrict } from '../lib/districts';
 const BUYER_SELECT = {
   id: true, storeName: true, ownerName: true, phone: true,
   district: true, address: true, latitude: true, longitude: true,
-  creditLimit: true, creditUsed: true,
+  creditLimit: true, creditUsed: true, panNumber: true,
 } as const;
 
 const router = Router();
@@ -19,6 +20,12 @@ const qs = (v: string | string[] | undefined): string | undefined =>
   typeof v === 'string' ? v : Array.isArray(v) ? v[0] : undefined;
 
 const NEPAL_PHONE = /^9[6-8]\d{8}$/;
+
+// Nepal PAN: exactly 9 digits. Kept byte-identical to the buyer-facing paths in
+// auth.ts (register / PATCH me / complete-profile) and distro-web's register,
+// onboarding and account forms — a rep-created shop must not end up with a PAN
+// the buyer's own account page would reject.
+const PAN_NUMBER = /^\d{9}$/;
 
 // ════════════════════════════════════════════════════════════════════════════
 // ADMIN — Sales team management. SALES accounts are ADMIN-CREATED ONLY; no
@@ -259,9 +266,9 @@ router.get('/buyers', requireAuth, requireRole('SALES', 'ADMIN'), async (req: Re
 // No OTP: the rep is physically at the shop. Creates a normal ACTIVE BUYER
 // profile with no password — the owner can later log in via phone OTP.
 router.post('/buyers', requireAuth, requireRole('SALES', 'ADMIN'), async (req: Request, res: Response): Promise<void> => {
-  const { storeName, ownerName, phone, district, address, latitude, longitude } = req.body as {
+  const { storeName, ownerName, phone, district, address, panNumber, latitude, longitude } = req.body as {
     storeName?: string; ownerName?: string; phone?: string; district?: string; address?: string;
-    latitude?: number; longitude?: number;
+    panNumber?: string; latitude?: number; longitude?: number;
   };
 
   if (!storeName?.trim() || !phone || !district) {
@@ -270,6 +277,15 @@ router.post('/buyers', requireAuth, requireRole('SALES', 'ADMIN'), async (req: R
   }
   if (!NEPAL_PHONE.test(phone)) {
     res.status(400).json({ error: 'Valid Nepal phone number required (98XXXXXXXX)' });
+    return;
+  }
+
+  // PAN is optional. Absent, empty, or whitespace-only all mean "the rep skipped
+  // it" and must store NULL — not '', which would collide on Profile.panNumber's
+  // unique index for the second such shop.
+  const pan = panNumber?.trim() || null;
+  if (pan && !PAN_NUMBER.test(pan)) {
+    res.status(400).json({ error: 'PAN number must be exactly 9 digits' });
     return;
   }
   // Location is optional, but a supplied pin must be plausible.
@@ -293,22 +309,51 @@ router.post('/buyers', requireAuth, requireRole('SALES', 'ADMIN'), async (req: R
     return;
   }
 
-  const buyer = await prisma.profile.create({
-    data: {
-      phone,
-      // Empty hash → password login always fails; OTP login works once the
-      // shop owner verifies their phone.
-      passwordHash: '',
-      role: 'BUYER',
-      status: 'ACTIVE',
-      storeName: storeName.trim(),
-      ownerName: ownerName?.trim() || null,
-      district,
-      address: address?.trim() || null,
-      ...(latitude != null && longitude != null ? { latitude, longitude } : {}),
-    },
-    select: BUYER_SELECT,
-  });
+  if (pan) {
+    const panTaken = await prisma.profile.findUnique({ where: { panNumber: pan }, select: { id: true } });
+    if (panTaken) {
+      res.status(409).json({ error: 'PAN number already in use' });
+      return;
+    }
+  }
+
+  let buyer;
+  try {
+    buyer = await prisma.profile.create({
+      data: {
+        phone,
+        // Empty hash → password login always fails; OTP login works once the
+        // shop owner verifies their phone.
+        passwordHash: '',
+        role: 'BUYER',
+        status: 'ACTIVE',
+        storeName: storeName.trim(),
+        ownerName: ownerName?.trim() || null,
+        district,
+        address: address?.trim() || null,
+        panNumber: pan,
+        ...(latitude != null && longitude != null ? { latitude, longitude } : {}),
+      },
+      select: BUYER_SELECT,
+    });
+  } catch (err) {
+    // The findUnique checks above are advisory: two reps registering the same
+    // shop at once both pass them, then one INSERT loses on the unique index.
+    // Same class of race as findOrCreateProfile's P2002 in auth.ts — report the
+    // conflict as 409 rather than letting it surface as a 500.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      const target = Array.isArray(err.meta?.target)
+        ? (err.meta.target as string[])
+        : [String(err.meta?.target ?? '')];
+      if (target.some((t) => t.includes('panNumber'))) {
+        res.status(409).json({ error: 'PAN number already in use' });
+        return;
+      }
+      res.status(409).json({ error: 'Phone number already in use' });
+      return;
+    }
+    throw err;
+  }
 
   res.status(201).json({ buyer });
 });

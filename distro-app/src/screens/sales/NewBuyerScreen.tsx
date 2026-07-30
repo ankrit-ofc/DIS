@@ -27,6 +27,10 @@ const BRAND_BLUE = "#1A4BDB";
 // Mirrors the API's NEPAL_PHONE (sales.ts) so a typo fails before the round-trip.
 const NEPAL_PHONE = /^9[6-8]\d{8}$/;
 
+// Mirrors PAN_NUMBER in sales.ts, which in turn matches the buyer's own web
+// register/onboarding/account forms. Nepal PAN is exactly 9 digits.
+const PAN_NUMBER = /^\d{9}$/;
+
 type Props = {
   navigation: StackNavigationProp<SalesStackParamList, "NewBuyer">;
   route: RouteProp<SalesStackParamList, "NewBuyer">;
@@ -58,6 +62,7 @@ export function NewBuyerScreen({ navigation, route }: Props) {
   const [phone, setPhone] = useState("");
   const [district, setDistrict] = useState("");
   const [address, setAddress] = useState("");
+  const [panNumber, setPanNumber] = useState("");
   const [districts, setDistricts] = useState<District[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [error, setError] = useState("");
@@ -90,6 +95,13 @@ export function NewBuyerScreen({ navigation, route }: Props) {
       setError("Enter a valid 10-digit Nepal mobile number (98XXXXXXXX).");
       return;
     }
+    // Optional: only validated when the rep actually typed something, so
+    // skipping it can never block the submit.
+    const trimmedPan = panNumber.trim();
+    if (trimmedPan && !PAN_NUMBER.test(trimmedPan)) {
+      setError("PAN must be exactly 9 digits.");
+      return;
+    }
 
     setError("");
     setSubmitting(true);
@@ -100,6 +112,7 @@ export function NewBuyerScreen({ navigation, route }: Props) {
         phone: trimmedPhone,
         district,
         address: address.trim() || undefined,
+        panNumber: trimmedPan || undefined,
       });
       const buyer: SalesBuyer = res.data.buyer;
 
@@ -272,6 +285,21 @@ export function NewBuyerScreen({ navigation, route }: Props) {
               />
             </Field>
 
+            {/* Last field: a tax number is rarely to hand at the shop door, so it
+                sits below the fields the rep always fills. */}
+            <Field label="PAN number" hint="optional, 9 digits">
+              <TextInput
+                style={s.input}
+                value={panNumber}
+                onChangeText={(v) => setPanNumber(v.replace(/\D/g, "").slice(0, 9))}
+                placeholder="123456789"
+                placeholderTextColor={colors.gray300}
+                keyboardType="number-pad"
+                maxLength={9}
+                returnKeyType="done"
+              />
+            </Field>
+
             {!!error && (
               <View style={s.errorBox}>
                 <Ionicons name="alert-circle" size={16} color={colors.red} />
@@ -301,10 +329,12 @@ export function NewBuyerScreen({ navigation, route }: Props) {
 function Field({
   label,
   required,
+  hint,
   children,
 }: {
   label: string;
   required?: boolean;
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -312,6 +342,7 @@ function Field({
       <Text style={s.label}>
         {label}
         {required && <Text style={s.req}> *</Text>}
+        {!!hint && <Text style={s.hint}> ({hint})</Text>}
       </Text>
       {children}
     </View>
@@ -357,6 +388,12 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
   },
   req: { color: colors.red },
+  hint: {
+    color: colors.gray400,
+    fontFamily: typography.body,
+    textTransform: "none",
+    letterSpacing: 0,
+  },
   input: {
     borderWidth: 1.5,
     borderColor: colors.gray200,

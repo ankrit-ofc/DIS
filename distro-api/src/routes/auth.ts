@@ -410,7 +410,10 @@ router.post('/register', authLimiter, async (req: Request, res: Response): Promi
       district,
       address,
       companyName: companyName ?? null,
-      panNumber: panNumber ?? null,
+      // `|| null`, not `?? null`: an empty-string PAN would be stored as '' and,
+      // because Profile.panNumber is unique, the second such registration would
+      // die on P2002 as a 500. Matches the PATCH /me path below.
+      panNumber: panNumber || null,
       emailVerified: true,
       phoneVerified: true,
     },
@@ -819,7 +822,9 @@ router.post('/complete-onboarding', requireAuth, async (req: Request, res: Respo
       phone,
       storeName,
       companyName: companyName ?? null,
-      panNumber: panNumber ?? null,
+      // See the register handler: `|| null` so '' becomes NULL instead of
+      // colliding on the unique index.
+      panNumber: panNumber || null,
       district,
       address: address ?? null,
       phoneVerified: true,
