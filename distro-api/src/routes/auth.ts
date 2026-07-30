@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import {
   hashPassword,
@@ -29,6 +30,19 @@ const router = Router();
 const MAX_OTP_ATTEMPTS = 5;
 const MAX_LIVE_OTP_CODES = 2;
 
+/**
+ * Per-phone daily ceiling on *billed* SMS sends (Sparrow charges 0.95 NPR each).
+ * otpLimiter caps bursts at 3/min but permits ~4,320 sends/day for one number
+ * (~4,100 NPR of credit), so this is the actual cost-abuse control.
+ *
+ * 10 is sized off a legitimately bad day, not a happy path: an SMS that never
+ * arrives and gets retried to the 3/min burst limit, a second attempt later,
+ * plus a few verify failures, lands around 6-9. 10 clears that with headroom
+ * while capping a targeted attacker at 9.50 NPR/day instead of ~4,100 — a ~430x
+ * reduction. Raise it if support sees real users hitting the cap.
+ */
+const MAX_SMS_PER_PHONE_PER_DAY = 10;
+
 const NEPAL_PHONE = /^9[6-8]\d{8}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -38,12 +52,63 @@ const maskEmail = (e: string) => {
   return `${local.slice(0, 2)}***@${domain}`;
 };
 
+/**
+ * Find the profile for this identifier, creating it if absent.
+ *
+ * Two concurrent first-time requests for the same phone both saw null and both
+ * inserted; the loser hit an unhandled P2002 and the caller got an HTTP 500.
+ * That is not an exotic race — it is what a first-time user gets for
+ * double-tapping "Send code" while waiting for a slow SMS (reproduced at 2
+ * failures per 3 parallel requests).
+ *
+ * Catch-and-refetch is used rather than upsert because the email-first branch
+ * mints a random PENDING_ placeholder phone: an upsert's create block would
+ * generate a *different* placeholder on each attempt, so the conflict target
+ * and the created row disagree. Re-reading the winner's row is both simpler and
+ * exactly what we want — losers of the race adopt the profile that won.
+ */
+// Exported for the concurrency regression test in __tests__/otpRace.test.ts.
+export async function findOrCreateProfile(email?: string, phone?: string) {
+  const where = email ? { email } : { phone: phone! };
+
+  const existing = await prisma.profile.findUnique({ where });
+  if (existing) return existing;
+
+  try {
+    return email
+      ? await prisma.profile.create({
+          data: {
+            email,
+            phone: `PENDING_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            passwordHash: '',
+            status: 'PENDING',
+          },
+        })
+      : await prisma.profile.create({
+          data: { phone: phone!, passwordHash: '', status: 'PENDING' },
+        });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      const winner = await prisma.profile.findUnique({ where });
+      if (winner) return winner;
+    }
+    throw err;
+  }
+}
+
+/** Billed SMS sends for this profile in the trailing 24h (see MAX_SMS_PER_PHONE_PER_DAY). */
+async function smsSentLast24h(profileId: string): Promise<number> {
+  return prisma.otpCode.count({
+    where: { profileId, smsSentAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+  });
+}
+
 /** Create a fresh OTP code for a profile, keeping at most MAX_LIVE_OTP_CODES live. */
-async function issueOtpCode(profileId: string): Promise<string> {
+async function issueOtpCode(profileId: string): Promise<{ otp: string; id: string }> {
   const otp = generateOTP();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-  await prisma.otpCode.create({ data: { profileId, code: otp, expiresAt } });
+  const created = await prisma.otpCode.create({ data: { profileId, code: otp, expiresAt } });
 
   // Invalidate everything older than the newest MAX_LIVE_OTP_CODES codes.
   const live = await prisma.otpCode.findMany({
@@ -59,7 +124,7 @@ async function issueOtpCode(profileId: string): Promise<string> {
     });
   }
 
-  return otp;
+  return { otp, id: created.id };
 }
 
 // ─── POST /api/auth/request-otp ──────────────────────────────────────────────
@@ -91,26 +156,20 @@ router.post('/request-otp', authIpBackstopLimiter, otpLimiter, async (req: Reque
     return;
   }
 
-  // Find or create the profile — email is the primary identifier when both are sent.
-  let profile = email
-    ? await prisma.profile.findUnique({ where: { email } })
-    : await prisma.profile.findUnique({ where: { phone: phone! } });
-  if (!profile) {
-    // Real phone binding happens at /register with a uniqueness check, so an
-    // email-first profile gets a placeholder phone even if one was supplied.
-    profile = email
-      ? await prisma.profile.create({
-          data: {
-            email,
-            phone: `PENDING_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-            passwordHash: '',
-            status: 'PENDING',
-          },
-        })
-      : await prisma.profile.create({
-          data: { phone: phone!, passwordHash: '', status: 'PENDING' },
-        });
-  }
+  // TEMPORARY DIAGNOSTIC — remove once trust-proxy is confirmed in production.
+  // `app.set('trust proxy', 1)` trusts exactly one hop; if Railway fronts the
+  // API with a different number of proxies, req.ip is not the real client and
+  // the pure-IP backstop silently collapses onto a single shared key.
+  // Logs the IP only — no phone, email, or OTP.
+  console.log(
+    `[OTP][PROXY-DIAG] req.ip=${req.ip} xff="${req.headers['x-forwarded-for'] ?? ''}" ` +
+    `xri="${req.headers['x-real-ip'] ?? ''}"`,
+  );
+
+  // Find or create the profile — email is the primary identifier when both are
+  // sent. Real phone binding happens at /register with a uniqueness check, so an
+  // email-first profile gets a placeholder phone even if one was supplied.
+  const profile = await findOrCreateProfile(email, phone);
 
   // Deliverable addresses: request values win, stored profile values fill gaps.
   // Placeholder phones (PENDING_/DELETED_) never pass the Nepal-format check.
@@ -126,7 +185,7 @@ router.post('/request-otp', authIpBackstopLimiter, otpLimiter, async (req: Reque
     return;
   }
 
-  const otp = await issueOtpCode(profile.id);
+  const { otp, id: otpId } = await issueOtpCode(profile.id);
 
   const sendOtpEmail = async (): Promise<boolean> => {
     if (!emailTo) return false;
@@ -142,16 +201,31 @@ router.post('/request-otp', authIpBackstopLimiter, otpLimiter, async (req: Reque
 
   // Primary channel: SMS (unless the caller forced email).
   let smsFailure: string | undefined;
+  let smsCapped = false;
   if (forceChannel !== 'email' && smsPhone) {
-    const sms = await sendSMS(smsPhone, otpMessage(otp));
-    if (sms.ok) {
-      res.json({ sent: true, channel: 'sms', maskedTo: maskPhone(smsPhone), message: 'OTP sent', method: 'phone' });
-      return;
+    // Cost control: refuse to bill another send once the daily ceiling is hit.
+    // This degrades to the email fallback rather than hard-failing, so a capped
+    // user with an email still receives their code.
+    smsCapped = (await smsSentLast24h(profile.id)) >= MAX_SMS_PER_PHONE_PER_DAY;
+    if (smsCapped) {
+      smsFailure = `daily SMS cap reached (${MAX_SMS_PER_PHONE_PER_DAY}/24h)`;
+      console.warn(`[OTP] sms_cap_reached profileId=${profile.id} cap=${MAX_SMS_PER_PHONE_PER_DAY}`);
+    } else {
+      const sms = await sendSMS(smsPhone, otpMessage(otp));
+      if (sms.ok) {
+        // Stamp only on a send Sparrow accepted — that is what costs a credit,
+        // and what the cap counts. Failed sends are free and must not count.
+        await prisma.otpCode.update({ where: { id: otpId }, data: { smsSentAt: new Date() } });
+        res.json({ sent: true, channel: 'sms', maskedTo: maskPhone(smsPhone), message: 'OTP sent', method: 'phone' });
+        return;
+      }
+      smsFailure = sms.error ?? 'unknown';
     }
-    smsFailure = sms.error ?? 'unknown';
     if (forceChannel === 'sms') {
       console.warn(`[OTP] channel_attempted=sms channel_used=none reason="${smsFailure}"`);
-      res.status(502).json({ error: 'otp_delivery_failed' });
+      res.status(smsCapped ? 429 : 502).json({
+        error: smsCapped ? 'otp_sms_daily_limit' : 'otp_delivery_failed',
+      });
       return;
     }
   }
@@ -167,7 +241,11 @@ router.post('/request-otp', authIpBackstopLimiter, otpLimiter, async (req: Reque
     return;
   }
 
-  res.status(502).json({ error: 'otp_delivery_failed' });
+  // A capped user with no email has nowhere left to go — say so distinctly
+  // rather than reporting a delivery failure that never happened.
+  res.status(smsCapped ? 429 : 502).json({
+    error: smsCapped ? 'otp_sms_daily_limit' : 'otp_delivery_failed',
+  });
 });
 
 // ─── POST /api/auth/verify-otp ───────────────────────────────────────────────

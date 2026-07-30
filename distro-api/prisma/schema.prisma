@@ -75,9 +75,14 @@ model OtpCode {
   usedAt    DateTime?
   attempts  Int       @default(0)
   createdAt DateTime  @default(now())
+  // Set only when Sparrow actually accepted the send (i.e. a credit was spent).
+  // Codes delivered by the email fallback leave this null, so the daily SMS cap
+  // counts real spend and never punishes a user for an SMS outage.
+  smsSentAt DateTime?
   profile   Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId, expiresAt])
+  @@index([profileId, smsSentAt])
 }
 
 model PasswordResetCode {

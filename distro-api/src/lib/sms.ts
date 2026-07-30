@@ -1,18 +1,72 @@
 import axios from 'axios';
-import createHttpsProxyAgent from 'https-proxy-agent';
+// v7+ (named export, native http.Agent base). v5 was built on agent-base@6,
+// whose freeSocket() destroys the socket outright, so keepAlive was impossible
+// there — the upgrade is what actually makes connection reuse work.
+import { HttpsProxyAgent } from 'https-proxy-agent';
 
 export interface SmsResult {
   ok: boolean;
   error?: string;
 }
 
+/**
+ * Sparrow business codes that mean the configuration itself is broken: every
+ * send will fail identically until a human changes an env var or an account
+ * setting. They are NOT retryable, and the email fallback silently papering
+ * over them is how a dead SMS channel masqueraded as a working feature for
+ * weeks. Anything not listed here (timeouts, network errors, 1607 no credits,
+ * 1011 bad number) is transient or per-recipient — fallback is the right
+ * response and a plain error log is enough.
+ */
+const TERMINAL_CODES: Record<number, string> = {
+  1001: 'caller IP is not whitelisted by Sparrow (check SMS_PROXY_URL and the whitelist)',
+  1002: 'SPARROW_SMS_TOKEN is invalid or expired',
+  1007: 'SPARROW_SMS_TOKEN is invalid or expired',
+  1008: 'SPARROW_SMS_FROM is not an approved sender ID for this account',
+};
+
+/**
+ * Single logging chokepoint for send failures. Terminal misconfigurations get
+ * a distinct, greppable marker naming the broken setting; everything else logs
+ * as an ordinary failure. Never receives or logs the message body (OTP).
+ */
+function logSendFailure(phone: string, detail: string, code: number | undefined, proxyUsed: boolean): void {
+  const reason = code !== undefined ? TERMINAL_CODES[code] : undefined;
+  if (reason) {
+    console.error(
+      `[SMS][CONFIG-ERROR] code=${code} ${reason} — SMS is broken for ALL users until this is fixed; ` +
+      `OTPs are falling back to email. phone=${phone} proxy=${proxyUsed ? 'yes' : 'no'}`,
+    );
+    return;
+  }
+  console.error(`[SMS] Failed for ${phone}: ${detail} proxy=${proxyUsed ? 'yes' : 'no'}`);
+}
+
 // Optional egress proxy for Sparrow calls only (their API is IP-whitelisted;
 // the proxy gives us a static IP). Contains credentials — never log it.
-let proxyAgent: ReturnType<typeof createHttpsProxyAgent> | undefined;
-function getProxyAgent(): ReturnType<typeof createHttpsProxyAgent> | undefined {
+let proxyAgent: HttpsProxyAgent<string> | undefined;
+let warnedNoProxy = false;
+function getProxyAgent(): HttpsProxyAgent<string> | undefined {
   const url = process.env.SMS_PROXY_URL;
-  if (!url) return undefined;
-  if (!proxyAgent) proxyAgent = createHttpsProxyAgent(url);
+  if (!url) {
+    // Sparrow IP-whitelists callers, so an unset/empty SMS_PROXY_URL in
+    // production means every send leaves from the platform's rotating egress
+    // IP and comes back 1001 (bad IP) — which looks identical to "SMS is
+    // broken" downstream. Say so once, loudly, rather than failing silently.
+    if (process.env.NODE_ENV === 'production' && !warnedNoProxy) {
+      warnedNoProxy = true;
+      console.error(
+        '[SMS] SMS_PROXY_URL is not set in production — Sparrow calls will egress ' +
+        'from an unwhitelisted IP and are expected to fail with response_code=1001',
+      );
+    }
+    return undefined;
+  }
+  // keepAlive reuses the tunnel across sends. Without it every OTP pays a fresh
+  // TCP connect + proxy CONNECT + TLS handshake (~600ms measured), which is the
+  // dominant latency in the OTP path. maxSockets caps concurrent tunnels so a
+  // burst can't exhaust the VPS's tinyproxy client slots.
+  if (!proxyAgent) proxyAgent = new HttpsProxyAgent(url, { keepAlive: true, maxSockets: 20 });
   return proxyAgent;
 }
 
@@ -76,21 +130,28 @@ export async function sendSMS(phone: string, message: string): Promise<SmsResult
     // Sparrow returns HTTP 200 even on business-logic failures — check response_code.
     if (data?.response_code !== 200) {
       const err = `Sparrow rejected SMS: code=${data?.response_code} msg=${data?.response}`;
-      console.error(`[SMS] Failed for ${phone}: ${err}`);
+      logSendFailure(phone, err, Number(data?.response_code), !!agent);
       return { ok: false, error: err };
     }
     return { ok: true };
   } catch (err: unknown) {
     let message = err instanceof Error ? err.message : String(err);
-    // Sparrow returns business failures (1001 bad IP, 1002/1007 bad token,
-    // 1607 no credits, 1011 bad number) as HTTP 403 — surface the body.
+    // Sparrow returns business failures as a non-2xx with the real code in the
+    // body (1008 invalid sender arrives as HTTP 400, 1001/1002 as 403), so the
+    // body is the only place the actionable code lives — surface it and use it
+    // to classify.
+    let code: number | undefined;
     if (axios.isAxiosError(err) && err.response?.data) {
+      const body = err.response.data as { response_code?: unknown };
+      if (body?.response_code !== undefined) code = Number(body.response_code);
       message += ` ${JSON.stringify(err.response.data)}`;
     }
     // Never let the proxy URL (contains credentials) reach logs or callers.
     const proxyUrl = process.env.SMS_PROXY_URL;
     if (proxyUrl) message = message.split(proxyUrl).join('[SMS_PROXY_URL]');
-    console.error(`[SMS] Failed for ${phone}: ${message}`);
+    // proxy= tells us whether the request even attempted the whitelisted
+    // egress; without it a 1001 and a dead VPS are indistinguishable in logs.
+    logSendFailure(phone, message, code, !!proxyUrl);
     return { ok: false, error: message };
   }
 }
