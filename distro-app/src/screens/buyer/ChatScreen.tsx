@@ -9,6 +9,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../lib/api";
 import { useAuthStore } from "../../store/authStore";
 import { colors, spacing, radius, typography } from "../../lib/theme";
+import { keyboardBehavior } from "../../lib/screen";
 
 interface Message {
   id: string;
@@ -24,6 +25,51 @@ interface ConversationData {
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+/** Local-midnight key, so "same day" means the user's day, not UTC's. */
+function dayKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+/**
+ * "Today" / "Yesterday" / "12 Mar 2026" for a date separator. Without these the
+ * times read as one scrambled run (19:04 → 21:43 → 09:42 → 22:07) because a
+ * conversation spanning days shows only clock times.
+ */
+function formatDayLabel(iso: string): string {
+  const d = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (dayKey(iso) === dayKey(today.toISOString())) return "Today";
+  if (dayKey(iso) === dayKey(yesterday.toISOString())) return "Yesterday";
+  return d.toLocaleDateString([], {
+    day: "numeric",
+    month: "short",
+    ...(d.getFullYear() === today.getFullYear() ? {} : { year: "numeric" }),
+  });
+}
+
+/** A message, or the day heading that precedes the first message of that day. */
+type ChatRow =
+  | { kind: "day"; id: string; label: string }
+  | { kind: "message"; id: string; message: Message };
+
+/** Interleave day separators into the (chronological) message list. */
+function buildRows(messages: Message[]): ChatRow[] {
+  const rows: ChatRow[] = [];
+  let lastDay: string | null = null;
+  for (const m of messages) {
+    const key = dayKey(m.createdAt);
+    if (key !== lastDay) {
+      rows.push({ kind: "day", id: `day-${key}`, label: formatDayLabel(m.createdAt) });
+      lastDay = key;
+    }
+    rows.push({ kind: "message", id: m.id, message: m });
+  }
+  return rows;
 }
 
 export function ChatScreen() {
@@ -87,7 +133,17 @@ export function ChatScreen() {
     }
   }
 
-  const renderItem = ({ item }: { item: Message }) => {
+  const rows = buildRows(messages);
+
+  const renderRow = ({ item: row }: { item: ChatRow }) => {
+    if (row.kind === "day") {
+      return (
+        <View style={bub.dayWrap}>
+          <Text style={bub.dayLabel}>{row.label}</Text>
+        </View>
+      );
+    }
+    const item = row.message;
     const isMine = item.senderRole === "BUYER";
     return (
       <View style={[bub.row, isMine ? bub.rowRight : bub.rowLeft]}>
@@ -104,8 +160,8 @@ export function ChatScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={insets.top + 56}
+      behavior={keyboardBehavior}
+      keyboardVerticalOffset={keyboardBehavior ? insets.top + 56 : 0}
     >
       <View style={[s.container, { paddingTop: insets.top }]}>
         {/* Header */}
@@ -117,10 +173,17 @@ export function ChatScreen() {
         {/* Messages */}
         <FlatList
           ref={flatListRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          contentContainerStyle={s.listContent}
+          data={rows}
+          keyExtractor={(row) => row.id}
+          renderItem={renderRow}
+          contentContainerStyle={[
+            s.listContent,
+            // Bottom-anchor: with `flexGrow: 1` alone a short conversation pins to
+            // the top and leaves a large gap above the input. Pushing a short list
+            // to the end puts the newest message next to the input, where a chat
+            // is read from. Once the content overflows, this has no effect.
+            messages.length > 0 && s.listContentEnd,
+          ]}
           onContentSizeChange={() =>
             flatListRef.current?.scrollToEnd({ animated: true })
           }
@@ -133,8 +196,11 @@ export function ChatScreen() {
           }
         />
 
-        {/* Input bar */}
-        <View style={[s.inputBar, { paddingBottom: insets.bottom + spacing.sm }]}>
+        {/* Input bar. No bottom inset here: Chat is a tab screen and BuyerTabs
+            already adds insets.bottom to the tab bar's height and padding, so the
+            bar below us is what clears the navigation bar. Adding it again left a
+            band of dead space above the tab bar. */}
+        <View style={[s.inputBar, { paddingBottom: spacing.sm }]}>
           <View style={{ flex: 1, maxHeight: 80 }}>
             <TextInput
               style={s.input}
@@ -190,6 +256,17 @@ const bub = StyleSheet.create({
   time: { fontSize: 10, marginTop: 3 },
   timeSent: { color: "rgba(255,255,255,0.6)", textAlign: "right" },
   timeRecv: { color: colors.gray400 },
+  dayWrap: { alignItems: "center", marginVertical: spacing.sm },
+  dayLabel: {
+    fontSize: 11,
+    fontFamily: typography.bodySemiBold,
+    color: colors.gray500,
+    backgroundColor: colors.gray100,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radius.full,
+    overflow: "hidden",
+  },
 });
 
 const s = StyleSheet.create({
@@ -218,6 +295,7 @@ const s = StyleSheet.create({
     paddingVertical: spacing.md,
     flexGrow: 1,
   },
+  listContentEnd: { justifyContent: "flex-end" },
   emptyWrap: {
     flex: 1,
     alignItems: "center",

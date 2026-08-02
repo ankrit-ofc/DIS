@@ -137,16 +137,22 @@ router.get('/history', requireAuth, async (req: Request, res: Response): Promise
     return;
   }
 
-  const [messages, total] = await Promise.all([
+  // Page 1 must be the NEWEST messages, not the oldest. Fetching `asc` and taking
+  // the first N pinned every client to the start of the conversation: past `limit`
+  // messages a buyer never saw a support reply again, and the chat screen's 5s
+  // poll overwrote just-sent messages with that stale head. Page descending, then
+  // reverse so callers still receive the page in chronological order.
+  const [newestFirst, total] = await Promise.all([
     prisma.message.findMany({
       where: { conversationId: conversation.id },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: 'desc' },
       skip,
       take: limit,
       include: { sender: { select: { id: true, role: true, storeName: true, ownerName: true } } },
     }),
     prisma.message.count({ where: { conversationId: conversation.id } }),
   ]);
+  const messages = newestFirst.reverse();
 
   res.json({ conversation, messages, total });
 });

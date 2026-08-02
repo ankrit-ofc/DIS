@@ -101,14 +101,29 @@ export function BuyerTabs() {
   const insets = useSafeAreaInsets();
   const totalItems = useCartStore((s) => s.totalItems());
   const [chatUnread, setChatUnread] = useState(0);
+  // While Chat is open the buyer is reading, and ChatScreen marks the conversation
+  // read on every poll — so the badge must stay suppressed regardless of what a
+  // racing /chat/history response says, or it flickers back on mid-conversation.
+  const [chatFocused, setChatFocused] = useState(false);
 
   useEffect(() => {
-    api.get("/chat/history")
-      .then((res) => {
-        const conv = res.data.conversation;
-        if (conv) setChatUnread(conv.unreadByBuyer ?? 0);
-      })
-      .catch(() => {});
+    let cancelled = false;
+    const refresh = () => {
+      api.get("/chat/history")
+        .then((res) => {
+          const conv = res.data.conversation;
+          if (!cancelled && conv) setChatUnread(conv.unreadByBuyer ?? 0);
+        })
+        .catch(() => {});
+    };
+    refresh();
+    // Previously fetched once at mount, so a reply that arrived while the buyer
+    // was on another tab never showed a badge until the app was restarted.
+    const id = setInterval(refresh, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, []);
 
   return (
@@ -176,11 +191,14 @@ export function BuyerTabs() {
               icon="chatbubble-outline"
               iconFocused="chatbubble"
               focused={focused}
-              badge={chatUnread}
+              badge={chatFocused ? 0 : chatUnread}
             />
           ),
         }}
-        listeners={{ focus: () => setChatUnread(0) }}
+        listeners={{
+          focus: () => { setChatFocused(true); setChatUnread(0); },
+          blur: () => setChatFocused(false),
+        }}
       />
       <Tab.Screen
         name="Account"
