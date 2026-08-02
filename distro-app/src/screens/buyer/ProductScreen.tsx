@@ -102,7 +102,9 @@ export function ProductScreen({ navigation, route, embedded = false }: any) {
   const unitPrice  = unitPriceOf(product);
   const outOfStock = product.stockStatus === "OUT_OF_STOCK";
   const cartItem   = items.find(i => i.productId === productId);
-  const priceSub   = priceLine2(product);
+  // `embedded` is set only by SalesProductScreen, i.e. the rep flow, so it is
+  // also exactly the condition under which dealer economics may be shown.
+  const priceSub   = priceLine2(product, embedded);
 
   return (
     <View style={s.flex}>
@@ -260,7 +262,6 @@ const s = StyleSheet.create({
   price:            { fontSize: 24, fontFamily: typography.heading, color: "#2563EB", fontWeight: "700" },
   cartonPrice:      { fontSize: 13, color: "#9BA3BF", fontFamily: typography.body },
   priceUnit:        { fontSize: 14, color: colors.gray400, fontFamily: typography.body },
-  mrp:              { fontSize: 16, color: colors.gray300, textDecorationLine: "line-through", fontFamily: typography.body },
   discountPill:     { backgroundColor: colors.greenLight, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 3 },
   discountPillText: { fontSize: 11, fontFamily: typography.bodySemiBold, color: colors.greenDark },
 

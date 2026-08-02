@@ -22,7 +22,7 @@ import { useCartStore } from "@/store/cartStore";
 import { AnimatedTestimonials } from "@/components/ui/animated-testimonials";
 import { DISTRO_ANIMATED_TESTIMONIALS } from "@/data/distro-testimonials";
 import { useReveal } from "@/hooks/useReveal";
-import { getImageUrl, unitShort } from "@/lib/utils";
+import { getImageUrl, unitShort, formatPrice } from "@/lib/utils";
 import { unitPriceOf } from "@/components/PriceBlock";
 import type { Product } from "@/components/ProductCard";
 
@@ -203,9 +203,6 @@ function ProductMini({
   onAdd: (p: Product) => void;
 }) {
   const [added, setAdded] = useState(false);
-  const mrp = product.mrp ?? 0;
-  const discount =
-    mrp > product.price ? Math.round(((mrp - product.price) / mrp) * 100) : 0;
   function handleClick(e: React.MouseEvent) {
     e.preventDefault();
     onAdd(product);
@@ -233,14 +230,9 @@ function ProductMini({
           {product.name}
         </h3>
         <div className="flex items-baseline gap-2 mb-auto">
-          <p className="text-base font-bold text-blue">
-            Rs {product.price.toFixed(2)}
-          </p>
-          {mrp > product.price && (
-            <p className="text-xs line-through text-gray-400">
-              Rs {mrp.toFixed(2)}
-            </p>
-          )}
+          {/* Buyer-facing: carton/piece price only. MRP and the struck-through
+              discount are dealer economics and were removed. */}
+          <p className="text-base font-bold text-blue">{formatPrice(product.price)}</p>
         </div>
         <button
           type="button"

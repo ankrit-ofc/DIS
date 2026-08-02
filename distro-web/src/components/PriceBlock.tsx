@@ -29,19 +29,24 @@ export function perPieceOf(p: PricedProduct): number {
 }
 
 /**
- * Buyer price display. Never strikes through across mixed units — no
- * struck-through MRP anywhere.
+ * Price display. Never strikes through across mixed units.
  *   CARTON:  Rs 10,462 / carton · 24 pcs
- *            Rs 436/pc · MRP Rs 510/pc · Margin Rs 74/pc
+ *            Rs 436/pc
  *   PIECE:   Rs 28 /pc
- *            MRP Rs 35 · Margin Rs 7/pc · min 50 pcs
+ *            min 50 pcs
+ *
+ * `showEconomics` appends MRP and the shopkeeper's per-piece margin. Off by
+ * default: buyers were shown three unlabelled prices in identical grey and read
+ * them as competing offers. Rep-facing pages opt in — a rep pitches on margin.
  */
 export default function PriceBlock({
   product,
   size = "sm",
+  showEconomics = false,
 }: {
   product: PricedProduct;
   size?: "sm" | "lg";
+  showEconomics?: boolean;
 }) {
   const heroCls =
     size === "lg"
@@ -55,8 +60,8 @@ export default function PriceBlock({
     const perPiece = perPieceOf(product);
     const margin = pieceMargin(product.mrp, perPiece);
     const segments = [formatPerPiece(perPiece)];
-    if (product.mrp != null) segments.push(`MRP ${formatPerPiece(product.mrp)}`);
-    if (margin != null) segments.push(`Margin ${formatPerPiece(margin)}`);
+    if (showEconomics && product.mrp != null) segments.push(`MRP ${formatPerPiece(product.mrp)}`);
+    if (showEconomics && margin != null) segments.push(`Margin ${formatPerPiece(margin)}`);
     return (
       <div>
         <p className={heroCls}>
@@ -70,8 +75,8 @@ export default function PriceBlock({
 
   const margin = pieceMargin(product.mrp, product.price);
   const segments: string[] = [];
-  if (product.mrp != null) segments.push(`MRP ${formatPrice(product.mrp)}`);
-  if (margin != null) segments.push(`Margin ${formatPerPiece(margin)}`);
+  if (showEconomics && product.mrp != null) segments.push(`MRP ${formatPrice(product.mrp)}`);
+  if (showEconomics && margin != null) segments.push(`Margin ${formatPerPiece(margin)}`);
   if (product.moq > 1) segments.push(`min ${product.moq} pcs`);
   return (
     <div>

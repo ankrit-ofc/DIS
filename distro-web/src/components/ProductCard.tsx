@@ -26,7 +26,14 @@ export interface Product {
   categoryId?: string;
 }
 
-export default function ProductCard({ product }: { product: Product }) {
+export default function ProductCard({
+  product,
+  showEconomics = false,
+}: {
+  product: Product;
+  /** Rep-facing pages pass true to keep MRP + margin. Off by default. */
+  showEconomics?: boolean;
+}) {
   const productImage = product.imageUrl ?? product.image;
   const isOutOfStock = product.stockStatus === "OUT_OF_STOCK";
   const isLowStock = product.stockStatus === "LOW_STOCK";
@@ -71,7 +78,7 @@ export default function ProductCard({ product }: { product: Product }) {
         </p>
 
         <div className="mt-1">
-          <PriceBlock product={product} size="sm" />
+          <PriceBlock product={product} size="sm" showEconomics={showEconomics} />
         </div>
 
         <div className="mt-2">

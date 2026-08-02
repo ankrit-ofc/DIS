@@ -52,31 +52,49 @@ export function perPieceOf(p: PricedProduct): number {
   return p.price;
 }
 
+/**
+ * Display rounding for prices shown on a card or a detail header.
+ *
+ * DISPLAY ONLY. Stored values, cart lines, order totals and VAT arithmetic all
+ * keep full precision — a carton at Rs 6,051.36 still bills as 6,051.36. This
+ * exists because three prices with paisa on one card is unreadable at a glance,
+ * not because the paisa are unwanted.
+ */
+function displayRs(amount: number): string {
+  return Math.round(amount).toLocaleString("en-IN");
+}
+
 /** Hero price line: "Rs 10,462 / carton · 24 pcs" or "Rs 28 /pc". */
 export function priceLine1(p: PricedProduct): string {
   if (p.sellUnit === "CARTON") {
-    return `Rs ${unitPriceOf(p).toLocaleString("en-IN")} / carton · ${p.piecesPerCarton ?? 1} pcs`;
+    return `Rs ${displayRs(unitPriceOf(p))} / carton · ${p.piecesPerCarton ?? 1} pcs`;
   }
-  return `Rs ${p.price.toLocaleString("en-IN")} /pc`;
+  return `Rs ${displayRs(p.price)} /pc`;
 }
 
 /**
- * Secondary line. Never a strikethrough across mixed units:
- *   CARTON → "Rs 436/pc · MRP Rs 510/pc · Margin Rs 74/pc"
- *   PIECE  → "MRP Rs 35 · Margin Rs 7/pc · min 50 pcs"
- * Margin omitted when MRP is missing or ≤ the buy price.
+ * Secondary line.
+ *
+ *   CARTON → "Rs 252/pc"
+ *   PIECE  → "min 50 pcs"
+ *
+ * `showEconomics` adds the dealer figures (MRP and the shopkeeper's per-piece
+ * margin). It is OFF by default: buyers were shown three unlabelled prices in
+ * identical grey and read them as competing offers, and MRP/margin are ours to
+ * discuss directly. Sales reps pass `true` — a rep pitches on margin at the
+ * counter, so the numbers stay on rep-facing surfaces only.
  */
-export function priceLine2(p: PricedProduct): string | null {
+export function priceLine2(p: PricedProduct, showEconomics = false): string | null {
   const perPc = perPieceOf(p);
   const margin = p.mrp != null && p.mrp > perPc ? p.mrp - perPc : null;
   const seg: string[] = [];
   if (p.sellUnit === "CARTON") {
-    seg.push(`Rs ${Math.round(perPc).toLocaleString("en-IN")}/pc`);
-    if (p.mrp != null) seg.push(`MRP Rs ${Math.round(p.mrp).toLocaleString("en-IN")}/pc`);
-    if (margin != null) seg.push(`Margin Rs ${Math.round(margin).toLocaleString("en-IN")}/pc`);
+    seg.push(`Rs ${displayRs(perPc)}/pc`);
+    if (showEconomics && p.mrp != null) seg.push(`MRP Rs ${displayRs(p.mrp)}/pc`);
+    if (showEconomics && margin != null) seg.push(`Margin Rs ${displayRs(margin)}/pc`);
   } else {
-    if (p.mrp != null) seg.push(`MRP Rs ${Math.round(p.mrp).toLocaleString("en-IN")}`);
-    if (margin != null) seg.push(`Margin Rs ${Math.round(margin).toLocaleString("en-IN")}/pc`);
+    if (showEconomics && p.mrp != null) seg.push(`MRP Rs ${displayRs(p.mrp)}`);
+    if (showEconomics && margin != null) seg.push(`Margin Rs ${displayRs(margin)}/pc`);
     if (p.moq > 1) seg.push(`min ${p.moq} pcs`);
   }
   return seg.length > 0 ? seg.join(" · ") : null;

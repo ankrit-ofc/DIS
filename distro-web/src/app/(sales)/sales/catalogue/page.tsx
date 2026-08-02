@@ -68,8 +68,10 @@ export default function SalesCataloguePage() {
           <p className="text-sm text-gray-400 text-center py-16">No products found</p>
         ) : (
           <div className="grid grid-cols-2 gap-3">
+            {/* Rep-facing: margin is what a rep pitches on, so this catalogue
+                keeps MRP + margin while the buyer catalogue drops them. */}
             {products.map((p) => (
-              <ProductCard key={p.id} product={p} />
+              <ProductCard key={p.id} product={p} showEconomics />
             ))}
           </div>
         )}

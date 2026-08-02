@@ -38,14 +38,21 @@ export function ProductCard({
   item,
   onPress,
   width = PRODUCT_CARD_W,
+  showEconomics = false,
 }: {
   item: CardProduct;
   onPress: () => void;
   width?: number;
+  /**
+   * Show MRP and the shopkeeper's margin. Rep-facing catalogues pass true; the
+   * buyer catalogue leaves it off. Defaults to off so a new caller can't leak
+   * dealer economics to a shopkeeper by omission.
+   */
+  showEconomics?: boolean;
 }) {
   const outOfStock = item.stockStatus === "OUT_OF_STOCK";
   const lowStock = item.stockStatus === "LOW_STOCK";
-  const sub = priceLine2(item);
+  const sub = priceLine2(item, showEconomics);
   return (
     <TouchableOpacity
       style={[pc.card, { width }, shadow.card, outOfStock && pc.cardOos]}
