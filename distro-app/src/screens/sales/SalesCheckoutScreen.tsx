@@ -11,7 +11,8 @@ import {
   Platform,
   BackHandler,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SCREEN_EDGES, keyboardBehavior } from "../../lib/screen";
 import { Ionicons } from "@expo/vector-icons";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { api } from "../../lib/api";
@@ -58,6 +59,7 @@ type Props = { navigation: StackNavigationProp<SalesStackParamList, "SalesChecko
  *    to close the order now.
  */
 export function SalesCheckoutScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const buyer = useSalesBuyerStore((s) => s.buyer);
   const setBuyer = useSalesBuyerStore((s) => s.setBuyer);
   const clearBuyer = useSalesBuyerStore((s) => s.clearBuyer);
@@ -193,13 +195,13 @@ export function SalesCheckoutScreen({ navigation }: Props) {
   };
 
   return (
-    <SafeAreaView style={s.safe} edges={["top", "left", "right"]}>
+    <SafeAreaView style={s.safe} edges={SCREEN_EDGES}>
       <SalesBuyerBanner buyer={buyer} onDiscard={clearBuyer} />
       <KeyboardAvoidingView
         style={s.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={keyboardBehavior}
       >
-        <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={[s.content, { paddingBottom: insets.bottom + spacing.lg }]} keyboardShouldPersistTaps="handled">
           <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()} hitSlop={8}>
             <Text style={s.backText}>← Back to catalogue</Text>
           </TouchableOpacity>
@@ -565,6 +567,8 @@ function SalesOrderPlaced({
     return () => sub.remove();
   }, [onNextShop]);
 
+  // Confirmation screen paints off-white edge to edge, so here the SafeAreaView
+  // can own the bottom inset directly without a colour mismatch.
   return (
     <SafeAreaView style={s.doneSafe} edges={["top", "left", "right", "bottom"]}>
       <View style={s.doneHeader}>

@@ -10,7 +10,8 @@ import {
   Platform,
   ActivityIndicator,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SCREEN_EDGES, keyboardBehavior } from "../../lib/screen";
 import { Ionicons } from "@expo/vector-icons";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RouteProp } from "@react-navigation/native";
@@ -37,6 +38,7 @@ type Props = {
  * to the manual map, which is always available.
  */
 export function PinLocationScreen({ navigation, route }: Props) {
+  const insets = useSafeAreaInsets();
   const [buyer, setBuyer] = useState<SalesBuyer | null>(route.params?.buyer ?? null);
   const [location, setLocation] = useState<LocationPickerValue | null>(null);
   const [saving, setSaving] = useState(false);
@@ -98,7 +100,7 @@ export function PinLocationScreen({ navigation, route }: Props) {
   // ── Shop picker ───────────────────────────────────────────────────────────
   if (!buyer) {
     return (
-      <SafeAreaView style={s.safe} edges={["top", "left", "right"]}>
+      <SafeAreaView style={s.safe} edges={SCREEN_EDGES}>
         <View style={s.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={8} style={s.backBtn}>
             <Ionicons name="arrow-back" size={22} color={colors.white} />
@@ -156,10 +158,10 @@ export function PinLocationScreen({ navigation, route }: Props) {
 
   // ── Pin capture ───────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={s.safe} edges={["top", "left", "right"]}>
+    <SafeAreaView style={s.safe} edges={SCREEN_EDGES}>
       <KeyboardAvoidingView
         style={s.flex}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={keyboardBehavior}
       >
         <View style={s.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={8} style={s.backBtn}>
@@ -169,7 +171,7 @@ export function PinLocationScreen({ navigation, route }: Props) {
         </View>
 
         <ScrollView
-          contentContainerStyle={s.scroll}
+          contentContainerStyle={[s.scroll, { paddingBottom: insets.bottom + spacing.lg }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >

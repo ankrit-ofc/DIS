@@ -12,7 +12,8 @@ import {
   Alert,
   TextInput as TI,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SCREEN_EDGES, keyboardBehavior } from "../../lib/screen";
 import { Ionicons } from "@expo/vector-icons";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RouteProp } from "@react-navigation/native";
@@ -51,6 +52,7 @@ interface District {
  * dedicated GPS pin screen, which is the real field sequence.
  */
 export function NewBuyerScreen({ navigation, route }: Props) {
+  const insets = useSafeAreaInsets();
   // Reached from the buyer picker ("no shop found — register it"): the rep is
   // mid-order, so hand the new shop straight to the catalogue instead of
   // dropping them back on the home screen to search for what they just typed.
@@ -161,10 +163,10 @@ export function NewBuyerScreen({ navigation, route }: Props) {
   };
 
   return (
-    <SafeAreaView style={s.safe} edges={["top", "left", "right"]}>
+    <SafeAreaView style={s.safe} edges={SCREEN_EDGES}>
       <KeyboardAvoidingView
         style={s.flex}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={keyboardBehavior}
       >
         <View style={s.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={8} style={s.backBtn}>
@@ -174,7 +176,7 @@ export function NewBuyerScreen({ navigation, route }: Props) {
         </View>
 
         <ScrollView
-          contentContainerStyle={s.scroll}
+          contentContainerStyle={[s.scroll, { paddingBottom: insets.bottom + spacing.lg }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >

@@ -8,7 +8,8 @@ import {
   RefreshControl,
   ActivityIndicator,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SCREEN_EDGES } from "../../lib/screen";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { StackNavigationProp } from "@react-navigation/stack";
@@ -49,6 +50,7 @@ type Props = { navigation: StackNavigationProp<SalesStackParamList, "TodaysOrder
  * total is the number being checked.
  */
 export function TodaysOrdersScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const [orders, setOrders] = useState<RepOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -84,7 +86,7 @@ export function TodaysOrdersScreen({ navigation }: Props) {
     .reduce((sum, o) => sum + o.total, 0);
 
   return (
-    <SafeAreaView style={s.safe} edges={["top", "left", "right"]}>
+    <SafeAreaView style={s.safe} edges={SCREEN_EDGES}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={8} style={s.backBtn}>
           <Ionicons name="arrow-back" size={22} color={colors.white} />
@@ -113,7 +115,7 @@ export function TodaysOrdersScreen({ navigation }: Props) {
         <FlatList
           data={orders}
           keyExtractor={(o) => o.id}
-          contentContainerStyle={s.listContent}
+          contentContainerStyle={[s.listContent, { paddingBottom: insets.bottom + spacing.lg }]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

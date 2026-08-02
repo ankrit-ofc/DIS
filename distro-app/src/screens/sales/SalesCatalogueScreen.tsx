@@ -9,7 +9,8 @@ import {
   ScrollView,
   RefreshControl,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SCREEN_EDGES } from "../../lib/screen";
 import { Ionicons } from "@expo/vector-icons";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { api } from "../../lib/api";
@@ -39,6 +40,7 @@ type Props = { navigation: StackNavigationProp<SalesStackParamList, "SalesCatalo
  * and that the order bar goes to the on-behalf checkout.
  */
 export function SalesCatalogueScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const buyer = useSalesBuyerStore((s) => s.buyer);
   const clearBuyer = useSalesBuyerStore((s) => s.clearBuyer);
   const { items, totalAmount } = useCartStore();
@@ -110,7 +112,7 @@ export function SalesCatalogueScreen({ navigation }: Props) {
   if (!buyer) return null;
 
   return (
-    <SafeAreaView style={s.safe} edges={["top", "left", "right"]}>
+    <SafeAreaView style={s.safe} edges={SCREEN_EDGES}>
       {/* Dropping the buyer is what navigates — see the effect above. */}
       <SalesBuyerBanner buyer={buyer} onDiscard={clearBuyer} />
 
@@ -166,7 +168,7 @@ export function SalesCatalogueScreen({ navigation }: Props) {
           keyExtractor={(p) => p.id}
           numColumns={2}
           columnWrapperStyle={s.row}
-          contentContainerStyle={s.listContent}
+          contentContainerStyle={[s.listContent, { paddingBottom: insets.bottom + spacing.xxl * 2 }]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -183,6 +185,10 @@ export function SalesCatalogueScreen({ navigation }: Props) {
             <ProductCard
               item={item}
               onPress={() => navigation.navigate("SalesProduct", { productId: item.id })}
+              // Rep-facing: a rep pitches on the shopkeeper's margin at the
+              // counter, so MRP and margin stay here. The buyer catalogue uses
+              // the same component with the default (off).
+              showEconomics
             />
           )}
           ListEmptyComponent={
@@ -224,7 +230,7 @@ export function SalesCatalogueScreen({ navigation }: Props) {
       )}
 
       {items.length > 0 && (
-        <View style={s.orderBarWrap}>
+        <View style={[s.orderBarWrap, { paddingBottom: spacing.lg + insets.bottom }]}>
           <TouchableOpacity
             style={s.orderBar}
             onPress={() => navigation.navigate("SalesCheckout")}

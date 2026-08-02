@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { View, Text, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, withSequence } from "react-native-reanimated";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SCREEN_EDGES, keyboardBehavior } from "../../lib/screen";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RouteProp } from "@react-navigation/native";
 import { api } from "../../lib/api";
@@ -15,6 +16,7 @@ type Props = {
 };
 
 export function RegisterScreen({ navigation, route }: Props) {
+  const insets = useSafeAreaInsets();
   // Set when an OTP login found no account for this number — carried to step 2.
   const prefillPhone = route.params?.prefillPhone;
   const [email, setEmail] = useState("");
@@ -62,10 +64,10 @@ export function RegisterScreen({ navigation, route }: Props) {
   };
 
   return (
-    <SafeAreaView style={s.root} edges={['top', 'left', 'right']}>
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+    <SafeAreaView style={s.root} edges={SCREEN_EDGES}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={keyboardBehavior}>
       <ScrollView
-        contentContainerStyle={[s.scroll, { paddingTop: spacing.xxl }]}
+        contentContainerStyle={[s.scroll, { paddingTop: spacing.xxl, paddingBottom: insets.bottom + spacing.lg }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >

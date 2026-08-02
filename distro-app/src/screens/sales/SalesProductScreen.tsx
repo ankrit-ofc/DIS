@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { View, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { SCREEN_EDGES } from "../../lib/screen";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RouteProp } from "@react-navigation/native";
 import { ProductScreen } from "../buyer/ProductScreen";
@@ -36,7 +37,7 @@ export function SalesProductScreen({ navigation, route }: Props) {
   if (!buyer) return null;
 
   return (
-    <SafeAreaView style={s.safe} edges={["top", "left", "right"]}>
+    <SafeAreaView style={s.safe} edges={SCREEN_EDGES}>
       <SalesBuyerBanner buyer={buyer} onDiscard={clearBuyer} />
       <View style={s.flex}>
         <ProductScreen navigation={navigation} route={route} embedded />

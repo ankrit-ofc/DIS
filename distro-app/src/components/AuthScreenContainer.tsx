@@ -10,6 +10,7 @@ import {
   ViewStyle,
 } from "react-native";
 import { SafeAreaView, Edge } from "react-native-safe-area-context";
+import { keyboardBehavior } from "../lib/screen";
 import { colors } from "../lib/theme";
 
 interface Props {
@@ -54,7 +55,7 @@ export function AuthScreenContainer({
     <SafeAreaView style={[styles.safe, { backgroundColor }]} edges={edges}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={keyboardBehavior}
         keyboardVerticalOffset={keyboardVerticalOffset}
       >
         {dismissOnTap ? (

@@ -1,5 +1,6 @@
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SCREEN_EDGES } from "../../lib/screen";
 import { Ionicons } from "@expo/vector-icons";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useAuthStore } from "../../store/authStore";
@@ -36,6 +37,7 @@ const TOOLS: Tool[] = [
 type Props = { navigation: StackNavigationProp<SalesStackParamList, "SalesHome"> };
 
 export function SalesHomeScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const { profile, logout } = useAuthStore();
   const selectedBuyer = useSalesBuyerStore((s) => s.buyer);
 
@@ -49,8 +51,8 @@ export function SalesHomeScreen({ navigation }: Props) {
   };
 
   return (
-    <SafeAreaView style={s.safe} edges={["top", "left", "right"]}>
-      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+    <SafeAreaView style={s.safe} edges={SCREEN_EDGES}>
+      <ScrollView contentContainerStyle={[s.scroll, { paddingBottom: insets.bottom + spacing.lg }]} showsVerticalScrollIndicator={false}>
         <View style={s.header}>
           <View style={s.headerRow}>
             <View style={s.flex}>

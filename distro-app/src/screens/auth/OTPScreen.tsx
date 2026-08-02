@@ -5,7 +5,8 @@ import {
 } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RouteProp } from "@react-navigation/native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SCREEN_EDGES, keyboardBehavior } from "../../lib/screen";
 import { api } from "../../lib/api";
 import { acceptMobileSession } from "../../lib/session";
 import { colors, spacing, radius, typography } from "../../lib/theme";
@@ -19,6 +20,7 @@ type Props = {
 const OTP_LENGTH = 6;
 
 export function OTPScreen({ navigation, route }: Props) {
+  const insets = useSafeAreaInsets();
   const { email, phone } = route.params;
   // Phone identifies the passwordless login flow; email the registration flow.
   const identifier = phone ? { phone } : { email: email! };
@@ -121,9 +123,9 @@ export function OTPScreen({ navigation, route }: Props) {
   const handleResendViaEmail = () => requestOtp("email");
 
   return (
-    <SafeAreaView style={st.root} edges={['top', 'left', 'right']}>
-      <KeyboardAvoidingView style={st.root} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-        <View style={st.container}>
+    <SafeAreaView style={st.root} edges={SCREEN_EDGES}>
+      <KeyboardAvoidingView style={st.root} behavior={keyboardBehavior}>
+        <View style={[st.container, { paddingBottom: insets.bottom }]}>
         <TouchableOpacity style={st.backBtn} onPress={() => navigation.goBack()}>
           <Text style={st.backText}>← Back</Text>
         </TouchableOpacity>

@@ -7,7 +7,8 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SCREEN_EDGES } from "../../lib/screen";
 import { Ionicons } from "@expo/vector-icons";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { SalesBuyer, buyerLabel } from "../../lib/sales";
@@ -28,6 +29,7 @@ type Props = { navigation: StackNavigationProp<SalesStackParamList, "SelectBuyer
  * flow starts rather than something layered over it.
  */
 export function SelectBuyerScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const setBuyer = useSalesBuyerStore((s) => s.setBuyer);
   const {
     search, setSearch, query, searchNow,
@@ -51,7 +53,7 @@ export function SelectBuyerScreen({ navigation }: Props) {
   };
 
   return (
-    <SafeAreaView style={s.safe} edges={["top", "left", "right"]}>
+    <SafeAreaView style={s.safe} edges={SCREEN_EDGES}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={8} style={s.backBtn}>
           <Ionicons name="arrow-back" size={22} color={colors.white} />
@@ -60,7 +62,7 @@ export function SelectBuyerScreen({ navigation }: Props) {
       </View>
 
       <ScrollView
-        contentContainerStyle={s.scroll}
+        contentContainerStyle={[s.scroll, { paddingBottom: insets.bottom + spacing.lg }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >

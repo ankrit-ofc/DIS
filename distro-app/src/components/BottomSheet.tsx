@@ -6,12 +6,15 @@ import {
 import {
   Animated,
   Dimensions,
+  KeyboardAvoidingView,
   Modal,
   StyleSheet,
   TouchableWithoutFeedback,
   View,
   PanResponder,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { modalKeyboardBehavior } from "../lib/screen";
 import { colors, radius } from "../lib/theme";
 
 const { height: SCREEN_H } = Dimensions.get("window");
@@ -29,6 +32,7 @@ export function BottomSheet({
   children,
   snapHeight = SCREEN_H * 0.78,
 }: BottomSheetProps) {
+  const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(snapHeight)).current;
 
   useEffect(() => {
@@ -69,13 +73,21 @@ export function BottomSheet({
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.backdrop} />
       </TouchableWithoutFeedback>
-      <Animated.View
-        style={[styles.sheet, { height: snapHeight, transform: [{ translateY }] }]}
-        {...panResponder.panHandlers}
-      >
-        <View style={styles.handle} />
-        {children}
-      </Animated.View>
+      {/* An Android Modal is its own native window and does not inherit the
+          Activity's adjustResize, so a sheet with inputs needs explicit padding
+          on both platforms or the keyboard covers it. */}
+      <KeyboardAvoidingView style={styles.avoider} behavior={modalKeyboardBehavior}>
+        <Animated.View
+          style={[
+            styles.sheet,
+            { height: snapHeight, paddingBottom: insets.bottom, transform: [{ translateY }] },
+          ]}
+          {...panResponder.panHandlers}
+        >
+          <View style={styles.handle} />
+          {children}
+        </Animated.View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -85,11 +97,8 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.5)",
   },
+  avoider: { ...StyleSheet.absoluteFillObject, justifyContent: "flex-end" },
   sheet: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
     backgroundColor: colors.white,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,

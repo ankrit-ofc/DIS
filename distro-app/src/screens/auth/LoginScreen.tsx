@@ -12,7 +12,8 @@ import {
   ActivityIndicator,
   TextInput as TI,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SCREEN_EDGES, keyboardBehavior } from "../../lib/screen";
 import { Ionicons } from "@expo/vector-icons";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { api } from "../../lib/api";
@@ -31,6 +32,7 @@ export function LoginScreen({ navigation }: Props) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const passwordRef = useRef<TI>(null);
+  const insets = useSafeAreaInsets();
 
   const handleLogin = async () => {
     if (!identifier.trim() || !password.trim()) {
@@ -54,13 +56,13 @@ export function LoginScreen({ navigation }: Props) {
   };
 
   return (
-    <SafeAreaView style={s.safe} edges={["top", "left", "right"]}>
-      <KeyboardAvoidingView
-        style={s.flex}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
+    <SafeAreaView style={s.safe} edges={SCREEN_EDGES}>
+      <KeyboardAvoidingView style={s.flex} behavior={keyboardBehavior}>
+        {/* The register link is the last thing in this scroll view and the screen has
+            no tab bar under it, so without the bottom inset it lands behind the
+            3-button navigation bar and the taps go to the system bar instead. */}
         <ScrollView
-          contentContainerStyle={s.scroll}
+          contentContainerStyle={[s.scroll, { paddingBottom: insets.bottom }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           bounces={false}
