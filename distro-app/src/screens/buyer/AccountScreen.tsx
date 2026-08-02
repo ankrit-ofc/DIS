@@ -19,6 +19,7 @@ import { colors, spacing, radius, shadow } from "../../lib/theme";
 import { sessionInitial } from "../../lib/format";
 import Constants from "expo-constants";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { modalKeyboardBehavior } from "../../lib/screen";
 
 // Public legal/support pages hosted on the DISTRO marketing site.
 // TODO(verify): confirm these production URLs are live before release.
@@ -222,9 +223,9 @@ export function AccountScreen() {
 
       {/* Edit Profile Modal */}
       <Modal visible={showEditModal} transparent animationType="slide" onRequestClose={() => setShowEditModal(false)}>
-        <KeyboardAvoidingView style={styles.modalFlex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <KeyboardAvoidingView style={styles.modalFlex} behavior={modalKeyboardBehavior}>
         <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowEditModal(false)} />
-        <View style={styles.modalSheet}>
+        <View style={[styles.modalSheet, { paddingBottom: insets.bottom + spacing.lg }]}>
           <View style={styles.modalHandle} />
           <Text style={styles.modalTitle}>Edit profile</Text>
           <Text style={styles.inputLabel}>Owner name</Text>
@@ -265,9 +266,21 @@ export function AccountScreen() {
 
       {/* Change Password Modal */}
       <Modal visible={showPasswordModal} transparent animationType="slide" onRequestClose={() => setShowPasswordModal(false)}>
-        <KeyboardAvoidingView style={styles.modalFlex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <KeyboardAvoidingView style={styles.modalFlex} behavior={modalKeyboardBehavior}>
         <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowPasswordModal(false)} />
-        <View style={styles.modalSheet}>
+        {/* Three fields plus the button is the tallest sheet in the app. With the
+            keyboard up on a short device the KeyboardAvoidingView can squeeze it
+            below its natural height, so the body scrolls rather than clipping the
+            "Update password" button out of reach. */}
+        <ScrollView
+          style={styles.modalScroll}
+          contentContainerStyle={[
+            styles.modalSheetContent,
+            { paddingBottom: insets.bottom + spacing.lg },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          bounces={false}
+        >
           <View style={styles.modalHandle} />
           <Text style={styles.modalTitle}>Change password</Text>
           {[
@@ -304,15 +317,15 @@ export function AccountScreen() {
           >
             {pwdLoading ? <ActivityIndicator color={colors.white} /> : <Text style={styles.modalBtnText}>Update password</Text>}
           </TouchableOpacity>
-        </View>
+        </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
 
       {/* Delete Account Modal */}
       <Modal visible={showDeleteModal} transparent animationType="slide" onRequestClose={() => setShowDeleteModal(false)}>
-        <KeyboardAvoidingView style={styles.modalFlex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <KeyboardAvoidingView style={styles.modalFlex} behavior={modalKeyboardBehavior}>
         <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowDeleteModal(false)} />
-        <View style={styles.modalSheet}>
+        <View style={[styles.modalSheet, { paddingBottom: insets.bottom + spacing.lg }]}>
           <View style={styles.modalHandle} />
           <Text style={styles.modalTitle}>Delete account</Text>
           <Text style={styles.deleteWarning}>
@@ -440,6 +453,19 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.md,
     paddingBottom: spacing.xxl,
+  },
+  // Used when modalSheet is a ScrollView: `padding`/`gap` on a ScrollView's own
+  // style don't lay out its children, so they move to the content container and
+  // the outer style keeps only the background, corners and height cap.
+  modalSheetContent: {
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  modalScroll: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    flexGrow: 0, // hug the content instead of filling the modal window
   },
   modalHandle: {
     width: 40,
