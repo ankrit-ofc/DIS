@@ -3,7 +3,7 @@
     "name": "DISTRO",
     "slug": "distro-app",
     "scheme": "com.distro.app",
-    "version": "1.1.3",
+    "version": "1.1.4",
     "orientation": "portrait",
     "icon": "./assets/logo-icon.png",
     "userInterfaceStyle": "light",
