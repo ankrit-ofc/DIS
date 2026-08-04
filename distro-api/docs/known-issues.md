@@ -200,6 +200,39 @@ That makes relaunch a resume rather than a rebuild.
 
 ---
 
+## 7. Email-less buyers receive nothing about their own orders
+
+Accepted consequence of the OTP-only SMS decision (2026-08-04), recorded so it
+is a known state rather than a surprise. **Not a bug — a deliberate trade.**
+
+`lib/notificationPolicy.ts` routes every order event to `email`. Buyers with no
+email address on file therefore get **no order confirmation, no status update
+and no cancellation notice** — nothing at all about orders placed for them.
+
+**Who this is:** every shop registered by a SALES rep (`POST /sales/buyers`
+collects no email), plus any phone-first self-serve signup that skipped the
+optional field. For rep-registered shops this is the norm, not the exception.
+
+**Why it was accepted:** a full order lifecycle cost ~5 SMS (~4.75 NPR) and the
+spend was unbounded on chat. The alternative — keeping the confirmation, and
+optionally DISPATCHED, on SMS at ~0.95 NPR against a typical Rs 11,000 order —
+was put forward and declined in favour of the strict target state.
+
+**What partially covers it:** the rep sees the order number on the confirmation
+screen and can read it out; the shop can see orders in the app if they have it;
+admin has the full list. None of these reach a shopkeeper who is not looking.
+
+**If it needs revisiting**, flip `order_confirmation` (and/or `order_status`
+gated to `DISPATCHED`) back to `'sms'` in `notificationPolicy.ts`. That single
+change re-enables the SMS at every call site — no route edits — which is the
+reason the policy is a map rather than scattered calls.
+
+Better long-term fix: prompt for an email at first login for accounts that
+have none, or drive order notifications through Expo push (already wired for
+chat) so the app itself becomes the channel.
+
+---
+
 ## Considered and rejected
 
 Decisions recorded so they don't get re-raised. These are **not** bugs.

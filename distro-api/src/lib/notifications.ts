@@ -1,11 +1,67 @@
 import axios from 'axios';
 import { prisma } from './prisma';
 import { sendSMS, type SmsResult } from './sms';
+import {
+  NOTIFICATION_CHANNELS,
+  type NotificationEvent,
+} from './notificationPolicy';
+
+/**
+ * Route a notification according to notificationPolicy.ts.
+ *
+ * Every non-OTP notification in the app goes through here, so the channel
+ * decision lives in one map instead of being implied by which helper a route
+ * happened to call. Callers name the EVENT, not the channel.
+ *
+ * Never throws — safe to fire-and-forget with `void dispatchNotification(...)`.
+ *
+ * `email` is intentionally a no-op here: the buyer-facing email templates are
+ * rendered inline at each call site (they need order lines, totals, VAT), and
+ * duplicating that here would mean passing half the order through. The routes
+ * already send those emails; this just stops the SMS that used to accompany
+ * them. Flipping an entry in the policy map back to 'sms' re-enables it here
+ * with no route changes.
+ */
+export async function dispatchNotification(
+  event: NotificationEvent,
+  opts: { phone?: string; profileId?: string; message: string; title?: string },
+): Promise<SmsResult> {
+  const channel = NOTIFICATION_CHANNELS[event];
+
+  if (channel === 'sms') {
+    if (!opts.phone) return { ok: false, error: 'no phone for sms event' };
+    return sendNotification(opts.phone, opts.message);
+  }
+
+  if (channel === 'push') {
+    if (!opts.profileId) return { ok: false, error: 'no profileId for push event' };
+    const tokens = await prisma.pushToken.findMany({
+      where: { profileId: opts.profileId },
+      select: { token: true },
+    });
+    if (tokens.length === 0) return { ok: true };
+    await sendExpoPush(
+      tokens.map((t) => ({
+        to: t.token,
+        title: opts.title ?? 'DISTRO',
+        body: opts.message,
+      })),
+    );
+    return { ok: true };
+  }
+
+  // 'email' — sent by the caller; 'none' — deliberately silent.
+  return { ok: true };
+}
 
 /**
  * Try WhatsApp first; fall back to Sparrow SMS on any failure.
- * Never throws — returns { ok, error? } so callers can safely fire-and-forget
- * with `void sendNotification(...)`.
+ * Never throws — returns { ok, error? } so callers can safely fire-and-forget.
+ *
+ * NOT for new call sites: go through `dispatchNotification` so the channel
+ * stays governed by notificationPolicy.ts. This remains exported only because
+ * the OTP path in routes/auth.ts calls sendSMS directly for its own cap and
+ * fallback handling.
  */
 export async function sendNotification(phone: string, message: string): Promise<SmsResult> {
   if (process.env.WHATSAPP_PHONE_ID && process.env.WHATSAPP_TOKEN) {

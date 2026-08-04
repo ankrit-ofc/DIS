@@ -428,8 +428,12 @@ function SalesDone({
       <p className="text-sm text-gray-500 mb-1">
         {orderNumber} · {formatPrice(total)}
       </p>
+      {/* No SMS is sent for orders any more (API notificationPolicy.ts: SMS is
+          OTP-only), and most rep-registered shops have no email either — so
+          promising a confirmation would be a lie the rep repeats at the
+          counter. State what is certainly true instead. */}
       <p className="text-xs text-gray-400 mb-8">
-        {shopName} will get the confirmation SMS.
+        Order {orderNumber} recorded for {shopName}.
       </p>
       <div className="w-full space-y-2">
         <button

@@ -7,7 +7,7 @@ import { requireAuth, isAdmin, requireRole } from '../middleware/auth';
 import { withTransaction } from '../lib/transaction';
 import { reverseOrderEffects, canAdminCancel, refundOwedNote } from '../lib/orderReversal';
 import { sendEmail, render } from '../lib/email';
-import { sendNotification, orderConfirmMessage, statusUpdateMessage, sendExpoPush, orderStatusPush } from '../lib/notifications';
+import { dispatchNotification, orderConfirmMessage, statusUpdateMessage, sendExpoPush, orderStatusPush } from '../lib/notifications';
 import { OrderConfirmEmail } from '../emails/OrderConfirmEmail';
 import { OrderStatusEmail } from '../emails/OrderStatusEmail';
 import { InvoiceEmail } from '../emails/InvoiceEmail';
@@ -417,7 +417,13 @@ router.post(
     }
 
     // Fire-and-forget notifications
-    void sendNotification(buyer.phone, orderConfirmMessage(createdOrder.orderNumber, createdOrder.total));
+    // Channel comes from notificationPolicy.ts — 'email' today, so this no-ops
+    // and the confirmation email below is the buyer's record of the order.
+    void dispatchNotification('order_confirmation', {
+      phone: buyer.phone,
+      profileId: buyer.id,
+      message: orderConfirmMessage(createdOrder.orderNumber, createdOrder.total),
+    });
 
     const emailItems = (createdOrder.items ?? []).map((row: { name: string; qty: number; price: number; total?: number }) => ({
       name: row.name,
@@ -594,7 +600,9 @@ router.patch(
     // Fetch buyer for notifications
     const buyer = await prisma.profile.findUnique({
       where:  { id: order.buyerId },
-      select: { phone: true, email: true, storeName: true },
+      // id is needed so dispatchNotification can reach push tokens if the
+      // policy ever routes order events to push.
+      select: { id: true, phone: true, email: true, storeName: true },
     });
 
     let updated;
@@ -636,7 +644,11 @@ router.patch(
 
     // Non-blocking notifications
     if (buyer) {
-      void sendNotification(buyer.phone, statusUpdateMessage(order.orderNumber, status));
+      void dispatchNotification('order_status', {
+        phone: buyer.phone,
+        profileId: buyer.id,
+        message: statusUpdateMessage(order.orderNumber, status),
+      });
       if (buyer.email) {
         void (async () => {
           try {
@@ -747,7 +759,7 @@ router.patch(
       where:   { id: { in: ids } },
       include: {
         items: true,
-        buyer: { select: { phone: true, email: true, storeName: true } },
+        buyer: { select: { id: true, phone: true, email: true, storeName: true } },
       },
     });
 
@@ -813,7 +825,11 @@ router.patch(
     // Fire-and-forget notifications for every buyer
     for (const o of orders) {
       if (!o.buyer) continue;
-      void sendNotification(o.buyer.phone, statusUpdateMessage(o.orderNumber, status));
+      void dispatchNotification('order_status', {
+        phone: o.buyer.phone,
+        profileId: o.buyer.id,
+        message: statusUpdateMessage(o.orderNumber, status),
+      });
       if (o.buyer.email) {
         void (async () => {
           try {
@@ -1152,7 +1168,11 @@ router.patch(
     }
 
     // Fire-and-forget notifications
-    void sendNotification(profile.phone, `Order ${order.orderNumber} has been cancelled.`);
+    void dispatchNotification('order_cancelled', {
+      phone: profile.phone,
+      profileId: profile.id,
+      message: `Order ${order.orderNumber} has been cancelled.`,
+    });
     if (profile.email) {
       void (async () => {
         try {

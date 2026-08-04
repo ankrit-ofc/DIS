@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { requireAuth, isAdmin } from '../middleware/auth';
 import { validateSession } from '../lib/auth';
-import { sendNotification } from '../lib/notifications';
+import { dispatchNotification } from '../lib/notifications';
 import {
   addClient, removeClient,
   sendToClient, sendToAllAdmins,
@@ -96,10 +96,14 @@ router.post('/send', requireAuth, async (req: Request, res: Response): Promise<v
     if (!hasAdminConnected()) {
       const admin = await prisma.profile.findFirst({ where: { role: 'ADMIN' } });
       if (admin) {
-        void sendNotification(
-          admin.phone,
-          `New message from ${profile.storeName ?? profile.ownerName ?? 'Buyer'}`,
-        );
+        // Policy says 'none': admins work at a dashboard with a live socket,
+        // so an SMS per buyer message was uncapped spend for something already
+        // on screen. Kept as a dispatch call so the decision stays visible.
+        void dispatchNotification('chat_message_to_admin', {
+          phone: admin.phone,
+          profileId: admin.id,
+          message: `New message from ${profile.storeName ?? profile.ownerName ?? 'Buyer'}`,
+        });
       }
     }
   } else {
@@ -107,7 +111,13 @@ router.post('/send', requireAuth, async (req: Request, res: Response): Promise<v
     if (!hasBuyerConnected(buyerId)) {
       const buyer = await prisma.profile.findUnique({ where: { id: buyerId } });
       if (buyer) {
-        void sendNotification(buyer.phone, 'New message from DISTRO Support');
+        // Push, not SMS: chat is realtime and the buyer has the app.
+        void dispatchNotification('chat_message_to_buyer', {
+          phone: buyer.phone,
+          profileId: buyer.id,
+          title: 'DISTRO Support',
+          message: 'New message from DISTRO Support',
+        });
       }
     }
   }
