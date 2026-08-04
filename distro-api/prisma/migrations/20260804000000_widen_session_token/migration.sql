@@ -1,0 +1,20 @@
+-- AlterTable
+-- Table name MUST stay PascalCase `Session`: prod MySQL (Railway) is
+-- case-sensitive, dev XAMPP on Windows is not, so a lowercase name passes
+-- locally and fails only in production.
+--
+-- `Session.token` stores a signed JWT. Prisma's default String is VARCHAR(191),
+-- and a DISTRO token was already ~190 characters — sitting one claim away from
+-- overflow. MySQL is non-strict here, so an over-long token was TRUNCATED on
+-- insert rather than erroring: login returned a full token, the database kept a
+-- clipped copy, and validateSession's `findUnique({ where: { token } })` then
+-- missed on every subsequent request. The user saw "Invalid or expired token"
+-- immediately after a successful login.
+--
+-- 512 chars leaves generous headroom. The unique index is then 512 * 4 = 2048
+-- bytes under utf8mb4, comfortably inside InnoDB's 3072-byte index limit.
+--
+-- Existing rows are unaffected (widening is lossless). Any already-truncated
+-- token stays truncated and simply fails to validate, which is what it does
+-- today — those sessions are dead either way and the holder logs in again.
+ALTER TABLE `Session` MODIFY `token` VARCHAR(512) NOT NULL;

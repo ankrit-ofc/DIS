@@ -11,7 +11,17 @@ export function generateOTP(): string {
 }
 
 export async function createSession(profileId: string): Promise<string> {
-  const token = jwt.sign({ profileId }, process.env.JWT_SECRET!, { expiresIn: '30d' });
+  // `jti` makes each token unique. Without it the payload is just
+  // {profileId, iat} and `iat` has SECOND resolution, so two sessions for the
+  // same profile within the same second are byte-identical and the second one
+  // dies on `Session_token_key` as a 500. Reachable by double-tapping "Sign in",
+  // and now by the normal claim flow: verify-otp signs a rep-created shop in,
+  // then /register immediately opens a second session for the same profile.
+  const token = jwt.sign(
+    { profileId, jti: crypto.randomUUID() },
+    process.env.JWT_SECRET!,
+    { expiresIn: '30d' },
+  );
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
   await prisma.session.create({ data: { profileId, token, expiresAt } });
   return token;

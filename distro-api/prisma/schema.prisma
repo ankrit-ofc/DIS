@@ -61,7 +61,12 @@ model PushToken {
 model Session {
   id        String   @id @default(cuid())
   profileId String
-  token     String   @unique
+  // Holds a signed JWT, NOT a short opaque id. Prisma's default String maps to
+  // VARCHAR(191), and a DISTRO token was already ~190 chars — so any added claim
+  // silently truncated the stored copy (MySQL is non-strict here), after which
+  // validateSession's lookup by full token missed and every request 401'd.
+  // 512 keeps the unique index at 2048 bytes, well inside InnoDB's 3072 limit.
+  token     String   @unique @db.VarChar(512)
   expiresAt DateTime
   createdAt DateTime @default(now())
   profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
