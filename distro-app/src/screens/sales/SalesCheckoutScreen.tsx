@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { SCREEN_EDGES, keyboardBehavior } from "../../lib/screen";
 import { Ionicons } from "@expo/vector-icons";
 import { StackNavigationProp } from "@react-navigation/stack";
+import * as Crypto from "expo-crypto";
 import { api } from "../../lib/api";
 import { colors, spacing, radius, shadow, typography } from "../../lib/theme";
 import { fmtRs, unitShort } from "../../lib/format";
@@ -136,6 +137,28 @@ export function SalesCheckoutScreen({ navigation }: Props) {
     setPickerOpen(false);
   };
 
+  /**
+   * Idempotency key for THIS checkout attempt.
+   *
+   * Minted on the first "Place order" tap and reused by every retry, which is
+   * the whole point: a fresh key per request would make the server-side guard
+   * a no-op. Reps work on patchy data in shops, so "order committed, response
+   * lost, rep taps again" is routine — with the key the retry gets the original
+   * order back (200 + Idempotency-Replayed) instead of placing a second one
+   * against the shop's credit.
+   *
+   * Cleared only after a confirmed success, so the next order gets a new key.
+   * It deliberately survives a 409 stock rejection: that rolls the transaction
+   * back, so the key is still unused, and holding it keeps the guard alive
+   * while the rep fixes quantities.
+   *
+   * Limitation: a ref dies with the JS context, and the cart is in-memory only
+   * (cartStore.ts has no persist), so if Android kills the app mid-submit both
+   * are gone and the rep has to rebuild the order — which could duplicate one
+   * that did commit. Tracked separately in docs/known-issues.md.
+   */
+  const idempotencyKeyRef = useRef<string | null>(null);
+
   const handlePlaceOrder = async () => {
     if (items.length === 0 || belowMin) return;
     if (!district) {
@@ -149,15 +172,22 @@ export function SalesCheckoutScreen({ navigation }: Props) {
     setError("");
     setIssues([]);
     setSubmitting(true);
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current = Crypto.randomUUID();
+    }
     try {
-      const res = await api.post("/orders", {
-        buyerId: buyer.id,
-        items: items.map((i) => ({ productId: i.productId, qty: i.qty })),
-        paymentMethod,
-        deliveryDistrict: district,
-        deliveryAddress: address.trim(),
-        notes: notes.trim() || undefined,
-      });
+      const res = await api.post(
+        "/orders",
+        {
+          buyerId: buyer.id,
+          items: items.map((i) => ({ productId: i.productId, qty: i.qty })),
+          paymentMethod,
+          deliveryDistrict: district,
+          deliveryAddress: address.trim(),
+          notes: notes.trim() || undefined,
+        },
+        { headers: { "Idempotency-Key": idempotencyKeyRef.current } },
+      );
 
       // "Save as shop's new address" — persisted only after the order is in.
       if (editing && saveMode === "profile") {
@@ -173,6 +203,9 @@ export function SalesCheckoutScreen({ navigation }: Props) {
       }
 
       const order = res.data?.order ?? res.data;
+      // Attempt is over — the next order must not reuse this key, or it would
+      // replay straight back to this one.
+      idempotencyKeyRef.current = null;
       clearCart();
       setPlaced({
         orderNumber: order?.orderNumber ?? "—",

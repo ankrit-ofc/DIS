@@ -4,35 +4,41 @@ Deliberately-deferred defects, recorded so they don't get rediscovered from
 scratch. Each was found while fixing the admin-cancellation reversal bug
 (2026-07-28) and judged out of scope for that change.
 
+**Related:** `reconcile-unreversed-cancellations.sql` in this directory holds
+the four read-only queries that measure the historical damage from that bug —
+cancelled orders whose stock and credit were never reversed, and which shops
+are being wrongly blocked by the resulting phantom credit.
+
 ---
 
-## 0. `POST /orders` has no idempotency key — retries create duplicate orders
+## 0. ~~`POST /orders` has no idempotency key~~ — FIXED 2026-08-03
 
-**Next piece of work.** Agreed 2026-07-28 to fix separately rather than bundle
-into the sales-picker change, because it is an API contract change that needs
-its own tests.
+Resolved. `POST /orders` accepts an optional `Idempotency-Key` header (1–64
+chars), stored on `Order.idempotencyKey` with a unique index (migration
+`20260803000000_add_order_idempotency_key`). A repeat returns the original
+order with **200 + `Idempotency-Replayed: true`** instead of creating another;
+a fresh order is still 201. The replay returns before the notification block,
+so a retry does not re-send the shop's confirmation SMS and email. A key
+presented by a different buyer is a 409, since a key is effectively a bearer
+token for the order it created.
 
-`POST /orders` has no client-supplied request id, so the server cannot tell a
-retry from a new order. If the order commits but the response is lost, the
-client's cart and shop selection are deliberately preserved (correct for a
-genuine failure) and the rep retries — producing a second real order against
-the shop's credit.
+The unique index — not the pre-flight `SELECT` — is the real guard: two
+simultaneous retries both miss the read, and the loser's `P2002` is caught and
+converted into a replay of the winner. Existing clients are unaffected: the
+column is nullable and MySQL permits unlimited NULLs under a unique index.
 
-**Why it matters more here than in most systems:** field reps work on patchy
-mobile data in shops, so "committed, response lost, retry" is a routine
-condition rather than an edge case. The cost is a duplicate order against a
-real shop's credit line, which then has to be cancelled and reconciled — and
-until the admin-cancel fix (`lib/orderReversal.ts`) that reconciliation was
-itself broken.
+Client: `SalesCheckoutScreen` mints one key per checkout attempt into a `useRef`
+on first submit, reuses it for retries, and clears it only after a confirmed
+success. It deliberately survives a 409 stock rejection — that rolls back, so
+the key is still unused.
 
-**Fix shape:** accept an `Idempotency-Key` header (or `clientRequestId` in the
-body) generated once per checkout attempt on the client and reused across
-retries. Store it on `Order` with a unique index; on a repeat, return the
-existing order with 200 instead of creating another. That is a schema change —
-one nullable unique column — so it needs a migration.
+Covered by `src/routes/__tests__/orderIdempotency.test.ts`. Mobile sales only
+for now; web buyer checkout sends no key, and the server accepts that, so web
+can adopt it later with no API change.
 
-Client side, the key must be generated when the cart is finalised, **not** per
-request, or every retry gets a fresh key and the guard does nothing.
+**Follow-on:** see issue 6 — this does not survive process death.
+
+---
 
 ---
 
@@ -159,3 +165,57 @@ Google-created PENDING profiles awaiting onboarding (`googleId` set), which are
 a different, legitimate state.
 
 ---
+
+---
+
+## 6. Idempotency key does not survive process death — the cart doesn't either
+
+Deferred deliberately 2026-08-03 when issue 0 was fixed, to keep that change
+small and testable. Decide separately.
+
+The key added in issue 0 lives in a `useRef` in `SalesCheckoutScreen`, so it
+dies with the JS context. That is sufficient for the common failure — request
+times out, screen still mounted, rep taps "Place order" again — but not for
+Android killing the app while the request is in flight.
+
+**The cart has the same lifetime.** `distro-app/src/store/cartStore.ts` is a
+plain Zustand store with no `persist` middleware, and `clearLegacyCart()`
+actively deletes the old `distro_cart` SecureStore blob ("the cart is in-memory
+per session"). So after a process death the rep has lost the cart *and* the key,
+and must rebuild the order by hand — for an order that may well have committed.
+Rebuilding produces a fresh key, so the guard cannot catch it.
+
+**Why it was left:** fixing it properly means persisting both the cart and the
+in-flight key to SecureStore and reconciling on relaunch, which is a materially
+bigger change than the header. Reps also lose the cart on process death today
+regardless of idempotency, so this is arguably a cart-durability bug that
+idempotency merely inherits.
+
+**Fix shape:** persist cart + pending idempotency key to SecureStore on submit;
+on relaunch, if a pending key exists, replay `POST /orders` with it — the server
+already returns the original order if it committed, and places it if it did not.
+That makes relaunch a resume rather than a rebuild.
+
+---
+
+---
+
+## Considered and rejected
+
+Decisions recorded so they don't get re-raised. These are **not** bugs.
+
+### `mrp` is sent to buyers over the wire (raised 2026-08-03, rejected)
+
+`GET /products` and `GET /products/:id` select `mrp` for every authenticated
+role (`routes/products.ts`), while commit `ce89b95` hid MRP and margin from
+buyer-facing *display*. So a buyer can read MRP from the network response and
+derive the shopkeeper margin.
+
+**Rejected — nothing private is exposed.** MRP is printed on the product packet
+and the buyer already knows what they pay. It was removed from the buyer UI for
+clarity, not secrecy: three unlabelled prices in identical grey read as
+competing offers. Adding a role-conditional `select` would buy no
+confidentiality and would fork the product serializer for no benefit.
+
+Do not "fix" this. If the buyer UI ever needs MRP back, the data is already
+there.

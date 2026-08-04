@@ -127,6 +127,41 @@ router.post(
       buyer = operator as any;
     }
 
+    // ── Idempotency ───────────────────────────────────────────────────────────
+    // Reps work on patchy mobile data in shops, so "order committed, response
+    // lost, rep retries" is routine rather than an edge case, and the cost is a
+    // duplicate order against a real shop's credit line. The client mints one
+    // key per checkout ATTEMPT and reuses it across retries; a fresh key per
+    // request would make this a no-op. See docs/known-issues.md.
+    const rawKey = req.header('Idempotency-Key')?.trim();
+    if (rawKey !== undefined && (rawKey.length === 0 || rawKey.length > 64)) {
+      res.status(400).json({ error: 'Idempotency-Key must be 1-64 characters' });
+      return;
+    }
+    const idempotencyKey = rawKey || null;
+
+    if (idempotencyKey) {
+      // Fast path only. The unique index inside the transaction is the actual
+      // guard — two simultaneous retries both miss this read.
+      const prior = await prisma.order.findUnique({
+        where:   { idempotencyKey },
+        include: { items: true },
+      });
+      if (prior) {
+        // A key is a bearer token for whatever order it created, so it must not
+        // let one account read another's. Same key + different buyer is a
+        // client bug or an attack, never a legitimate retry.
+        if (prior.buyerId !== buyer.id) {
+          res.status(409).json({ error: 'Idempotency-Key already used by another account' });
+          return;
+        }
+        // Deliberately returns before the notification block below: a retry
+        // must not re-send the shop's confirmation SMS and email.
+        res.set('Idempotency-Replayed', 'true').status(200).json({ order: prior });
+        return;
+      }
+    }
+
     if (!Array.isArray(items) || items.length === 0) {
       res.status(400).json({ error: 'items array is required' });
       return;
@@ -253,6 +288,7 @@ router.post(
             ...(deliveryLat != null && { deliveryLat }),
             ...(deliveryLng != null && { deliveryLng }),
             notes: notes ?? null,
+            idempotencyKey,
           },
         });
 
@@ -343,6 +379,24 @@ router.post(
       if (err instanceof OrderError) {
         res.status(err.statusCode).json({ error: err.message, ...(err.body ?? {}) });
         return;
+      }
+      // Two retries raced past the pre-flight read and this one lost the unique
+      // index. The winner's order is the correct answer, so this is a success,
+      // not an error — the whole point is that the rep never sees a failure for
+      // an order that did commit.
+      if (
+        idempotencyKey &&
+        (err as { code?: string }).code === 'P2002' &&
+        String((err as any).meta?.target ?? '').includes('idempotencyKey')
+      ) {
+        const winner = await prisma.order.findUnique({
+          where:   { idempotencyKey },
+          include: { items: true },
+        });
+        if (winner && winner.buyerId === buyer.id) {
+          res.set('Idempotency-Replayed', 'true').status(200).json({ order: winner });
+          return;
+        }
       }
       console.error('[ORDER] Unhandled error creating order:', err);
       res.status(500).json({ error: (err as Error).message || 'Internal server error' });

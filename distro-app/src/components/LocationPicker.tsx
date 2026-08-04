@@ -45,7 +45,20 @@ const NEPAL_REGION: Region = {
   longitudeDelta: 4.0,
 };
 
-const GOOGLE_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
+/**
+ * Places (Autocomplete + Details) is a WEB SERVICE, so its key cannot carry an
+ * Android package + SHA-1 restriction — a restricted key returns REQUEST_DENIED
+ * here. The Android Maps SDK key is separately restricted to the package and is
+ * read from AndroidManifest.xml by the native SDK, never from JS.
+ *
+ * These are therefore two different keys. Falls back to the Maps key so the
+ * flow keeps working until the Places key exists in Cloud Console; drop the
+ * fallback once EXPO_PUBLIC_GOOGLE_PLACES_API_KEY is set everywhere.
+ */
+const GOOGLE_API_KEY =
+  process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ??
+  process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ??
+  "";
 const SESSIONTOKEN_CACHE = { current: Math.random().toString(36).slice(2) };
 
 function newSessionToken() {
@@ -268,7 +281,7 @@ export function LocationPicker({
       <View style={s.configBox}>
         <Ionicons name="warning-outline" size={18} color={colors.amberDark} />
         <Text style={s.configText}>
-          Set EXPO_PUBLIC_GOOGLE_MAPS_API_KEY to enable map + search.
+          Set EXPO_PUBLIC_GOOGLE_PLACES_API_KEY to enable map + search.
         </Text>
       </View>
     );

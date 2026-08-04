@@ -6,6 +6,7 @@ import Link from "next/link";
 import { AlertCircle, Eye, EyeOff, Lock, Mail, Store } from "lucide-react";
 import toast from "react-hot-toast";
 import { GoogleLogin } from "@react-oauth/google";
+import AppDownload from "@/components/AppDownload";
 import api from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 import { cn } from "@/lib/utils";
@@ -436,6 +437,16 @@ function LoginContent() {
               </Link>
             </p>
           )}
+        </div>
+
+        {/* Auth pages sit outside SiteLayoutShell, so the footer's copy of this
+            never reaches them — and this is the highest-intent moment for a
+            shopkeeper who is on mobile web only because they don't have the app. */}
+        <div className="mt-8 flex flex-col items-center gap-3 border-t border-gray-100 pt-6">
+          <p className="font-jakarta text-xs font-medium text-gray-500">
+            Order faster from your phone
+          </p>
+          <AppDownload size="sm" className="justify-center" />
         </div>
 
         <p className="mt-8 text-center text-xs leading-relaxed text-gray-400">

@@ -181,6 +181,13 @@ model Order {
   notes            String?         @db.Text
   invoicePdfPath   String?
   invoiceEmailSent Boolean         @default(false)
+  // Client-supplied request id, one per checkout ATTEMPT (not per request), so
+  // a retry after a lost response returns the original order instead of
+  // placing a second one against the shop's credit. NULL for orders placed
+  // before this existed and for clients that don't send it — MySQL permits
+  // many NULLs under a UNIQUE index, which is what makes this safe to add to
+  // a live table. See docs/known-issues.md.
+  idempotencyKey   String?         @unique @db.VarChar(64)
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   buyer            Profile         @relation(fields: [buyerId], references: [id])

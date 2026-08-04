@@ -1,8 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Mail, MapPin, MessageCircle, Phone } from "lucide-react";
-import { AppStoreButton } from "@/components/ui/app-store-button";
-import { PlayStoreButton } from "@/components/ui/play-store-button";
+import AppDownload from "@/components/AppDownload";
 interface FooterLink {
   text: string;
   href: string;
@@ -250,16 +249,7 @@ export default function Footer() {
               <h3 className="mb-3 mt-6 text-xs font-semibold uppercase tracking-wide text-[color:var(--ink)]">
                 Get the app
               </h3>
-              <div className="flex max-w-[13rem] flex-col gap-3">
-                <AppStoreButton
-                  type="button"
-                  className="h-8 w-full justify-start rounded-lg border-0 bg-black text-white hover:bg-zinc-900"
-                />
-                <PlayStoreButton
-                  type="button"
-                  className="h-8 w-full justify-start rounded-lg border-0 bg-black text-white hover:bg-zinc-900"
-                />
-              </div>
+              <AppDownload size="sm" vertical className="max-w-[13rem]" />
             </div>
           </div>
 
