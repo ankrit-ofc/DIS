@@ -79,6 +79,37 @@ export function SalesCheckoutScreen({ navigation }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [placed, setPlaced] = useState<{ orderNumber: string; total: number } | null>(null);
 
+  /**
+   * Idempotency key for THIS checkout attempt.
+   *
+   * Minted on the first "Place order" tap and reused by every retry, which is
+   * the whole point: a fresh key per request would make the server-side guard
+   * a no-op. Reps work on patchy data in shops, so "order committed, response
+   * lost, rep taps again" is routine — with the key the retry gets the original
+   * order back (200 + Idempotency-Replayed) instead of placing a second one
+   * against the shop's credit.
+   *
+   * Cleared only after a confirmed success, so the next order gets a new key.
+   * It deliberately survives a 409 stock rejection: that rolls the transaction
+   * back, so the key is still unused, and holding it keeps the guard alive
+   * while the rep fixes quantities.
+   *
+   * MUST stay here, above every early return. It previously sat below
+   * `if (placed)`, so the render right after a successful order took that
+   * return and ran one fewer hook than the render before it. React treats that
+   * as unrecoverable ("Rendered fewer hooks than expected") and kills the JS
+   * thread — Android shows "DISTRO keeps stopping". It fired on EVERY rep
+   * order at the confirmation screen, and again whenever the buyer was cleared
+   * via `if (!buyer)`. See eslint.config.js: rules-of-hooks is an error now so
+   * this cannot come back.
+   *
+   * Limitation: a ref dies with the JS context, and the cart is in-memory only
+   * (cartStore.ts has no persist), so if Android kills the app mid-submit both
+   * are gone and the rep has to rebuild the order — which could duplicate one
+   * that did commit. Tracked separately in docs/known-issues.md.
+   */
+  const idempotencyKeyRef = useRef<string | null>(null);
+
   // Losing the selection (banner discard, "next shop", or a logout elsewhere)
   // unwinds the whole order flow — a reset rather than a replace, so the
   // finished order screens aren't reachable again with the back gesture.
@@ -136,28 +167,6 @@ export function SalesCheckoutScreen({ navigation }: Props) {
     setSaveMode("order");
     setPickerOpen(false);
   };
-
-  /**
-   * Idempotency key for THIS checkout attempt.
-   *
-   * Minted on the first "Place order" tap and reused by every retry, which is
-   * the whole point: a fresh key per request would make the server-side guard
-   * a no-op. Reps work on patchy data in shops, so "order committed, response
-   * lost, rep taps again" is routine — with the key the retry gets the original
-   * order back (200 + Idempotency-Replayed) instead of placing a second one
-   * against the shop's credit.
-   *
-   * Cleared only after a confirmed success, so the next order gets a new key.
-   * It deliberately survives a 409 stock rejection: that rolls the transaction
-   * back, so the key is still unused, and holding it keeps the guard alive
-   * while the rep fixes quantities.
-   *
-   * Limitation: a ref dies with the JS context, and the cart is in-memory only
-   * (cartStore.ts has no persist), so if Android kills the app mid-submit both
-   * are gone and the rep has to rebuild the order — which could duplicate one
-   * that did commit. Tracked separately in docs/known-issues.md.
-   */
-  const idempotencyKeyRef = useRef<string | null>(null);
 
   const handlePlaceOrder = async () => {
     if (items.length === 0 || belowMin) return;
@@ -615,7 +624,11 @@ function SalesOrderPlaced({
         <Text style={s.doneMeta}>
           {orderNumber} · {fmtRs(total)}
         </Text>
-        <Text style={s.doneSub}>{shopName} will get the confirmation SMS.</Text>
+        {/* No SMS is sent for orders any more (notificationPolicy.ts: SMS is
+            OTP-only), and most rep-registered shops have no email either — so
+            promising a confirmation would be a lie the rep repeats at the
+            counter. State what is certainly true instead. */}
+        <Text style={s.doneSub}>Order {orderNumber} recorded for {shopName}.</Text>
       </View>
       <View style={s.doneActions}>
         <TouchableOpacity style={s.primaryBtn} onPress={onNextShop} activeOpacity={0.88}>
