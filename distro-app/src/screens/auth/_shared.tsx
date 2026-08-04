@@ -38,11 +38,13 @@ export function StepIndicator({ current, total }: { current: number; total: numb
 // ─── Animated input field ─────────────────────────────────────────────────────
 export function InputField({ label, value, onChangeText, placeholder, keyboardType,
   secureTextEntry, inputRef, autoCapitalize, maxLength, returnKeyType,
-  onSubmitEditing, autoFocus }: {
+  onSubmitEditing, autoFocus, helperText }: {
   label: string; value: string; onChangeText: (v: string) => void;
   placeholder?: string; keyboardType?: any; secureTextEntry?: boolean;
   inputRef?: React.Ref<TI>; autoCapitalize?: any; maxLength?: number;
   returnKeyType?: any; onSubmitEditing?: () => void; autoFocus?: boolean;
+  /** One line under the field — use it to say WHY an optional field is worth filling. */
+  helperText?: string;
 }) {
   const [showPw, setShowPw] = useState(false);
   const fp = useSharedValue(0);
@@ -70,6 +72,7 @@ export function InputField({ label, value, onChangeText, placeholder, keyboardTy
           </TouchableOpacity>
         )}
       </Animated.View>
+      {helperText ? <Text style={s.fieldHelper}>{helperText}</Text> : null}
     </View>
   );
 }
@@ -116,6 +119,7 @@ export const s = StyleSheet.create({
   fieldBox:   { flexDirection: "row", alignItems: "center", borderRadius: radius.lg, overflow: "hidden" },
   fieldInput: { flex: 1, paddingHorizontal: spacing.md, paddingVertical: 15, fontSize: 16, color: colors.ink, fontFamily: typography.body },
   eyeBtn:     { paddingRight: spacing.md, paddingLeft: spacing.sm },
+  fieldHelper:{ fontSize: 12, fontFamily: typography.body, color: colors.gray400, marginLeft: 2, lineHeight: 17 },
 
   // Error
   errorWrap: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.redLight, borderRadius: radius.md, paddingHorizontal: spacing.sm, paddingVertical: 10 },

@@ -17,9 +17,10 @@ type Props = {
 
 export function RegisterScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  // Set when an OTP login found no account for this number — carried to step 2.
+  // Set when an OTP login found no account for this number — start from it so
+  // the shopkeeper doesn't retype the number they just entered.
   const prefillPhone = route.params?.prefillPhone;
-  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState(prefillPhone ?? "");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -37,8 +38,11 @@ export function RegisterScreen({ navigation, route }: Props) {
   };
 
   const handleRequestOTP = async () => {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError("Enter a valid email address.");
+    // Phone-first: shopkeepers use their number daily and may have no working
+    // email at all. Sending the phone here is also what lets the API's SMS-first
+    // branch fire — with an email-only request it had no number to text.
+    if (!/^9[6-8]\d{8}$/.test(phone.trim())) {
+      setError("Enter a valid Nepal phone number (98XXXXXXXX).");
       shake();
       return;
     }
@@ -46,13 +50,12 @@ export function RegisterScreen({ navigation, route }: Props) {
     setLoading(true);
     btnScale.value = withSpring(0.97, { damping: 20, stiffness: 300 });
     try {
-      const res = await api.post("/auth/request-otp", { email });
+      const res = await api.post("/auth/request-otp", { phone: phone.trim() });
       btnScale.value = withSpring(1);
       navigation.navigate("OTP", {
-        email,
+        phone: phone.trim(),
         channel: res.data?.channel === "sms" ? "sms" : "email",
         maskedTo: res.data?.maskedTo,
-        prefillPhone,
       });
     } catch (err: any) {
       setError(err?.response?.data?.error ?? err.message ?? "Failed to send OTP.");
@@ -76,15 +79,15 @@ export function RegisterScreen({ navigation, route }: Props) {
         <View style={s.card}>
           <StepIndicator current={1} total={2} />
           <View style={s.cardHeader}>
-            <Text style={s.cardTitle}>Email address</Text>
+            <Text style={s.cardTitle}>Your phone number</Text>
             <Text style={s.cardSubtitle}>
               {prefillPhone
-                ? `No DISTRO account found for ${prefillPhone}. Add your email to create one — we'll send a code to verify it.`
-                : "We'll send a one-time code to verify your email."}
+                ? `No DISTRO account found for ${prefillPhone}. Let's create one — we'll text you a code to verify this number.`
+                : "We'll text you a 6-digit code to verify it."}
             </Text>
           </View>
-          <InputField label="Email address" value={email} onChangeText={setEmail}
-            placeholder="yourshop@gmail.com" keyboardType="email-address" autoCapitalize="none" autoFocus />
+          <InputField label="Phone number" value={phone} onChangeText={setPhone}
+            placeholder="98XXXXXXXX" keyboardType="phone-pad" autoCapitalize="none" autoFocus />
           <AuthError message={error} animStyle={errorStyle} />
           <Animated.View style={btnStyle}>
             <TouchableOpacity style={[s.btn, loading && s.btnLoading]} onPress={handleRequestOTP}

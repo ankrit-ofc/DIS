@@ -68,15 +68,18 @@ const p = StyleSheet.create({
 
 export function RegisterStep2Screen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { email, otpToken, prefillPhone } = route.params;
+  // The phone is already verified by OTP — it identifies the profile and is not
+  // re-collected here. Email is optional and starts from whatever the OTP step
+  // knew (normally nothing, for a phone-first signup).
+  const { phone } = route.params;
   const [storeName, setStoreName] = useState("");
   const [ownerName, setOwnerName] = useState("");
+  const [email, setEmail] = useState(route.params.email ?? "");
   const [companyName, setCompanyName] = useState("");
   const [panNumber, setPanNumber] = useState("");
   const [district, setDistrict] = useState("");
   const [address, setAddress] = useState("");
   const [location, setLocation] = useState<LocationPickerValue | null>(null);
-  const [phone, setPhone] = useState(prefillPhone ?? "");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [agreeTerms, setAgreeTerms] = useState(false);
@@ -87,7 +90,7 @@ export function RegisterStep2Screen({ navigation, route }: Props) {
   const companyRef = useRef<TI>(null);
   const panRef = useRef<TI>(null);
   const addressRef = useRef<TI>(null);
-  const phoneRef = useRef<TI>(null);
+  const emailRef = useRef<TI>(null);
   const passwordRef = useRef<TI>(null);
   const confirmRef = useRef<TI>(null);
 
@@ -105,11 +108,16 @@ export function RegisterStep2Screen({ navigation, route }: Props) {
   };
 
   const handleRegister = async () => {
-    if (!storeName.trim() || !ownerName.trim() || !district || !phone.trim() || !password || !address.trim()) {
+    if (!storeName.trim() || !ownerName.trim() || !district || !password || !address.trim()) {
       setError("Please fill all required fields."); shake(); return;
     }
     if (!location) {
       setError("Please pin your store location on the map."); shake(); return;
+    }
+    // Optional, but a supplied address must be valid — it is the only password
+    // recovery channel there is, so silently storing junk would strand them.
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError("Enter a valid email address, or leave it blank."); shake(); return;
     }
     if (panNumber && !/^\d{9}$/.test(panNumber)) {
       setError("PAN number must be exactly 9 digits."); shake(); return;
@@ -128,7 +136,9 @@ export function RegisterStep2Screen({ navigation, route }: Props) {
     btnScale.value = withSpring(0.97, { damping: 20, stiffness: 300 });
     try {
       const res = await api.post("/auth/register", {
-        email, otpToken, storeName, ownerName, district, phone, password, address,
+        phone, storeName, ownerName, district, password, address,
+        // Omitted entirely when blank so the API stores NULL, never ''.
+        email: email.trim() || undefined,
         companyName: companyName || undefined,
         panNumber: panNumber || undefined,
         latitude: location?.latitude,
@@ -172,6 +182,11 @@ export function RegisterStep2Screen({ navigation, route }: Props) {
               onSubmitEditing={() => (ownerRef.current as any)?.focus()} />
             <InputField label="Owner name" value={ownerName} onChangeText={setOwnerName}
               placeholder="e.g. Ram Sharma" inputRef={ownerRef} returnKeyType="next"
+              onSubmitEditing={() => (emailRef.current as any)?.focus()} />
+            <InputField label="Email address (optional)" value={email} onChangeText={setEmail}
+              placeholder="yourshop@gmail.com" keyboardType="email-address" autoCapitalize="none"
+              inputRef={emailRef} returnKeyType="next"
+              helperText="For invoices, and as a backup way to sign in if SMS is down."
               onSubmitEditing={() => (companyRef.current as any)?.focus()} />
             <InputField label="Company name (optional)" value={companyName} onChangeText={setCompanyName}
               placeholder="For registered businesses" inputRef={companyRef} returnKeyType="next"
@@ -183,7 +198,7 @@ export function RegisterStep2Screen({ navigation, route }: Props) {
             <DistrictPicker value={district} onSelect={setDistrict} />
             <InputField label="Address" value={address} onChangeText={setAddress}
               placeholder="Street, area, landmark" inputRef={addressRef} returnKeyType="next"
-              onSubmitEditing={() => (phoneRef.current as any)?.focus()} />
+              onSubmitEditing={() => (passwordRef.current as any)?.focus()} />
             <LocationPicker
               value={location}
               onChange={(v) => {
@@ -193,9 +208,6 @@ export function RegisterStep2Screen({ navigation, route }: Props) {
               label="Pin your store location *"
               helperText="Search, drag the marker, or use your current location."
             />
-            <InputField label="Phone number" value={phone} onChangeText={setPhone}
-              placeholder="98XXXXXXXX" keyboardType="phone-pad" inputRef={phoneRef}
-              returnKeyType="next" onSubmitEditing={() => (passwordRef.current as any)?.focus()} />
             <InputField label="Password" value={password} onChangeText={setPassword}
               placeholder="Min. 8 characters" secureTextEntry inputRef={passwordRef}
               returnKeyType="next" onSubmitEditing={() => (confirmRef.current as any)?.focus()}

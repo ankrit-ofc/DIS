@@ -14,18 +14,20 @@ export type AuthStackParamList = {
   Register: { prefillPhone?: string } | undefined;
   LoginOtp: undefined;
   /**
-   * Exactly one of `email` / `phone` identifies the profile — `phone` means the
-   * passwordless login flow, `email` the registration flow.
+   * Exactly one of `email` / `phone` identifies the profile. Registration and
+   * passwordless login are both phone-first now; `email` remains only for
+   * accounts created under the old email-first flow, which must keep working.
    */
   OTP: {
     email?: string;
     phone?: string;
     channel?: "sms" | "email";
     maskedTo?: string;
-    /** Passed through the email flow so step 2 can prefill the phone field. */
+    /** Carries the number when an OTP login found no account for it. */
     prefillPhone?: string;
   };
-  RegisterStep2: { email: string; otpToken: string; prefillPhone?: string };
+  /** `phone` is the verified identifier; `email` is optional and set later. */
+  RegisterStep2: { phone: string; email?: string };
   ForgotPassword: undefined;
   ResetOtp: { email: string };
   NewPassword: { resetToken: string };

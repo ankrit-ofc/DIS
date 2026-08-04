@@ -95,3 +95,67 @@ off-system settlement.
 **Fix shape:** update `creditUsed` in the same transaction, or make `creditUsed`
 a derived read over the ledger rather than a stored column. The latter is the
 more durable fix and removes this whole class of desync.
+
+---
+
+## 4. `/forgot-password` is email-only — phone-first buyers have no recovery path
+
+Surfaced by the phone-first registration switch (2026-08-04) and deliberately
+not fixed in it, to keep that change to one concern.
+
+`POST /auth/forgot-password` takes `{ email }`, looks the profile up by email,
+and mails a `PasswordResetCode`. There is no phone equivalent. Registration is
+now phone-first with email **optional**, so a buyer who skips email has:
+
+- password login — works, until they forget the password
+- OTP login — works, but needs SMS
+- password reset — **nothing at all**
+
+So a forgotten password during an SMS outage is an unrecoverable account
+without a support call. Sparrow outages are not hypothetical here; the whole
+reason email is still collected at all is that we have been burned by one.
+
+This is why `PATCH /me` was extended to accept `email` in the same change: a
+buyer who skipped it at signup can at least add one later and get a recovery
+path. That is a mitigation, not a fix — it only helps people who think to do it
+*before* they are locked out.
+
+**Fix shape:** a phone branch on forgot-password that issues the reset code by
+SMS, reusing `PasswordResetCode` and the existing `forgotLimiter`. Note it puts
+another SMS-billed endpoint in front of unauthenticated traffic, so it wants
+the same cost review as the PENDING-cleanup issue below — and the reset code must not become a cheaper
+oracle for "is this number registered" than request-otp already is.
+
+---
+
+---
+
+## 5. PENDING profiles are never cleaned up
+
+Also surfaced by the phone-first switch. Pre-existing, but it matters more now.
+
+`findOrCreateProfile` (`routes/auth.ts`) creates a `status: 'PENDING'` row on
+the *first* `request-otp` for an unknown identifier. `lib/cleanup.ts` prunes
+expired sessions and OTP codes only — nothing ever deletes an abandoned PENDING
+profile, so every signup that stalls after "send code" leaves a permanent row.
+
+Under the old email-first flow those rows held a `PENDING_<ts>_<rand>`
+placeholder phone. Phone-first stores the **real** number, so each abandoned
+signup now occupies that number's slot on the unique index.
+
+**Why it is not urgent:** the slot is not lost. A returning user hits
+`findOrCreateProfile`, matches the existing PENDING row, and completes
+registration on it — abandonment is genuinely resumable, which is a feature.
+The cost is table growth plus a misleading "profile count".
+
+**Why it is not nothing:** it is the storage half of the abuse surface in the
+SMS cost note. `authIpBackstopLimiter` allows 300 requests / 15 min / IP, and
+every one of those against a fresh number mints a row. Nothing reclaims them.
+
+**Fix shape:** extend `startCleanupCron` to delete `status = 'PENDING'`
+profiles older than N days with no orders and no live OTP codes. Pick N well
+past a realistic "came back the next day" window — 30 days, not 1. Must exclude
+Google-created PENDING profiles awaiting onboarding (`googleId` set), which are
+a different, legitimate state.
+
+---

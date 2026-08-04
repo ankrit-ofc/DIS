@@ -8,13 +8,14 @@ import { CheckCircle2, AlertCircle, ChevronRight, MapPin } from "lucide-react";
 import toast from "react-hot-toast";
 import api from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
+import AppDownload from "@/components/AppDownload";
 
 const MapLocationPicker = dynamic(
   () => import("@/components/MapLocationPicker"),
   { ssr: false, loading: () => <div className="h-80 rounded-xl skeleton" /> }
 );
 
-const STEPS = ["Contact", "Verify OTP", "Business", "Password"];
+const STEPS = ["Phone", "Verify", "Business", "Password"];
 
 // Served districts come from the API (active only) — never hardcode them.
 const FALLBACK_DISTRICTS = ["Kathmandu", "Lalitpur", "Bhaktapur"];
@@ -90,10 +91,8 @@ export default function RegisterPage() {
 
   async function handleRequestOtp(e: React.FormEvent) {
     e.preventDefault();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setStep1Error("Enter a valid email address.");
-      return;
-    }
+    // Phone-first: the shopkeeper's number is the identifier. Email is collected
+    // later and is optional — see the Business step.
     if (!/^9[6-8]\d{8}$/.test(phone)) {
       setStep1Error("Enter a valid Nepal phone number (98XXXXXXXX).");
       return;
@@ -101,7 +100,7 @@ export default function RegisterPage() {
     setStep1Loading(true);
     setStep1Error(null);
     try {
-      const res = await api.post("/auth/request-otp", { email, phone });
+      const res = await api.post("/auth/request-otp", { phone });
       setOtpChannel(res.data?.channel === "sms" ? "sms" : "email");
       setOtpMaskedTo(res.data?.maskedTo ?? null);
       setCountdown(60);
@@ -143,7 +142,17 @@ export default function RegisterPage() {
     setStep2Loading(true);
     setStep2Error(null);
     try {
-      await api.post("/auth/verify-otp", { email, otp: code });
+      const res = await api.post("/auth/verify-otp", { phone, otp: code });
+
+      // This number already has an account. verify-otp doubles as passwordless
+      // login and hands back a session, so sign them in rather than dead-ending
+      // them on an error — no duplicate profile is possible either way.
+      if (res.data?.token && res.data?.profile) {
+        setAuth(res.data.token, res.data.profile);
+        toast.success("You already have an account — signed you in.");
+        router.push(res.data.profile?.role === "ADMIN" ? "/admin" : "/");
+        return;
+      }
       setStep(2);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || "Invalid OTP.";
@@ -157,20 +166,9 @@ export default function RegisterPage() {
     setCanResend(false);
     setCountdown(60);
     try {
-      const res = await api.post("/auth/request-otp", { email, phone });
+      const res = await api.post("/auth/request-otp", { phone });
       setOtpChannel(res.data?.channel === "sms" ? "sms" : "email");
       setOtpMaskedTo(res.data?.maskedTo ?? null);
-    } catch { setCanResend(true); }
-  }
-
-  async function handleResendViaEmail() {
-    setCanResend(false);
-    setCountdown(60);
-    try {
-      const res = await api.post("/auth/request-otp", { email, forceChannel: "email" });
-      setOtpChannel("email");
-      setOtpMaskedTo(res.data?.maskedTo ?? null);
-      toast.success("Code sent to your email.");
     } catch { setCanResend(true); }
   }
 
@@ -178,6 +176,10 @@ export default function RegisterPage() {
     e.preventDefault();
     if (!ownerName.trim() || !storeName.trim() || !district || !address.trim()) {
       setStep3Error("Fill all required fields.");
+      return;
+    }
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setStep3Error("Enter a valid email address, or leave it blank.");
       return;
     }
     if (panNumber && !/^\d{9}$/.test(panNumber)) {
@@ -202,7 +204,9 @@ export default function RegisterPage() {
     setStep4Error(null);
     try {
       const res = await api.post("/auth/register", {
-        email, phone, password,
+        phone, password,
+        // Optional — omitted entirely when blank so the API stores NULL, never ''.
+        email: email.trim() || undefined,
         ownerName, storeName, district, address,
         companyName: companyName || undefined,
         panNumber: panNumber || undefined,
@@ -246,22 +250,17 @@ export default function RegisterPage() {
         <div className="bg-white rounded-2xl border border-gray-200 p-6">
           {step === 0 && (
             <form onSubmit={handleRequestOtp} className="space-y-4">
-              <h2 className="font-grotesk font-semibold text-lg text-ink">Contact details</h2>
-              <p className="text-sm text-gray-400">We&apos;ll send a 6-digit OTP to verify your email.</p>
-              <div>
-                <label className="text-sm font-medium text-ink block mb-1.5">Email address <span className="text-red-400">*</span></label>
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="yourshop@gmail.com"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue" />
-              </div>
+              <h2 className="font-grotesk font-semibold text-lg text-ink">Your phone number</h2>
+              <p className="text-sm text-gray-400">We&apos;ll text you a 6-digit code to verify it.</p>
               <div>
                 <label className="text-sm font-medium text-ink block mb-1.5">Phone number <span className="text-red-400">*</span></label>
-                <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} required placeholder="98XXXXXXXX"
+                <input type="tel" inputMode="numeric" value={phone} onChange={(e) => setPhone(e.target.value)} required placeholder="98XXXXXXXX" autoFocus
                   className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue" />
               </div>
               {step1Error && <div className="flex items-start gap-2 text-red-600 bg-red-50 rounded-xl p-3 text-sm"><AlertCircle size={15} className="flex-shrink-0 mt-0.5" />{step1Error}</div>}
               <button type="submit" disabled={step1Loading}
                 className="w-full bg-blue hover:bg-blue-dark disabled:bg-gray-200 text-white font-medium py-3 rounded-xl">
-                {step1Loading ? "Sending OTP…" : "Send OTP to email"}
+                {step1Loading ? "Sending code…" : "Send code"}
               </button>
             </form>
           )}
@@ -273,9 +272,11 @@ export default function RegisterPage() {
                   {otpChannel === "sms" ? "Verify your phone" : "Verify your email"}
                 </h2>
                 <p className="text-sm text-gray-400 mt-1">
+                  {/* Always name the channel the API actually used — never say
+                      "check your email" for a code that went by SMS. */}
                   {otpChannel === "sms"
                     ? <>Code sent via SMS to <span className="font-medium text-ink">{otpMaskedTo ?? phone}</span>.</>
-                    : <>Code sent to <span className="font-medium text-ink">{otpMaskedTo ?? email}</span>.</>}
+                    : <>Code sent by email to <span className="font-medium text-ink">{otpMaskedTo ?? "your email"}</span>.</>}
                 </p>
               </div>
               <div className="flex gap-2 justify-center" onPaste={handleOtpPaste}>
@@ -297,13 +298,9 @@ export default function RegisterPage() {
                   <span>Resend in <span className="font-grotesk font-semibold text-ink">{countdown}s</span></span>
                 )}
               </div>
-              {otpChannel === "sms" && (
-                <button type="button" onClick={handleResendViaEmail} disabled={!canResend}
-                  className="w-full text-sm text-blue font-medium hover:underline disabled:text-gray-300 disabled:no-underline">
-                  Resend via email instead
-                </button>
-              )}
-              <button type="button" onClick={() => setStep(0)} className="w-full text-sm text-gray-400 hover:text-ink">← Change email</button>
+              {/* No "resend via email" here: registration is phone-first, so a
+                  new signup has no email on file to fall back to yet. */}
+              <button type="button" onClick={() => setStep(0)} className="w-full text-sm text-gray-400 hover:text-ink">← Change number</button>
             </form>
           )}
 
@@ -319,6 +316,12 @@ export default function RegisterPage() {
                 <label className="text-sm font-medium text-ink block mb-1.5">Store / shop name <span className="text-red-400">*</span></label>
                 <input type="text" value={storeName} onChange={(e) => setStoreName(e.target.value)} required
                   className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-ink block mb-1.5">Email address <span className="text-gray-400 text-xs">(optional)</span></label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="yourshop@gmail.com"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue" />
+                <p className="mt-1.5 text-xs text-gray-400">For invoices, and as a backup way to sign in if SMS is down.</p>
               </div>
               <div>
                 <label className="text-sm font-medium text-ink block mb-1.5">Company name <span className="text-gray-400 text-xs">(optional)</span></label>
@@ -398,6 +401,18 @@ export default function RegisterPage() {
         <p className="text-center text-sm text-gray-400 mt-5">
           Already have an account? <Link href="/login" className="text-blue font-medium hover:underline">Sign in</Link>
         </p>
+
+        {/* See login/page.tsx — auth routes are outside SiteLayoutShell, so the
+            footer's copy never renders here. The bottom padding keeps the badge
+            clear of the floating chat button, which is fixed bottom-right and
+            would otherwise sit on top of the iOS label as the last element on
+            the page. */}
+        <div className="mt-6 flex flex-col items-center gap-3 border-t border-gray-100 pt-6 pb-24 sm:pb-6">
+          <p className="font-jakarta text-xs font-medium text-gray-500">
+            Order faster from your phone
+          </p>
+          <AppDownload size="sm" className="justify-center" />
+        </div>
       </div>
     </div>
   );

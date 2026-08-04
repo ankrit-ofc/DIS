@@ -75,6 +75,15 @@ export async function findOrCreateProfile(email?: string, phone?: string) {
   if (existing) return existing;
 
   try {
+    // Cost/abuse telemetry. Registration is phone-first, so every new signup —
+    // and every enumeration attempt — mints a PENDING row here and then bills an
+    // SMS. The per-phone cap (MAX_SMS_PER_PHONE_PER_DAY) does NOT bound total
+    // spend because it is per profile; the only ceiling is authIpBackstopLimiter
+    // (300 req/15min/IP). Grep `pending_profile_created` to see the real rate
+    // before tightening anything — the backstop is loose on purpose for CGNAT.
+    console.warn(
+      `[AUTH] pending_profile_created via=${email ? 'email' : 'phone'} at=${new Date().toISOString()}`,
+    );
     return email
       ? await prisma.profile.create({
           data: {
@@ -324,7 +333,21 @@ router.post('/verify-otp', authIpBackstopLimiter, authLimiter, async (req: Reque
 });
 
 // ─── POST /api/auth/register ─────────────────────────────────────────────────
-// Requires prior OTP verification. Email is primary identifier; phone is additional info.
+// PHONE-FIRST. Requires prior OTP verification of the phone.
+//
+// The phone is the identifier: Nepali shopkeepers use their number daily and may
+// have no working email at all, so requiring one at signup was friction at the
+// worst possible moment — and it meant request-otp had no phone to send to, so
+// the SMS-first path in this same file could never fire for a new user.
+//
+// Email is OPTIONAL but deliberately kept: /forgot-password is email-only, so a
+// buyer with no email on file has no password recovery during an SMS outage.
+// It is stored as NULL when absent — never '' — because Profile.email is unique
+// and a second empty-string row would die on P2002 as a 500 (the same bug we
+// already fixed for panNumber).
+//
+// This aligns the self-serve shape with rep-created buyers (POST /sales/buyers):
+// phone-keyed, email optional, one row shape with two doors into it.
 router.post('/register', authLimiter, async (req: Request, res: Response): Promise<void> => {
   const { email, password, storeName, ownerName, district, phone, address, companyName, panNumber } =
     req.body as {
@@ -339,16 +362,23 @@ router.post('/register', authLimiter, async (req: Request, res: Response): Promi
       panNumber?: string;
     };
 
-  if (!email || !password) {
-    res.status(400).json({ error: 'email and password are required' });
+  if (!phone || !password) {
+    res.status(400).json({ error: 'phone and password are required' });
+    return;
+  }
+  if (!NEPAL_PHONE.test(phone)) {
+    res.status(400).json({ error: 'Valid Nepal phone number required (98XXXXXXXX)' });
     return;
   }
   if (password.length < 8) {
     res.status(400).json({ error: 'Password must be at least 8 characters' });
     return;
   }
-  if (!phone) {
-    res.status(400).json({ error: 'phone is required' });
+  // Email is optional, but a supplied one must be well-formed — storing junk
+  // would silently break the only password-recovery channel there is.
+  const cleanEmail = email?.trim() || null;
+  if (cleanEmail && !EMAIL_RE.test(cleanEmail)) {
+    res.status(400).json({ error: 'Valid email address required' });
     return;
   }
   if (panNumber && !/^\d{9}$/.test(panNumber)) {
@@ -363,27 +393,38 @@ router.post('/register', authLimiter, async (req: Request, res: Response): Promi
     }
   }
 
-  const profile = await prisma.profile.findUnique({ where: { email } });
+  const profile = await prisma.profile.findUnique({ where: { phone } });
   if (!profile) {
-    res.status(400).json({ error: 'Email not found — request OTP first' });
+    res.status(400).json({ error: 'Phone not found — request OTP first' });
     return;
   }
   if (!profile.phoneVerified) {
-    res.status(400).json({ error: 'Email not verified — complete OTP verification first' });
+    res.status(400).json({ error: 'Phone not verified — complete OTP verification first' });
     return;
   }
-  if (profile.status === 'ACTIVE') {
+
+  // A shop a SALES rep already registered is ACTIVE with an empty passwordHash
+  // (password login always fails; they can only OTP in). When the shopkeeper
+  // then signs up themselves, that is them CLAIMING their own shop, not a
+  // duplicate registration — so set the password on the existing row and keep
+  // its order history, ledger and credit limit intact. Anyone holding the SIM
+  // could do this, but that is already true of OTP login today.
+  const isClaimingRepCreatedShop = profile.status === 'ACTIVE' && profile.passwordHash === '';
+  if (profile.status === 'ACTIVE' && !isClaimingRepCreatedShop) {
     res.status(409).json({ error: 'Account already registered' });
     return;
   }
 
-  // Validate phone uniqueness (another profile already owns this real phone)
-  const phoneTaken = await prisma.profile.findFirst({
-    where: { phone, id: { not: profile.id } },
-  });
-  if (phoneTaken) {
-    res.status(409).json({ error: 'Phone number already in use' });
-    return;
+  // Email uniqueness — checked explicitly so a clash is a clean 409 rather than
+  // a P2002 surfacing as a 500.
+  if (cleanEmail) {
+    const emailTaken = await prisma.profile.findFirst({
+      where: { email: cleanEmail, id: { not: profile.id } },
+    });
+    if (emailTaken) {
+      res.status(409).json({ error: 'Email already in use' });
+      return;
+    }
   }
 
   // Validate PAN uniqueness if provided
@@ -400,39 +441,44 @@ router.post('/register', authLimiter, async (req: Request, res: Response): Promi
   const passwordHash = await hashPassword(password);
 
   const updated = await prisma.profile.update({
-    where: { email },
+    where: { id: profile.id },
     data: {
       passwordHash,
-      phone,
       status: 'ACTIVE',
-      storeName,
-      ownerName,
-      district,
-      address,
+      // `?? undefined` leaves the column untouched when the client omits it, so
+      // claiming a rep-created shop cannot blank out details the rep captured.
+      storeName: storeName ?? undefined,
+      ownerName: ownerName ?? undefined,
+      district: district ?? undefined,
+      address: address ?? undefined,
       companyName: companyName ?? null,
       // `|| null`, not `?? null`: an empty-string PAN would be stored as '' and,
       // because Profile.panNumber is unique, the second such registration would
       // die on P2002 as a 500. Matches the PATCH /me path below.
       panNumber: panNumber || null,
-      emailVerified: true,
+      // Only touch email when one was supplied — and mark it UNVERIFIED, because
+      // the OTP proved the phone, not this address.
+      ...(cleanEmail ? { email: cleanEmail, emailVerified: false } : {}),
       phoneVerified: true,
     },
   });
 
   const token = await createSession(updated.id);
 
-  // Non-blocking welcome email
-  void (async () => {
-    try {
-      const html = await render(WelcomeEmail({
-        storeName: updated.storeName ?? updated.phone,
-        phone: updated.phone,
-      }));
-      await sendEmail(updated.email!, 'Welcome to DISTRO', html, 'welcome');
-    } catch (e) {
-      console.error('[EMAIL] Welcome pipeline failed:', e);
-    }
-  })();
+  // Non-blocking welcome email — only when we actually have an address.
+  if (updated.email) {
+    void (async () => {
+      try {
+        const html = await render(WelcomeEmail({
+          storeName: updated.storeName ?? updated.phone,
+          phone: updated.phone,
+        }));
+        await sendEmail(updated.email!, 'Welcome to DISTRO', html, 'welcome');
+      } catch (e) {
+        console.error('[EMAIL] Welcome pipeline failed:', e);
+      }
+    })();
+  }
 
   const { passwordHash: _, otpCode, otpExpiry, ...safeProfile } = updated;
   res.status(201).json({ token, profile: safeProfile });
@@ -602,13 +648,14 @@ router.post('/google', authLimiter, async (req: Request, res: Response): Promise
 // ─── PATCH /api/auth/me — update own profile ────────────────────────────────
 router.patch('/me', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const authProfile = (req as any).profile as { id: string };
-  const { storeName, ownerName, district, address, companyName, panNumber, latitude, longitude } = req.body as {
+  const { storeName, ownerName, district, address, companyName, panNumber, email, latitude, longitude } = req.body as {
     storeName?: string;
     ownerName?: string;
     district?: string;
     address?: string;
     companyName?: string;
     panNumber?: string;
+    email?: string;
     latitude?: number;
     longitude?: number;
   };
@@ -616,6 +663,26 @@ router.patch('/me', requireAuth, async (req: Request, res: Response): Promise<vo
   if (panNumber && !/^\d{9}$/.test(panNumber)) {
     res.status(400).json({ error: 'PAN number must be exactly 9 digits' });
     return;
+  }
+
+  // Email is settable here because registration is phone-first and email is
+  // optional: without this a buyer who skipped it at signup could never add one,
+  // and /forgot-password is email-only — so they would have no recovery path at
+  // all for the life of the account.
+  const cleanEmail = email?.trim() || null;
+  if (email !== undefined && cleanEmail && !EMAIL_RE.test(cleanEmail)) {
+    res.status(400).json({ error: 'Valid email address required' });
+    return;
+  }
+  if (cleanEmail) {
+    const emailTaken = await prisma.profile.findFirst({
+      where: { email: cleanEmail, id: { not: authProfile.id } },
+      select: { id: true },
+    });
+    if (emailTaken) {
+      res.status(409).json({ error: 'Email already in use' });
+      return;
+    }
   }
   if (panNumber) {
     const panTaken = await prisma.profile.findFirst({
@@ -651,6 +718,12 @@ router.patch('/me', requireAuth, async (req: Request, res: Response): Promise<vo
   if (address     !== undefined) data.address     = address;
   if (companyName !== undefined) data.companyName = companyName || null;
   if (panNumber   !== undefined) data.panNumber   = panNumber   || null;
+  if (email       !== undefined) {
+    // NULL, never '' — Profile.email is unique, so a second empty string would
+    // collide. Changing the address invalidates any prior verification.
+    data.email         = cleanEmail;
+    data.emailVerified = false;
+  }
   if (latitude !== undefined || longitude !== undefined) {
     const coordError = validateCoords(latitude, longitude);
     if (coordError) {

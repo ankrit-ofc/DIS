@@ -73,18 +73,18 @@ export function OTPScreen({ navigation, route }: Props) {
         return;
       }
 
-      // Verified but no account yet. The phone flow has no email to register
-      // with, so send them to step 1 with the number carried over.
-      if (phone) {
-        navigation.navigate("Register", { prefillPhone: phone });
+      // Verified, no account yet → finish signing up. Registration is
+      // phone-first, so the verified number IS the identifier and there is
+      // nothing left to collect before the details step.
+      const verifiedPhone = phone ?? route.params.prefillPhone;
+      if (!verifiedPhone) {
+        // Reached only by an email-identified OTP on a profile that never
+        // completed registration (an abandoned signup from the old email-first
+        // flow). /register needs a verified phone, so collect and verify one.
+        navigation.navigate("Register");
         return;
       }
-
-      navigation.navigate("RegisterStep2", {
-        email: email!,
-        otpToken: res.data.otpToken ?? "",
-        prefillPhone: route.params.prefillPhone,
-      });
+      navigation.navigate("RegisterStep2", { phone: verifiedPhone, email });
     } catch (err: any) {
       setError(err?.message ?? "Invalid OTP.");
     } finally {
